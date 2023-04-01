@@ -13,6 +13,9 @@ mod btree;
 // "interface" - REPL loop that accepts a sql query to do on the file, using parser and vfs, and commands to open databases, etc.
 // Formats emitted rows to csv file or stdout.
 
+mod record;
+mod serial_type;
+
 use crate::vfs::DbAttachment;
 
 fn main() {

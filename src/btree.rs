@@ -27,9 +27,10 @@
 // 5 The cell content area
 // 6 The reserved region.  (hope to assume always 0)
 
+use crate::serial_type;
+use crate::record;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Cursor, Read, Seek, SeekFrom};
-
 // Sqlite supports different page sizes, but we are just going to support the default.
 // TODO: consolidate multiple definitions of this constant in other modules.
 const PAGESIZE: u32 = 4096;
@@ -130,7 +131,7 @@ pub fn get_btree_page(
     }
     // TODO: implement this as an iterator over cells in a page,
     // using iterators: https://doc.rust-lang.org/beta/rust-by-example/trait/iter.html
-    // and returning payloads, which the caller can parse, or which they can use an iterator adapter to return typed values.
+    // and returning a slice that gives access to a payload.
     println!(
         "cell_offsets: {:?} cell_lengths: {:?}",
         cell_offsets, cell_lengths
@@ -163,107 +164,24 @@ pub fn get_btree_page(
                 let payload = &celltmp[offset..].to_vec();
                 println!("payload bytes {:?}", &payload);
 
-                // TODO: move to "record.rs"
-
-                // Read the header.
-                // A record contains a header and a body, in that order. The header begins with a single varint which determines the total number of bytes in the header.
-                let (hdr_len, hdr_len_len) = sqlite_varint::read_varint(&payload[..]);
-                let mut offset = hdr_len_len;
-
-                let mut serial_types = vec![];
-                loop {
-                    let (serial_type, bytes_read) = sqlite_varint::read_varint(&payload[offset..]);
-                    offset += bytes_read;
-                    serial_types.push(serial_type);
-                    if offset >= hdr_len as usize {
-                        break;
+                {
+                    // TODO: use map(typecode_to_string).join("|") or something like that.
+                    let rhi = record::HeaderIterator::new(&payload[..]);
+                    print!("|");
+                    for t in rhi {   
+                        print!(" {} |", serial_type::typecode_to_string(t)); 
                     }
+                    println!("");
                 }
-                print!("| ");
-                for serial_type in serial_types.iter() {
-                    let serial_type_as_str = match serial_type {
-                        // Serial Type	Content Size	Meaning
-                        // 0	0	Value is a NULL.s
-                        0 => "NULL",
-                        // 1	1	Value is an 8-bit twos-complement integer.
-                        1 => "INTEGER",
-                        // 2	2	Value is a big-endian 16-bit twos-complement integer.
-                        2 => "INTEGER",
-                        // 3	3	Value is a big-endian 24-bit twos-complement integer.
-                        // 4	4	Value is a big-endian 32-bit twos-complement integer.
-                        // 5	6	Value is a big-endian 48-bit twos-complement integer.
-                        // 6	8	Value is a big-endian 64-bit twos-complement integer.
-                        // 7	8	Value is a big-endian IEEE 754-2008 64-bit floating point number.
-                        // 8	0	Value is the integer 0. (Only available for schema format 4 and higher.)
-                        8 => "INTEGER",
-                        // 9	0	Value is the integer 1. (Only available for schema format 4 and higher.)
-                        9 => "INTEGER",
-                        // 10,11	variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
-                        // N≥12 and even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
-                        x if *x >= 12 && (*x % 2 == 0) => "BLOB",
-                        // N≥13 and odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
-                        x if *x >= 13 && (*x % 2 == 1) => "STRING",
-                        _ => panic!("Unknown column type: {}", serial_type),
-                    };
-                    print!("{} |", serial_type_as_str);
-                }
-                println!("");
-
                 println!("---");
-
-                let mut c2 = Cursor::new(payload);
-                c2.seek(SeekFrom::Start(offset as u64))
-                    .expect("Should have seeked.");
-
-                // TODO: avoid copying below
-                print!("| ");
-                for serial_type in serial_types.iter() {
-                    let col_data_as_str = match serial_type {
-                        // Serial Type	Content Size	Meaning
-                        // 0	0	Value is a NULL.
-                        0 => "NULL".to_owned(),
-                        // 1	1	Value is an 8-bit twos-complement integer.
-                        1 => format!("{}", c2.read_u8().map_err(|_| Error::ReadFailed)?),
-                        // 2	2	Value is a big-endian 16-bit twos-complement integer.
-                        2 => format!(
-                            "{}",
-                            c2.read_u16::<BigEndian>().map_err(|_| Error::ReadFailed)?
-                        ),
-                        // 3	3	Value is a big-endian 24-bit twos-complement integer.
-                        // 4	4	Value is a big-endian 32-bit twos-complement integer.
-                        // 5	6	Value is a big-endian 48-bit twos-complement integer.
-                        // 6	8	Value is a big-endian 64-bit twos-complement integer.
-                        // 7	8	Value is a big-endian IEEE 754-2008 64-bit floating point number.
-                        // 8	0	Value is the integer 0. (Only available for schema format 4 and higher.)
-                        8 => "0".to_owned(),
-                        // 9	0	Value is the integer 1. (Only available for schema format 4 and higher.)
-                        9 => "1".to_owned(),
-                        // 10,11	variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
-                        // N≥12 and even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
-                        x if *x >= 12 && (*x % 2 == 0) => {
-                            // TODO: avoid the copy somehow?
-                            let mut buf = vec![0_u8; (*x as usize - 12) / 2];
-                            c2.read_exact(&mut buf[..]).map_err(|_| Error::ReadFailed)?;
-                            format!("{:?}", buf)
-                        }
-                        // N≥13 and odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
-                        x if *x >= 13 && (x % 2 == 1) => {
-                            // TODO: avoid the copy somehow?
-                            let mut buf = vec![0_u8; (*x as usize - 13) / 2];
-                            c2.read_exact(&mut buf[..]).map_err(|_| Error::ReadFailed)?;
-                            String::from_utf8(buf)
-                                .expect("Should have converted string to utf8")
-                                .as_str()
-                                .to_owned()
-                        }
-                        _ => panic!("Unknown column type: {}", serial_type),
-                    };
-                    print!(" {} |", col_data_as_str);
+                print!("|");
+                let hi = record::ValueIterator::new(&payload[..]);
+                for (t, v) in hi {
+                    // TODO: map the iterator using a closure that calls to_string, and then intersperses the delimiters and then reduces into a string.
+                    // TODO: move cursor use into read_value_to_string, so it just uses a byte slice.
+                    print!(" {} |", serial_type::read_value_to_string(&t, &mut Cursor::new(v)));
                 }
                 println!("");
-                // Another function converts payloads into record header and record body.
-                // e.g. 02 01 02 09 means 2 byte payload, rowid 1, 2 byte record header, record type is literal 1 (09), record body has zero bytes (nonexistent additional bytes).
-                //println!("{}", std::str::from_utf8(&celltmp).expect("Should have converted to a string"));
             }
             _ => unimplemented!("Only Leaf Table page types implemented."),
         }
