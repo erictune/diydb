@@ -14,6 +14,12 @@ pub enum Error {
     WrongMagic,
     #[error("A field value is not supported by this code, though it may be valid Sqlite format.")]
     Unsupported,
+    #[error("The pagesize is not supported by this code, though it may be valid Sqlite format.")]
+    UnsupportedPagesize,
+    #[error("A field value specified a free list that is not supported by this code, though it may be valid Sqlite format.")]
+    UnsupportedFreelistUse,
+    #[error("A field value specified a schema type that is not supported by this code, though it may be valid Sqlite format.")]
+    UnsupportedSchema,
     #[error("A field value is invalid per the Sqlite format spec (version 3.0.0).")]
     Invalid,
     #[error("Error reading file.")]
@@ -85,7 +91,7 @@ fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
         x => x as u32,
     };
     if pagesize != PAGESIZE {
-        return Err(Error::Unsupported);
+        return Err(Error::UnsupportedPagesize);
     }
     // Offset	Size	Description
     // 18	    1	    File format write version. 1 for legacy; 2 for WAL.
@@ -127,16 +133,16 @@ fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // 40	    4	    The schema cookie.
     // 44	    4	    The schema format number. Supported schema formats are 1, 2, 3, and 4.
     if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
-        return Err(Error::Unsupported);
+        return Err(Error::UnsupportedFreelistUse);
     }
     if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
-        return Err(Error::Unsupported);
+        return Err(Error::UnsupportedFreelistUse);
     }
     if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x1 {
-        return Err(Error::Unsupported);
+        return Err(Error::UnsupportedSchema);
     }
     if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x4 {
-        return Err(Error::Unsupported);
+        return Err(Error::UnsupportedSchema);
     }
 
     // Offset	Size	Description
@@ -146,22 +152,22 @@ fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // 60	    4	    The "user version" as read and set by the user_version pragma.
     // 64	    4	    True (non-zero) for incremental-vacuum mode. False (zero) otherwise.
     // 68	    4	    The "Application ID" set by PRAGMA application_id.
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 { println!("a");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {println!("b");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x1 {
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x1 {println!("c");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {println!("d");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {println!("e");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {println!("f");
         return Err(Error::Unsupported);
     }
 
@@ -177,9 +183,7 @@ fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // Offset	Size	Description
     // 92	4	The version-valid-for number.
     // 96	4	SQLITE_VERSION_NUMBER
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x1 {
-        return Err(Error::Unsupported);
-    }
+    let _version_valid_for = f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)?;
     if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != SQLITE_VERSION_NUMBER {
         return Err(Error::Unsupported);
     }
@@ -198,14 +202,14 @@ impl DbAttachment {
     // TODO: return errors
     // Is it better to use the Box<dyn Error> pattern or
     // to define a new error type in this crate and map the std::fs errors to it?
-    pub fn open() -> Result<DbAttachment, Error> {
+    pub fn open(path: &str) -> Result<DbAttachment, Error> {
         // TODO: Lock file when opening so that other processes do not also
         // open and modify it, and so that is not modified while reading.
         let result = std::fs::OpenOptions::new()
             .read(true)
-            .write(true)
-            .create(true)
-            .open("./test.db");
+            .write(false)
+            .create(false)
+            .open(path);
         match result {
             Ok(ff) => Ok(DbAttachment { f: ff }),
             Err(_) => Err(Error::OpenFailed),

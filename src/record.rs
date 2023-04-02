@@ -138,11 +138,6 @@ impl<'a> Iterator for ValueIterator<'a> {
 
     /// Returns the next item, which is a tuple of (type, &[u8] - a reference to a slice of bytes for this value).
     ///
-    /// # Arguments
-    ///
-    /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
-    ///         and ends with the last byte of the record body.
-    ///
     fn next(&mut self) -> Option<Self::Item> {
         if self.hdr_offset >= self.hdr_len {
             return None;

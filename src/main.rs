@@ -20,11 +20,11 @@ use crate::vfs::DbAttachment;
 
 fn main() {
     // Open the database file. This is a file in sqlite3 format.
-    let mut vfs = DbAttachment::open().expect("Should have opened the DB");
+    let mut vfs = DbAttachment::open("./record.db").expect("Should have opened the DB");
 
     // Read db file header to confirm it is a valid file, and how many and what size pages it has.
-    let dbhdr = vfs.get_header().unwrap();
-    println!("Opened DB File.  Interesting Header bits: {:?}", dbhdr);
+    let dbhdr = vfs.get_header().expect("Should have gotten DB file header");
+    println!("Opened DB File. {:?}", dbhdr);
     // TODO: move checking magic and reading creation-time fields (like page size) into vfs.rs.
     //       but move access to modifiable fields to use a Pager from pager.rs, since that will require locking.
 
@@ -39,6 +39,7 @@ fn main() {
     let pagenum = SCHEMA_BTREE_ROOT_PAGENUM;
     // TODO: consider putting this into btree.rs
 
+    println!("Schema Table (root page 1)");
     print!("| ");
     for column in schema_table_columns.iter() {
         print!(" {} |", *column);
@@ -54,29 +55,25 @@ fn main() {
         _ => 0,
     };
 
+    {
     // TODO: consider making this take a pager and a root pagenumber instead.
     //   e.g.   btree::get_btree_page(/* pager */ pager, /* pagenum of root */ SCHEMA_BTREE_ROOT_PAGENUM);
-    match btree::get_btree_page(page, btree_start_offset) {
-        Ok(ph) => {
-            println!("{:?}", ph);
-        }
-        Err(e) => {
-            panic!("Error processing btree #{} : {}", pagenum, e);
-        }
-    }
+    let tl = btree::PageReader::new(page, btree_start_offset);
+    let _ = tl.check_header();
+    //println!("{:?}", tl.check_header());
+
     // TODO: instead of printing the btree contents inside "get_btree_page", do these things:
     // - provide an iterator over btree kvs
     //   e.g.   btree = btree::new(/* pager */ pager, /* pagenum of root */ SCHEMA_BTREE_ROOT_PAGENUM);
     //          for kv in btree.iter() { ... }
-    // - provide an iterator over record elements (returning the type, length, and raw bytes)
-    //   e.g.   record = record::new(kv);
-    // - provide a helper function to get an integer type record as an i64 integer (?)
-    //   e.g.   for elem in record { print!("{}", elem.type_as_string()) }
-    // - provide a helper function to record in the form of a printable string.
-    //   e.g.   for elem in record { print!("{}", elem.value_as_string()) }
+    tl.print_cell_contents();
+    }
+
+
+    println!("Table $NAME (root page 2)");
 
     // Dump a table other than than schema table.
-
+    {
     // TODO: instead of hardcoding that there is another table with root page 2, write a function to walk the records of the schema page,
     // to find the root pages of all "table" records, and then we can dump those.
     // TODO: for ech of those rows, parse the sql column of "sql" to extract the list of column names.  Print those as a header to this btree.
@@ -89,15 +86,11 @@ fn main() {
         _ => 0,
     };
 
-    match btree::get_btree_page(page2, btree_start_offset2) {
-        Ok(ph) => {
-            println!("{:?}", ph);
-        }
-        Err(e) => {
-            panic!("Error processing btree #{} : {}", pagenum, e);
-        }
-    }
-
+    let tl2 = btree::PageReader::new(page2, btree_start_offset2);
+    let _ = tl2.check_header();
+    //println!("{:?}", tl2.check_header());
+    tl2.print_cell_contents();
+    }   
     // We only handle pages of type btree.
     // Rationale:  When Sqlite files are created from sessions that use only CREATE TABLE and INSERT statements,
     // the resulting files don't appear to have other page types.
