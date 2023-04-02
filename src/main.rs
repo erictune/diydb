@@ -17,13 +17,12 @@ mod record;
 mod serial_type;
 
 use crate::vfs::DbAttachment;
-
+use std::io::Cursor;
 // TODO: make an iterator that can walk across multiple pages.  To do that,
 // the "btree iterator" needs to hold access to the pager.  This in turn requires.
 // improvements to pager design, like:
 // (pager object static lifetime, page interior mutability, concurrency controls)
 
-// TODO: look into consolidating btree::PageReader and btree::CellIterator
 fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::PageReader {
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
@@ -35,7 +34,8 @@ fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::PageReade
     };
     btree::PageReader::new(page, btree_start_offset)
 }
-fn _new_cell_iterator_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::CellIterator {
+
+fn new_table_leaf_cell_iterator_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::TableLeafCellIterator {
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
         Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
@@ -44,10 +44,40 @@ fn _new_cell_iterator_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::C
         1 => 100,
         _ => 0,
     };
-    btree::CellIterator::new(page, btree_start_offset)
+    // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
+    btree::TableLeafCellIterator::new(btree::CellIterator::new(page, btree_start_offset))
 }
 
+fn print_table(pgr: &mut pager::Pager, root_pgnum: usize, table_name: &str, column_names: Vec<&str>) {
+    println!("Table {}", table_name);
+    println!("| {} |", column_names.join(" | "));
+    {
+        let pr = new_reader_for_page(pgr, root_pgnum);
+        let _ = pr.check_header();
+        //println!("{:?}", tl.check_header());
+    }
+    {
+        let tci = new_table_leaf_cell_iterator_for_page(pgr, root_pgnum);
+        for (rowid, payload) in tci {
+            // TODO: use map(typecode_to_string).join("|") or something like that.
+            let rhi = record::HeaderIterator::new(payload);
+            print!("{} |", rowid);
+            for t in rhi {   
+                print!(" {} |", serial_type::typecode_to_string(t)); 
+            }
+            println!("");
+            print!("{} |", rowid);
+            let hi = record::ValueIterator::new(&payload[..]);
+            for (t, v) in hi {
+                // TODO: map the iterator using a closure that calls to_string, and then intersperses the delimiters and then reduces into a string.
+                // TODO: move cursor use into read_value_to_string, so it just uses a byte slice.
+                print!(" {} |", serial_type::read_value_to_string(&t, &mut Cursor::new(v)));
+            }
+            println!("");
+        }
+    }
 
+}
 fn main() {
     // Open the database file. This is a file in sqlite3 format.
     let mut vfs = DbAttachment::open("./record.db").expect("Should have opened the DB");
@@ -60,37 +90,19 @@ fn main() {
 
     let mut pager = pager::Pager::new(vfs);
 
+    // ----------------------------------------------------//
+
     // Page 1 (the first page) is always a btree page, and it is the root of the schema.  It has references
     // to the roots of other btrees.
     const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
     let schema_table_columns = vec!["type", "name", "tbl_name", "rootpage", "sql"];
 
-    // ----------------------------------------------------//
-    println!("Schema Table");
-    println!("| {} |", schema_table_columns.join(" | "));
-    {
-        let pr = new_reader_for_page(&mut pager, SCHEMA_BTREE_ROOT_PAGENUM);
-        let _ = pr.check_header();
-        //println!("{:?}", tl.check_header());
-
-        // TODO: instead of printing the btree contents inside "get_btree_page", do using an iterator.
-        //   e.g.   btree = btree::new(/* pager */ pager, /* pagenum of root */ SCHEMA_BTREE_ROOT_PAGENUM);
-        //          for kv in btree.iter() { ... }
-        pr.print_cell_contents();
-    }
+    print_table(&mut pager, SCHEMA_BTREE_ROOT_PAGENUM, "sqlite_schema", schema_table_columns);
 
     // ----------------------------------------------------//
-    // TODO: Get the table_name and page number from the schema table.
-    let table_name = "TODO_get_table_name";
-    let pagenum = 2;
-    println!("Table {}", table_name);
-    // TODO: Print the schema of this table by parsing the sql of the corresponding row of the schema table.
-    {
-        let pr = new_reader_for_page(&mut pager, pagenum);
-        let _ = pr.check_header();
-        //println!("{:?}", tl2.check_header());
-        pr.print_cell_contents();
-    }   
+
+    // TODO: Iterate over the table_names and page numbers from the schema table.
+    print_table(&mut pager, 2, "TODO_get_table_name", vec![]);
 
     // ----------------------------------------------------//
 

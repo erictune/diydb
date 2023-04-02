@@ -12,8 +12,6 @@
 // 5 The cell content area
 // 6 The reserved region.  (hope to assume always 0)
 
-use crate::serial_type;
-use crate::record;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Cursor, Seek, SeekFrom};
 // Sqlite supports different page sizes, but we are just going to support the default.
@@ -98,47 +96,6 @@ impl<'a> PageReader<'a> {
             }
     }
     
-    pub fn print_cell_contents(&self) {
-        let it = CellIterator::new(self.page, self.non_btree_header_bytes);
-        // TODO: implment cell iterators for other page types with different Item
-        // and different parsing code.
-        for cell in it {
-            // Cell format for table leaf page.
-            // payload_len: A varint which is the total number of bytes of payload, including any overflow
-            // rowid: A varint which is the integer key, a.k.a. "rowid"
-            // unspilled_payload: The initial portion of the payload that does not spill to overflow pages.
-            // overflow_page_num: A 4-byte big-endian integer page number for the first page of the overflow page list - omitted if all payload fits on the b-tree page.
-            let mut offset = 0;
-            let (payload_len, bytesread) = sqlite_varint::read_varint(&cell);
-            offset += bytesread;
-            let (_rowid, bytesread2) = sqlite_varint::read_varint(&cell[offset..]);
-            offset += bytesread2;
-            //println!("payload_len: {} rowid: {}", payload_len, rowid);
-            if cell.len() - offset != (payload_len as usize) {
-                unimplemented!("Spilled payloads not implemented.");
-            }
-            let payload = &cell[offset..].to_vec();
-            //println!("payload bytes {:?}", &payload);
-
-            {
-                // TODO: use map(typecode_to_string).join("|") or something like that.
-                let rhi = record::HeaderIterator::new(&payload[..]);
-                print!("|");
-                for t in rhi {   
-                    print!(" {} |", serial_type::typecode_to_string(t)); 
-                }
-                println!("");
-            }
-            print!("|");
-            let hi = record::ValueIterator::new(&payload[..]);
-            for (t, v) in hi {
-                // TODO: map the iterator using a closure that calls to_string, and then intersperses the delimiters and then reduces into a string.
-                // TODO: move cursor use into read_value_to_string, so it just uses a byte slice.
-                print!(" {} |", serial_type::read_value_to_string(&t, &mut Cursor::new(v)));
-            }
-            println!("");
-        }
-    }
 }
 
 pub struct CellIterator<'a> {
@@ -149,7 +106,7 @@ pub struct CellIterator<'a> {
 }
 
 impl<'a> CellIterator<'a> {
-    /// Creates an iterator over the cells of a btree.
+    /// Creates an iterator over the cells of a single page of a btree.
     ///
     /// Iterator produces cells which are slices of bytes, which contain a record.
     /// 
@@ -209,9 +166,7 @@ impl<'a> Iterator for CellIterator<'a> {
     // is dependent on the type of the btree page.
     type Item = &'a [u8];
 
-    /// Returns the next item, which is a tuple of (k, v), where
-    ///   `k` is a key, the row number (u64)
-    ///   `v` is a value, &[u8], the slice of bytes containing the "payload" of the cell.
+    /// Returns the next item, which is a &[u8], the slice of bytes containing the contents of the cell.
     fn next(&mut self) -> Option<Self::Item> {
         if self.cell_idx >= self.cell_offsets.len() {
             return None
@@ -223,6 +178,79 @@ impl<'a> Iterator for CellIterator<'a> {
         let e = b + self.cell_lengths[self.cell_idx];
         self.cell_idx += 1;
         Some(&self.page[b..e])
+    }
+}
+
+// Cell Formats from https://www.sqlite.org/fileformat2.html#b_tree_pages
+//
+// Table B-Tree Leaf Cell (header 0x0d):
+// A varint which is the total number of bytes of payload, including any overflow
+// A varint which is the integer key, a.k.a. "rowid"
+// The initial portion of the payload that does not spill to overflow pages.
+// A 4-byte big-endian integer page number for the first page of the overflow page list - omitted if all payload fits on the b-tree page.
+//
+// Table B-Tree Interior Cell (header 0x05):
+// A 4-byte big-endian page number which is the left child pointer.
+// A varint which is the integer key
+//
+// Index B-Tree Leaf Cell (header 0x0a):
+// A varint which is the total number of bytes of key payload, including any overflow
+// The initial portion of the payload that does not spill to overflow pages.
+// A 4-byte big-endian integer page number for the first page of the overflow page list - omitted if all payload fits on the b-tree page.
+//
+// Index B-Tree Interior Cell (header 0x02):
+// A 4-byte big-endian page number which is the left child pointer.
+// A varint which is the total number of bytes of key payload, including any overflow
+// The initial portion of the payload that does not spill to overflow pages.
+// A 4-byte big-endian integer page number for the first page of the overflow page list - omitted if all payload fits on the b-tree page.
+
+
+pub struct TableLeafCellIterator<'a> {
+    ci: CellIterator<'a>,
+}
+
+impl<'a> TableLeafCellIterator<'a> {
+    /// Creates an iterator over the cells of a single page of a btree, with page of type TableLeaf.
+    ///
+    /// Iterator produces cells which are slices of bytes, which contain a record.
+    /// 
+    /// # Arguments
+    ///
+    /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
+    ///         slives ends with the last byte of the record body.
+    pub fn new(ci: CellIterator) -> TableLeafCellIterator {
+        TableLeafCellIterator{
+            ci: ci,
+        }
+    }
+}
+
+impl<'a> Iterator for TableLeafCellIterator<'a> {
+    // The iterator returns a tuple of (rowid, cell_payload).
+    // Overflowing payloads are not supported.
+    type Item = (i64, &'a [u8]);
+    
+    /// Returns the next item, which is a tuple of (k, v), where
+    ///   `k` is a key, the row number (u64)
+    ///   `v` is a value, &[u8].
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.ci.next() {
+            None => None,
+            Some(cell) => {
+                let mut offset = 0;
+                let (payload_len, bytesread) = sqlite_varint::read_varint(cell);
+                offset += bytesread;
+                let (rowid, bytesread2) = sqlite_varint::read_varint(&cell[offset..]);
+                offset += bytesread2;
+                if cell.len() - offset != (payload_len as usize) {
+                    unimplemented!("Spilled payloads not implemented.");
+                }
+                //let payload = &cell[offset..].to_vec();
+                //println!("payload bytes {:?}", &payload);
+                Some((rowid, &cell[offset..]))
+            }
+        }
+
     }
 }
 
