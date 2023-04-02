@@ -18,6 +18,36 @@ mod serial_type;
 
 use crate::vfs::DbAttachment;
 
+// TODO: make an iterator that can walk across multiple pages.  To do that,
+// the "btree iterator" needs to hold access to the pager.  This in turn requires.
+// improvements to pager design, like:
+// (pager object static lifetime, page interior mutability, concurrency controls)
+
+// TODO: look into consolidating btree::PageReader and btree::CellIterator
+fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::PageReader {
+    let page = match pgr.get_page_ro(pgnum) {
+        Ok(p) => p,
+        Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
+    };
+    let btree_start_offset = match pgnum {
+        1 => 100,
+        _ => 0,
+    };
+    btree::PageReader::new(page, btree_start_offset)
+}
+fn _new_cell_iterator_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::CellIterator {
+    let page = match pgr.get_page_ro(pgnum) {
+        Ok(p) => p,
+        Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
+    };
+    let btree_start_offset = match pgnum {
+        1 => 100,
+        _ => 0,
+    };
+    btree::CellIterator::new(page, btree_start_offset)
+}
+
+
 fn main() {
     // Open the database file. This is a file in sqlite3 format.
     let mut vfs = DbAttachment::open("./record.db").expect("Should have opened the DB");
@@ -35,62 +65,35 @@ fn main() {
     const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
     let schema_table_columns = vec!["type", "name", "tbl_name", "rootpage", "sql"];
 
-    // Dump the the database btree.
-    let pagenum = SCHEMA_BTREE_ROOT_PAGENUM;
-    // TODO: consider putting this into btree.rs
-
-    println!("Schema Table (root page 1)");
-    print!("| ");
-    for column in schema_table_columns.iter() {
-        print!(" {} |", *column);
-    }
-    println!("");
-
-    let page = match pager.get_page_ro(pagenum) {
-        Ok(page) => page,
-        Err(e) => panic!("Error loading db page #{} : {}", pagenum, e),
-    };
-    let btree_start_offset = match pagenum {
-        1 => 100,
-        _ => 0,
-    };
-
+    // ----------------------------------------------------//
+    println!("Schema Table");
+    println!("| {} |", schema_table_columns.join(" | "));
     {
-    // TODO: consider making this take a pager and a root pagenumber instead.
-    //   e.g.   btree::get_btree_page(/* pager */ pager, /* pagenum of root */ SCHEMA_BTREE_ROOT_PAGENUM);
-    let tl = btree::PageReader::new(page, btree_start_offset);
-    let _ = tl.check_header();
-    //println!("{:?}", tl.check_header());
+        let pr = new_reader_for_page(&mut pager, SCHEMA_BTREE_ROOT_PAGENUM);
+        let _ = pr.check_header();
+        //println!("{:?}", tl.check_header());
 
-    // TODO: instead of printing the btree contents inside "get_btree_page", do these things:
-    // - provide an iterator over btree kvs
-    //   e.g.   btree = btree::new(/* pager */ pager, /* pagenum of root */ SCHEMA_BTREE_ROOT_PAGENUM);
-    //          for kv in btree.iter() { ... }
-    tl.print_cell_contents();
+        // TODO: instead of printing the btree contents inside "get_btree_page", do using an iterator.
+        //   e.g.   btree = btree::new(/* pager */ pager, /* pagenum of root */ SCHEMA_BTREE_ROOT_PAGENUM);
+        //          for kv in btree.iter() { ... }
+        pr.print_cell_contents();
     }
 
-
-    println!("Table $NAME (root page 2)");
-
-    // Dump a table other than than schema table.
+    // ----------------------------------------------------//
+    // TODO: Get the table_name and page number from the schema table.
+    let table_name = "TODO_get_table_name";
+    let pagenum = 2;
+    println!("Table {}", table_name);
+    // TODO: Print the schema of this table by parsing the sql of the corresponding row of the schema table.
     {
-    // TODO: instead of hardcoding that there is another table with root page 2, write a function to walk the records of the schema page,
-    // to find the root pages of all "table" records, and then we can dump those.
-    // TODO: for ech of those rows, parse the sql column of "sql" to extract the list of column names.  Print those as a header to this btree.
-    let page2 = match pager.get_page_ro(2) {
-        Ok(page) => page,
-        Err(e) => panic!("Error loading db page #{} : {}", 2, e),
-    };
-    let btree_start_offset2 = match 2 {
-        1 => 100,
-        _ => 0,
-    };
-
-    let tl2 = btree::PageReader::new(page2, btree_start_offset2);
-    let _ = tl2.check_header();
-    //println!("{:?}", tl2.check_header());
-    tl2.print_cell_contents();
+        let pr = new_reader_for_page(&mut pager, pagenum);
+        let _ = pr.check_header();
+        //println!("{:?}", tl2.check_header());
+        pr.print_cell_contents();
     }   
+
+    // ----------------------------------------------------//
+
     // We only handle pages of type btree.
     // Rationale:  When Sqlite files are created from sessions that use only CREATE TABLE and INSERT statements,
     // the resulting files don't appear to have other page types.

@@ -15,7 +15,7 @@
 use crate::serial_type;
 use crate::record;
 use byteorder::{BigEndian, ReadBytesExt};
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{Cursor, Seek, SeekFrom};
 // Sqlite supports different page sizes, but we are just going to support the default.
 // TODO: consolidate multiple definitions of this constant in other modules.
 const PAGESIZE: u32 = 4096;
@@ -225,5 +225,4 @@ impl<'a> Iterator for CellIterator<'a> {
         Some(&self.page[b..e])
     }
 }
-
 
