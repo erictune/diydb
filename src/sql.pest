@@ -4,7 +4,7 @@ table_identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 column_name = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
 
 column_def = {column_name ~ type_name}
-additional_column_def = { "," ~ column_def}
+column_defs = { column_def ~ ("," ~ column_def)* }
 
 // https://www.sqlite.org/syntax/create-table-stmt.html
 create = _{ ^"create" }
@@ -13,7 +13,7 @@ int = { ^"int" }
 real = { ^"real" }
 text = { ^"string" }
 type_name = {int | text | real}
-create_stmt = {SOI ~ create ~ table_identifier ~ "(" ~ column_def ~ additional_column_def* ~ ")" ~ EOI}
+create_stmt = {SOI ~ create ~ table ~ table_identifier ~ "(" ~ column_defs ~ ")" ~ EOI}
 
 
 // https://www.sqlite.org/syntax/select-stmt.html

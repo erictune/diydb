@@ -63,8 +63,8 @@ fn new_table_leaf_cell_iterator_for_page(pgr: &mut pager::Pager, pgnum: usize) -
 }
 
 fn print_table(pgr: &mut pager::Pager, root_pgnum: usize, table_name: &str, column_names: Vec<&str>) {
-    println!("Table {}", table_name);
-    println!("| {} |", column_names.join(" | "));
+    println!("Full Dump of Table {}", table_name);
+    println!("   | {} |", column_names.iter().map(|x| format!("{:15}", x)).collect::<Vec<String>>().join(" | "));
     {
         let pr = new_reader_for_page(pgr, root_pgnum);
         let _ = pr.check_header();
@@ -75,58 +75,56 @@ fn print_table(pgr: &mut pager::Pager, root_pgnum: usize, table_name: &str, colu
         for (rowid, payload) in tci {
             // TODO: use map(typecode_to_string).join("|") or something like that.
             let rhi = record::HeaderIterator::new(payload);
-            print!("{} |", rowid);
+            print!("{:2} |", rowid);
             for t in rhi {   
-                print!(" {} |", serial_type::typecode_to_string(t)); 
+                print!(" {:15} |", serial_type::typecode_to_string(t)); 
             }
             println!("");
-            print!("{} |", rowid);
+            print!("{:2} |", rowid);
             let hi = record::ValueIterator::new(&payload[..]);
             for (t, v) in hi {
                 // TODO: map the iterator using a closure that calls to_string, and then intersperses the delimiters and then reduces into a string.
                 // TODO: move cursor use into read_value_to_string, so it just uses a byte slice.
-                print!(" {} |", serial_type::read_value_to_string(&t, &mut Cursor::new(v)));
+                print!(" {:15} |", serial_type::read_value_to_string(&t, &mut Cursor::new(v)));
             }
             println!("");
         }
     }
-
 }
-fn main() {
-    // Open the database file. This is a file in sqlite3 format.
-    let mut vfs = DbAttachment::open("./record.db").expect("Should have opened the DB");
 
-    // Read db file header to confirm it is a valid file, and how many and what size pages it has.
-    let dbhdr = vfs.get_header().expect("Should have gotten DB file header");
-    println!("Opened DB File. {:?}", dbhdr);
-    // TODO: move checking magic and reading creation-time fields (like page size) into vfs.rs.
-    //       but move access to modifiable fields to use a Pager from pager.rs, since that will require locking.
+// TODO: figure out how to move parsing and code generation out of main into codegen.rs.
+// TODO: expand star into list of all column names of all tables in the input table list.
+fn parse_create_statement(c: &str) -> (String, Vec<&str>) {
+    // TODO: get this from the schema table by looking it up.
 
-    let mut pager = pager::Pager::new(vfs);
+    let create_stmt = SQLParser::parse(Rule::create_stmt, c)
+    .expect("unsuccessful parse") // unwrap the parse result
+    .next().unwrap();
 
-    // ----------------------------------------------------//
+    let mut colnames_and_types = vec![];
+    let mut table_name = String::from("");
+    // Confirm it is a select statement.
+    for c in create_stmt.into_inner() {
+        //println!("{:?}", s);
+        match c.as_rule() {
+            Rule::table_identifier => { table_name = String::from(c.as_str()); },
+            Rule::column_defs => {
+                for column_def in c.into_inner() {
+                    match column_def.as_rule() {
+                        Rule::column_def => { colnames_and_types.push(column_def.as_str()); },
+                        _ => unreachable!(),
+                    }
+                }
+            },
+            Rule::EOI => (),
+            _ => unreachable!(),
+        }
+    }
+    (table_name, colnames_and_types)
+}
 
-    // Page 1 (the first page) is always a btree page, and it is the root of the schema.  It has references
-    // to the roots of other btrees.
-    const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
-    let schema_table_columns = vec!["type", "name", "tbl_name", "rootpage", "sql"];
-
-    print_table(&mut pager, SCHEMA_BTREE_ROOT_PAGENUM, "sqlite_schema", schema_table_columns);
-
-    // ----------------------------------------------------//
-
-    print_table(&mut pager, 2, "TODO_get_table_name", vec![]);
-
-    // ----------------------------------------------------//
-
-    // We only handle pages of type btree.
-    // Rationale:  When Sqlite files are created from sessions that use only CREATE TABLE and INSERT statements,
-    // the resulting files don't appear to have other page types.
-    // TODO: support non-btree pages.
-
-    // TODO: figure out how to move parsing and code generation out of main into codegen.rs.
-    let q = "SELECT a FROM record_test";
-    let select_stmt = SQLParser::parse(Rule::select_stmt, &q)
+fn parse_select_statement(query: &str)  -> (Vec<&str>, Vec<&str>) {
+    let select_stmt = SQLParser::parse(Rule::select_stmt, &query)
     .expect("unsuccessful parse") // unwrap the parse result
     .next().unwrap();
 
@@ -152,11 +150,51 @@ fn main() {
             _ => unreachable!(),
         }
     }
+    (input_tables, output_cols)
+}
+
+fn main() {
+    // Open the database file. This is a file in sqlite3 format.
+    let mut vfs = DbAttachment::open("./record.db").expect("Should have opened the DB");
+
+    // Read db file header to confirm it is a valid file, and how many and what size pages it has.
+    let dbhdr = vfs.get_header().expect("Should have gotten DB file header");
+    println!("Opened DB File. {:?}", dbhdr);
+    // TODO: move checking magic and reading creation-time fields (like page size) into vfs.rs.
+    //       but move access to modifiable fields to use a Pager from pager.rs, since that will require locking.
+
+    let mut pager = pager::Pager::new(vfs);
+
+    // ----------------------------------------------------//
+
+    // Page 1 (the first page) is always a btree page, and it is the root of the schema.  It has references
+    // to the roots of other btrees.
+    const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
+    let schema_table_columns = vec!["type", "name", "tbl_name", "rootpage", "sql"];
+
+    print_table(&mut pager, SCHEMA_BTREE_ROOT_PAGENUM, "sqlite_schema", schema_table_columns);
+
+    // ----------------------------------------------------//
+    // TODO: get from above table:
+    let create_statement = "CREATE TABLE record_test ( a int, b int, c real, d string, e int)";
+    // TODO: separate types and column names.  Just print the names.  Use the types to cast the serial_types.
+    let (table_name, column_names) = parse_create_statement(create_statement);
+    // TODO: make the print_table function accept a vector<T> where T is str& or String?
+    // let column_names_as_str = column_names.iter().into_iter().map(|s| s.as_str()).collect();
+
+    print_table(&mut pager, 2, table_name.as_str(), column_names);
+
+    // ----------------------------------------------------//
+
+    // We only handle pages of type btree.
+    // Rationale:  When Sqlite files are created from sessions that use only CREATE TABLE and INSERT statements,
+    // the resulting files don't appear to have other page types.
+    // TODO: support non-btree pages.
+
+    let q = "SELECT a FROM record_test";
+    let (input_tables, output_cols) = parse_select_statement(q);
     println!("output_cols: {}", output_cols.join(";"));
     println!("input_tables: {}", input_tables.join(";"));
-
-
-    // TODO: expand star into list of all column names of all tables in the input table list.
 
     // TODO: Generate a sequence of instruction for the above statement, like:
     // 
