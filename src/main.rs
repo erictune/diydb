@@ -1,5 +1,17 @@
-// TODO: save this into github, before doing more to it.  It works, so lets keep it working.
-// TODO: iterator-ify the table dumping.
+extern crate pest;
+#[macro_use]
+extern crate pest_derive;
+
+use pest::Parser;
+
+#[derive(Parser)]
+#[grammar = "sql.pest"]
+pub struct SQLParser;
+
+// TODO: Parse the create statement from the "sql" column of the schema table to provide the schema for the second table,
+// and use that schema as the column headers.
+// Then cast each serial type to its schema type while reading them.
+
 
 // Intent is to have code structure which models Sqlite's architecture (https://www.sqlite.org/arch.html)
 // "vfs" - opens and locks database files, providing Read and Seek interfaces to them, and the header (readonly initially).
@@ -8,8 +20,10 @@ mod vfs;
 mod pager;
 // "btree" - provides iterator (cursor) to walk over btree elements (in future could support writes.).  Uses a pager to get at pages.
 mod btree;
-// "bytecode" - makes a program from a parse tree.  Uses btree cursors to the referenced tables.  Emits rows.
 // "parser" - parses SQL statement into a parse tree, e.g. using https://pest.rs/book/examples/ini.html
+// We use pest parser generator.
+
+// "bytecode" - makes a program from a parse tree.  Uses btree cursors to the referenced tables.  Emits rows.
 // "interface" - REPL loop that accepts a sql query to do on the file, using parser and vfs, and commands to open databases, etc.
 // Formats emitted rows to csv file or stdout.
 
@@ -101,7 +115,6 @@ fn main() {
 
     // ----------------------------------------------------//
 
-    // TODO: Iterate over the table_names and page numbers from the schema table.
     print_table(&mut pager, 2, "TODO_get_table_name", vec![]);
 
     // ----------------------------------------------------//
@@ -111,28 +124,59 @@ fn main() {
     // the resulting files don't appear to have other page types.
     // TODO: support non-btree pages.
 
-    // For now we only support this query.
-    // let q = "SELECT * FROM a";
+    // TODO: figure out how to move parsing and code generation out of main into codegen.rs.
+    let q = "SELECT a FROM record_test";
+    let select_stmt = SQLParser::parse(Rule::select_stmt, &q)
+    .expect("unsuccessful parse") // unwrap the parse result
+    .next().unwrap();
 
-    // TODO move to parser.rs
-    // let pt = parse(q);
+    let mut output_cols = vec![];
+    let mut input_tables = vec![];
+    // Confirm it is a select statement.
+    for s in select_stmt.into_inner() {
+        //println!("{:?}", s);
+        match s.as_rule() {
+            Rule::select_item => { 
+                for t in s.into_inner() {
+                    //println!("--- {:?}", t);
 
-    // let prog = codegen(pt);
-    // program {
-    //   set output header to input header;
-    //   a: break if input cursor done;
-    //   read from input cursor to registers
-    //   write reg to output cursor
-    //   jump a
-    //  }
+                    match t.as_rule() {
+                        Rule::column_name => { input_tables.push(t.as_str()); },
+                        Rule::star => unimplemented!(),
+                        _ => unreachable!(),
+                     };
+                }
+            },
+            Rule::table_identifier => { output_cols.push(s.as_str()); },
+            Rule::EOI => (),
+            _ => unreachable!(),
+        }
+    }
+    println!("output_cols: {}", output_cols.join(";"));
+    println!("input_tables: {}", input_tables.join(";"));
+
+
+    // TODO: expand star into list of all column names of all tables in the input table list.
+
+    // TODO: Generate a sequence of instruction for the above statement, like:
+    // 
+    // let prog = vec![
+    //      OpOpenTable("a", Cursor1),  // addr 0
+    //      OpBreakIfDone(Cursor1), 
+    //      // Maybe one op for each column to be selected?
+    //      OpReadFromCursor(Cursor1, RowReg1),
+    //      OpSelect(RowReg1, SelExpr),
+    //      OpWriteToOutputStream(RowReg1),
+    //      OpJumpToAddr(0),
+    // ];
 
     // Explain the program to the user.
     // println!("{}", program.explain());
 
-    // Define a function to run programs (a VM):
+    // Define a VM to run the program:
     // let cursor = get_read_cursor(prog.input_table_name());
-    // prog.give_cursor(cursor);
-    // prog.reset();
+    // vm.reset();
+    // vm.load_program(prog);
     // while true {
     //     match prog.step() {
     //         StepResult::Halt => break,
@@ -143,5 +187,5 @@ fn main() {
 
     // Define interface convenience functions to run a query while formatting the output to a text table, etc.
 
-    // REPL to run queries.
+    // Make a REPL to run queries.
 }

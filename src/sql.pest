@@ -1,0 +1,25 @@
+WHITESPACE = _{ " " }
+
+table_identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+column_name = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
+
+column_def = {column_name ~ type_name}
+additional_column_def = { "," ~ column_def}
+
+// https://www.sqlite.org/syntax/create-table-stmt.html
+create = _{ ^"create" }
+table = _{ ^"table" }
+int = { ^"int" }
+real = { ^"real" }
+text = { ^"string" }
+type_name = {int | text | real}
+create_stmt = {SOI ~ create ~ table_identifier ~ "(" ~ column_def ~ additional_column_def* ~ ")" ~ EOI}
+
+
+// https://www.sqlite.org/syntax/select-stmt.html
+select = _{ ^"select" }
+star = _{ "*" }
+from = _{ ^"from" }
+select_item = {column_name | star} // TODO: support star, list items, and expressions on columns
+from_items = {from ~ table_identifier}
+select_stmt = {SOI ~ select ~ select_item ~ from ~ table_identifier ~ EOI}
