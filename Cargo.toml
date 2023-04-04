@@ -11,4 +11,5 @@ byteorder = "1.4.3"
 sqlite_varint="0.1.2"
 pest = "2.0"
 pest_derive = "2.0"
+itertools = "0.10.5"
 

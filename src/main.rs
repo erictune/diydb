@@ -1,18 +1,11 @@
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
+// TODO: implement PrintTable using an inner method that emits rows and an outer method that formats (width, headers) and prints.
+//       subsequently, the inner method could be implemented as a "do select" method that interprets a parsed select statement and emits
+//       rows.
 
-use pest::Parser;
+// TODO: move below comments to the readme.md under code structure.
 
-#[derive(Parser)]
-#[grammar = "sql.pest"]
-pub struct SQLParser;
-
-// TODO: Parse the create statement from the "sql" column of the schema table to provide the schema for the second table,
-// and use that schema as the column headers.
-// Then cast each serial type to its schema type while reading them.
-
-
+// System Layers
+//
 // Intent is to have code structure which models Sqlite's architecture (https://www.sqlite.org/arch.html)
 // "vfs" - opens and locks database files, providing Read and Seek interfaces to them, and the header (readonly initially).
 mod vfs;
@@ -22,21 +15,31 @@ mod pager;
 mod btree;
 // "parser" - parses SQL statement into a parse tree, e.g. using https://pest.rs/book/examples/ini.html
 // We use pest parser generator.
+mod parser;
+extern crate pest;
+#[macro_use]
+extern crate pest_derive;
 
 // "bytecode" - makes a program from a parse tree.  Uses btree cursors to the referenced tables.  Emits rows.
 // "interface" - REPL loop that accepts a sql query to do on the file, using parser and vfs, and commands to open databases, etc.
 // Formats emitted rows to csv file or stdout.
 
+
 mod record;
 mod serial_type;
 
+// We only handle pages of type btree.
+// Rationale:  When Sqlite files are created from sessions that use only CREATE TABLE and INSERT statements,
+// the resulting files don't appear to have other page types.
+// TODO: support non-btree pages.
+
 use crate::vfs::DbAttachment;
 use std::io::Cursor;
+
 // TODO: make an iterator that can walk across multiple pages.  To do that,
 // the "btree iterator" needs to hold access to the pager.  This in turn requires.
 // improvements to pager design, like:
 // (pager object static lifetime, page interior mutability, concurrency controls)
-
 fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::PageReader {
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
@@ -62,24 +65,29 @@ fn new_table_leaf_cell_iterator_for_page(pgr: &mut pager::Pager, pgnum: usize) -
     btree::TableLeafCellIterator::new(btree::CellIterator::new(page, btree_start_offset))
 }
 
-fn print_table(pgr: &mut pager::Pager, root_pgnum: usize, table_name: &str, column_names: Vec<&str>) {
+fn print_table(pgr: &mut pager::Pager, root_pgnum: usize, table_name: &str, col_names: Vec<&str>, col_types: Vec<&str>, detailed: bool) {
     println!("Full Dump of Table {}", table_name);
-    println!("   | {} |", column_names.iter().map(|x| format!("{:15}", x)).collect::<Vec<String>>().join(" | "));
     {
         let pr = new_reader_for_page(pgr, root_pgnum);
-        let _ = pr.check_header();
-        //println!("{:?}", tl.check_header());
+        let hdr = pr.check_header();
+        if detailed { println!("{:?}", hdr); }
     }
+    println!("   | {} |", col_names.iter().map(|x| format!("{:15}", x)).collect::<Vec<String>>().join(" | "));
+    if detailed {
+        println!("   | {} |", col_types.iter().map(|x| format!("{:15}", x)).collect::<Vec<String>>().join(" | "));
+    }
+    
     {
         let tci = new_table_leaf_cell_iterator_for_page(pgr, root_pgnum);
         for (rowid, payload) in tci {
-            // TODO: use map(typecode_to_string).join("|") or something like that.
             let rhi = record::HeaderIterator::new(payload);
-            print!("{:2} |", rowid);
-            for t in rhi {   
-                print!(" {:15} |", serial_type::typecode_to_string(t)); 
-            }
+            if detailed {
+                print!("{:2} |", rowid);
+                for t in rhi {   
+                    print!(" {:15} |", serial_type::typecode_to_string(t)); 
+                }
             println!("");
+            }
             print!("{:2} |", rowid);
             let hi = record::ValueIterator::new(&payload[..]);
             for (t, v) in hi {
@@ -90,67 +98,6 @@ fn print_table(pgr: &mut pager::Pager, root_pgnum: usize, table_name: &str, colu
             println!("");
         }
     }
-}
-
-// TODO: figure out how to move parsing and code generation out of main into codegen.rs.
-// TODO: expand star into list of all column names of all tables in the input table list.
-fn parse_create_statement(c: &str) -> (String, Vec<&str>) {
-    // TODO: get this from the schema table by looking it up.
-
-    let create_stmt = SQLParser::parse(Rule::create_stmt, c)
-    .expect("unsuccessful parse") // unwrap the parse result
-    .next().unwrap();
-
-    let mut colnames_and_types = vec![];
-    let mut table_name = String::from("");
-    // Confirm it is a select statement.
-    for c in create_stmt.into_inner() {
-        //println!("{:?}", s);
-        match c.as_rule() {
-            Rule::table_identifier => { table_name = String::from(c.as_str()); },
-            Rule::column_defs => {
-                for column_def in c.into_inner() {
-                    match column_def.as_rule() {
-                        Rule::column_def => { colnames_and_types.push(column_def.as_str()); },
-                        _ => unreachable!(),
-                    }
-                }
-            },
-            Rule::EOI => (),
-            _ => unreachable!(),
-        }
-    }
-    (table_name, colnames_and_types)
-}
-
-fn parse_select_statement(query: &str)  -> (Vec<&str>, Vec<&str>) {
-    let select_stmt = SQLParser::parse(Rule::select_stmt, &query)
-    .expect("unsuccessful parse") // unwrap the parse result
-    .next().unwrap();
-
-    let mut output_cols = vec![];
-    let mut input_tables = vec![];
-    // Confirm it is a select statement.
-    for s in select_stmt.into_inner() {
-        //println!("{:?}", s);
-        match s.as_rule() {
-            Rule::select_item => { 
-                for t in s.into_inner() {
-                    //println!("--- {:?}", t);
-
-                    match t.as_rule() {
-                        Rule::column_name => { input_tables.push(t.as_str()); },
-                        Rule::star => unimplemented!(),
-                        _ => unreachable!(),
-                     };
-                }
-            },
-            Rule::table_identifier => { output_cols.push(s.as_str()); },
-            Rule::EOI => (),
-            _ => unreachable!(),
-        }
-    }
-    (input_tables, output_cols)
 }
 
 fn main() {
@@ -170,29 +117,39 @@ fn main() {
     // Page 1 (the first page) is always a btree page, and it is the root of the schema.  It has references
     // to the roots of other btrees.
     const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
-    let schema_table_columns = vec!["type", "name", "tbl_name", "rootpage", "sql"];
+    let schema_table_column_names = vec!["type", "name", "tbl_name", "rootpage", "sql"];
+    let schema_table_column_types = vec!["text", "text", "text", "integer", "text"];
 
-    print_table(&mut pager, SCHEMA_BTREE_ROOT_PAGENUM, "sqlite_schema", schema_table_columns);
+    print_table(
+        &mut pager,
+        SCHEMA_BTREE_ROOT_PAGENUM,
+        "sqlite_schema",
+        schema_table_column_names,
+        schema_table_column_types,
+        false
+    );
 
     // ----------------------------------------------------//
     // TODO: get from above table:
     let create_statement = "CREATE TABLE record_test ( a int, b int, c real, d string, e int)";
     // TODO: separate types and column names.  Just print the names.  Use the types to cast the serial_types.
-    let (table_name, column_names) = parse_create_statement(create_statement);
+    let (table_name, column_names, column_types) = parser::parse_create_statement(create_statement);
     // TODO: make the print_table function accept a vector<T> where T is str& or String?
     // let column_names_as_str = column_names.iter().into_iter().map(|s| s.as_str()).collect();
 
-    print_table(&mut pager, 2, table_name.as_str(), column_names);
+    print_table(
+        &mut pager,
+        2,
+        table_name.as_str(),
+        column_names,
+        column_types,
+        false
+    );
 
     // ----------------------------------------------------//
 
-    // We only handle pages of type btree.
-    // Rationale:  When Sqlite files are created from sessions that use only CREATE TABLE and INSERT statements,
-    // the resulting files don't appear to have other page types.
-    // TODO: support non-btree pages.
-
     let q = "SELECT a FROM record_test";
-    let (input_tables, output_cols) = parse_select_statement(q);
+    let (input_tables, output_cols) = parser::parse_select_statement(q);
     println!("output_cols: {}", output_cols.join(";"));
     println!("input_tables: {}", input_tables.join(";"));
 
