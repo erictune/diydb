@@ -24,7 +24,6 @@ extern crate pest_derive;
 // "interface" - REPL loop that accepts a sql query to do on the file, using parser and vfs, and commands to open databases, etc.
 // Formats emitted rows to csv file or stdout.
 
-
 mod record;
 mod serial_type;
 
@@ -52,7 +51,10 @@ fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::PageReade
     btree::PageReader::new(page, btree_start_offset)
 }
 
-fn new_table_leaf_cell_iterator_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::TableLeafCellIterator {
+fn new_table_leaf_cell_iterator_for_page(
+    pgr: &mut pager::Pager,
+    pgnum: usize,
+) -> btree::TableLeafCellIterator {
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
         Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
@@ -65,35 +67,61 @@ fn new_table_leaf_cell_iterator_for_page(pgr: &mut pager::Pager, pgnum: usize) -
     btree::TableLeafCellIterator::new(btree::CellIterator::new(page, btree_start_offset))
 }
 
-fn print_table(pgr: &mut pager::Pager, root_pgnum: usize, table_name: &str, col_names: Vec<&str>, col_types: Vec<&str>, detailed: bool) {
+fn print_table(
+    pgr: &mut pager::Pager,
+    root_pgnum: usize,
+    table_name: &str,
+    col_names: Vec<&str>,
+    col_types: Vec<&str>,
+    detailed: bool,
+) {
     println!("Full Dump of Table {}", table_name);
     {
         let pr = new_reader_for_page(pgr, root_pgnum);
         let hdr = pr.check_header();
-        if detailed { println!("{:?}", hdr); }
+        if detailed {
+            println!("{:?}", hdr);
+        }
     }
-    println!("   | {} |", col_names.iter().map(|x| format!("{:15}", x)).collect::<Vec<String>>().join(" | "));
+    println!(
+        "   | {} |",
+        col_names
+            .iter()
+            .map(|x| format!("{:15}", x))
+            .collect::<Vec<String>>()
+            .join(" | ")
+    );
     if detailed {
-        println!("   | {} |", col_types.iter().map(|x| format!("{:15}", x)).collect::<Vec<String>>().join(" | "));
+        println!(
+            "   | {} |",
+            col_types
+                .iter()
+                .map(|x| format!("{:15}", x))
+                .collect::<Vec<String>>()
+                .join(" | ")
+        );
     }
-    
+
     {
         let tci = new_table_leaf_cell_iterator_for_page(pgr, root_pgnum);
         for (rowid, payload) in tci {
             let rhi = record::HeaderIterator::new(payload);
             if detailed {
                 print!("{:2} |", rowid);
-                for t in rhi {   
-                    print!(" {:15} |", serial_type::typecode_to_string(t)); 
+                for t in rhi {
+                    print!(" {:15} |", serial_type::typecode_to_string(t));
                 }
-            println!("");
+                println!("");
             }
             print!("{:2} |", rowid);
             let hi = record::ValueIterator::new(&payload[..]);
             for (t, v) in hi {
                 // TODO: map the iterator using a closure that calls to_string, and then intersperses the delimiters and then reduces into a string.
                 // TODO: move cursor use into read_value_to_string, so it just uses a byte slice.
-                print!(" {:15} |", serial_type::read_value_to_string(&t, &mut Cursor::new(v)));
+                print!(
+                    " {:15} |",
+                    serial_type::read_value_to_string(&t, &mut Cursor::new(v))
+                );
             }
             println!("");
         }
@@ -126,7 +154,7 @@ fn main() {
         "sqlite_schema",
         schema_table_column_names,
         schema_table_column_types,
-        false
+        false,
     );
 
     // ----------------------------------------------------//
@@ -143,7 +171,7 @@ fn main() {
         table_name.as_str(),
         column_names,
         column_types,
-        false
+        false,
     );
 
     // ----------------------------------------------------//
@@ -154,10 +182,10 @@ fn main() {
     println!("input_tables: {}", input_tables.join(";"));
 
     // TODO: Generate a sequence of instruction for the above statement, like:
-    // 
+    //
     // let prog = vec![
     //      OpOpenTable("a", Cursor1),  // addr 0
-    //      OpBreakIfDone(Cursor1), 
+    //      OpBreakIfDone(Cursor1),
     //      // Maybe one op for each column to be selected?
     //      OpReadFromCursor(Cursor1, RowReg1),
     //      OpSelect(RowReg1, SelExpr),

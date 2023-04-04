@@ -69,33 +69,39 @@ impl<'a> PageReader<'a> {
         };
 
         // 1	2	The two-byte integer at offset 1 gives the start of the first freeblock on the page, or is zero if there are no freeblocks.
-        let freeblock_start: u32 = c.read_u16::<BigEndian>().expect("Should have btree header") as u32;
+        let freeblock_start: u32 =
+            c.read_u16::<BigEndian>().expect("Should have btree header") as u32;
         // 3	2	The two-byte integer at offset 3 gives the number of cells on the page.
-        let num_cells: u32 = c.read_u16::<BigEndian>().expect("Should have read btree header") as u32;
+        let num_cells: u32 = c
+            .read_u16::<BigEndian>()
+            .expect("Should have read btree header") as u32;
         // 5	2	The two-byte integer at offset 5 designates the start of the cell content area. A zero value for this integer is interpreted as 65536.
-        let cell_content_start: u32 = match c.read_u16::<BigEndian>().expect("Should have read btree header") {
+        let cell_content_start: u32 = match c
+            .read_u16::<BigEndian>()
+            .expect("Should have read btree header")
+        {
             0 => 655365,
             x => x as u32,
         };
         // 7	1	The one-byte integer at offset 7 gives the number of fragmented free bytes within the cell content area.
         let _: u32 = c.read_u8().expect("Should have read btree header") as u32;
         // 8	4	The four-byte page number at offset 8 is the right-most pointer. This value appears in the header of interior b-tree pages only and is omitted from all other pages.
-        
+
         let _ = match btree_page_type {
-            PageType::IndexInterior | PageType::TableInterior => {
-                Some(c.read_u32::<BigEndian>().expect("Should have read rightmost pointer"))
-            }
+            PageType::IndexInterior | PageType::TableInterior => Some(
+                c.read_u32::<BigEndian>()
+                    .expect("Should have read rightmost pointer"),
+            ),
             PageType::IndexLeaf | PageType::TableLeaf => None,
         };
 
-       Header {
-                btree_page_type: btree_page_type,
-                freeblock_start: freeblock_start,
-                num_cells: num_cells,
-                cell_content_start: cell_content_start,
-            }
+        Header {
+            btree_page_type: btree_page_type,
+            freeblock_start: freeblock_start,
+            num_cells: num_cells,
+            cell_content_start: cell_content_start,
+        }
     }
-    
 }
 
 pub struct CellIterator<'a> {
@@ -109,14 +115,15 @@ impl<'a> CellIterator<'a> {
     /// Creates an iterator over the cells of a single page of a btree.
     ///
     /// Iterator produces cells which are slices of bytes, which contain a record.
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
     ///         slives ends with the last byte of the record body.
     pub fn new(p: &Vec<u8>, non_btree_header_bytes: usize) -> CellIterator {
         let mut c = Cursor::new(p);
-        c.seek(SeekFrom::Start(non_btree_header_bytes as u64)).expect("Should have seeked.");
+        c.seek(SeekFrom::Start(non_btree_header_bytes as u64))
+            .expect("Should have seeked.");
         let btree_page_type = match c.read_u8().expect("Should have read btree header") {
             0x02 => PageType::IndexInterior,
             0x05 => PageType::TableInterior,
@@ -126,14 +133,18 @@ impl<'a> CellIterator<'a> {
         };
         c.seek(SeekFrom::Start(3 + non_btree_header_bytes as u64))
             .expect("Should have seeked.");
-        let num_cells: u32 = c.read_u16::<BigEndian>().expect("Should have read btree header") as u32;
+        let num_cells: u32 = c
+            .read_u16::<BigEndian>()
+            .expect("Should have read btree header") as u32;
 
         let btree_header_bytes = match btree_page_type {
             PageType::IndexInterior | PageType::TableInterior => 12,
             PageType::IndexLeaf | PageType::TableLeaf => 8,
-        };    
-        c.seek(SeekFrom::Start(btree_header_bytes + non_btree_header_bytes as u64))
-            .expect("Should have seeked to cell offset.");
+        };
+        c.seek(SeekFrom::Start(
+            btree_header_bytes + non_btree_header_bytes as u64,
+        ))
+        .expect("Should have seeked to cell offset.");
 
         let mut it = CellIterator {
             page: p,
@@ -152,7 +163,9 @@ impl<'a> CellIterator<'a> {
         // """()
         let mut last_offset: usize = PAGESIZE as usize; // First cell in pointer list is the last cell on the page, so it ends on byte PAGESIZE, I think (?).
         for _ in 0..num_cells {
-            let off = c.read_u16::<BigEndian>().expect("Should have read cell pointer") as usize;
+            let off = c
+                .read_u16::<BigEndian>()
+                .expect("Should have read cell pointer") as usize;
             it.cell_offsets.push(off);
             it.cell_lengths.push(last_offset - off);
             last_offset = off;
@@ -169,7 +182,7 @@ impl<'a> Iterator for CellIterator<'a> {
     /// Returns the next item, which is a &[u8], the slice of bytes containing the contents of the cell.
     fn next(&mut self) -> Option<Self::Item> {
         if self.cell_idx >= self.cell_offsets.len() {
-            return None
+            return None;
         }
         let mut c = Cursor::new(self.page);
         c.seek(SeekFrom::Start(self.cell_offsets[self.cell_idx] as u64))
@@ -204,7 +217,6 @@ impl<'a> Iterator for CellIterator<'a> {
 // The initial portion of the payload that does not spill to overflow pages.
 // A 4-byte big-endian integer page number for the first page of the overflow page list - omitted if all payload fits on the b-tree page.
 
-
 pub struct TableLeafCellIterator<'a> {
     ci: CellIterator<'a>,
 }
@@ -213,15 +225,13 @@ impl<'a> TableLeafCellIterator<'a> {
     /// Creates an iterator over the cells of a single page of a btree, with page of type TableLeaf.
     ///
     /// Iterator produces cells which are slices of bytes, which contain a record.
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
     ///         slives ends with the last byte of the record body.
     pub fn new(ci: CellIterator) -> TableLeafCellIterator {
-        TableLeafCellIterator{
-            ci: ci,
-        }
+        TableLeafCellIterator { ci: ci }
     }
 }
 
@@ -229,7 +239,7 @@ impl<'a> Iterator for TableLeafCellIterator<'a> {
     // The iterator returns a tuple of (rowid, cell_payload).
     // Overflowing payloads are not supported.
     type Item = (i64, &'a [u8]);
-    
+
     /// Returns the next item, which is a tuple of (k, v), where
     ///   `k` is a key, the row number (u64)
     ///   `v` is a value, &[u8].
@@ -250,7 +260,5 @@ impl<'a> Iterator for TableLeafCellIterator<'a> {
                 Some((rowid, &cell[offset..]))
             }
         }
-
     }
 }
-

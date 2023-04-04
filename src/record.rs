@@ -15,22 +15,22 @@ impl<'a> HeaderIterator<'a> {
     ///
     /// Iterator produces i64s which are SQLite serial types numbers.
     /// See: https://www.sqlite.org/fileformat.html#record_format.
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
     ///         slives ends with the last byte of the record body.
-    /// 
+    ///
 
     pub fn new(s: &[u8]) -> HeaderIterator {
         // "A record contains a header and a body, in that order.
         // The header begins with a single varint which determines the total number of bytes in the header"
         // - https://www.sqlite.org/fileformat.html#record_format
         let (hdr_len, hdr_len_len) = sqlite_varint::read_varint(s);
-        
-        HeaderIterator { 
-            data: s, 
-            offset: hdr_len_len, 
+
+        HeaderIterator {
+            data: s,
+            offset: hdr_len_len,
             hdr_len: hdr_len as usize,
         }
     }
@@ -50,15 +50,13 @@ impl<'a> Iterator for HeaderIterator<'a> {
     }
 }
 
-
-
 #[test]
 fn test_header_iterator_literal_one() {
     // 2 byte record header, record type is literal 1, record body has zero bytes.
     let test_record: &[u8] = &[0x02, 0x09];
 
     let mut hi = HeaderIterator::new(&test_record);
-    
+
     assert_eq!(hi.next(), Some(9));
     assert_eq!(hi.next(), None);
 }
@@ -66,10 +64,12 @@ fn test_header_iterator_literal_one() {
 #[test]
 fn test_header_iterator_five_one_byte_ints_value_ten() {
     // 06 0101 0101 010a 0a0a 0a0a
-    let test_record: &[u8] = &[0x06, 0x01, 0x01, 0x01, 0x01, 0x01, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a];
+    let test_record: &[u8] = &[
+        0x06, 0x01, 0x01, 0x01, 0x01, 0x01, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
+    ];
 
     let mut hi = HeaderIterator::new(&test_record);
-    
+
     assert_eq!(hi.next(), Some(1));
     assert_eq!(hi.next(), Some(1));
     assert_eq!(hi.next(), Some(1));
@@ -82,15 +82,18 @@ fn test_header_iterator_five_one_byte_ints_value_ten() {
 fn test_header_iterator_various_types() {
     // 0608 0907 1300 4009 21ca c083 126f 5465 6e
     // literal 0 | literal 1 | float 3.1415 | "Ten" |
-    let test_record: &[u8] = &[0x06, 0x08, 0x09, 0x07, 0x13, 0x00, 0x40, 0x09, 0x21, 0xca, 0xc0, 0x83, 0x12, 0x6f, 0x54, 0x65, 0x6e];
+    let test_record: &[u8] = &[
+        0x06, 0x08, 0x09, 0x07, 0x13, 0x00, 0x40, 0x09, 0x21, 0xca, 0xc0, 0x83, 0x12, 0x6f, 0x54,
+        0x65, 0x6e,
+    ];
 
     let mut hi = HeaderIterator::new(&test_record);
-    
-    assert_eq!(hi.next(), Some(8));    // Literal 0
-    assert_eq!(hi.next(), Some(9));    // Literal 1
-    assert_eq!(hi.next(), Some(7));    // Float 64
+
+    assert_eq!(hi.next(), Some(8)); // Literal 0
+    assert_eq!(hi.next(), Some(9)); // Literal 1
+    assert_eq!(hi.next(), Some(7)); // Float 64
     assert_eq!(hi.next(), Some(0x13)); // String of length 3; (19-13)/2 = 3
-    assert_eq!(hi.next(), Some(0));    // NULL
+    assert_eq!(hi.next(), Some(0)); // NULL
     assert_eq!(hi.next(), None);
 }
 
@@ -106,26 +109,26 @@ impl<'a> ValueIterator<'a> {
     /// Creates an iterator over a slice of bytes in SQLite record format.
     ///
     /// Iterator produces tuples (t, bs).
-    /// 
+    ///
     /// `t` is a SQLite serial type code
     /// See: https://www.sqlite.org/fileformat.html#record_format.
-    /// 
+    ///
     /// `bs` is byte slice accessing the value, valid for the lifetime of the iterator.
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
     ///         slives ends with the last byte of the record body.
-    /// 
+    ///
 
     pub fn new(s: &[u8]) -> ValueIterator {
         // "A record contains a header and a body, in that order.
         // The header begins with a single varint which determines the total number of bytes in the header"
         // - https://www.sqlite.org/fileformat.html#record_format
         let (hdr_len, hdr_len_len) = sqlite_varint::read_varint(s);
-        ValueIterator { 
-            data: s, 
-            hdr_offset: hdr_len_len, 
+        ValueIterator {
+            data: s,
+            hdr_offset: hdr_len_len,
             hdr_len: hdr_len as usize,
             value_offset: hdr_len as usize,
         }
@@ -167,12 +170,15 @@ impl<'a> Iterator for ValueIterator<'a> {
             // 10,11	    variable	    Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
             // N≥12 & even	(N-12)/2	    Value is a BLOB that is (N-12)/2 bytes in length.
             // N≥13 & odd	(N-13)/2	    Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
-            x if x >= 12  => (x as usize - 12 - (x % 2) as usize)/ 2,
+            x if x >= 12 => (x as usize - 12 - (x % 2) as usize) / 2,
             _ => unimplemented!(),
         };
         let old_value_offset = self.value_offset;
         self.value_offset += value_len;
-        Some((serial_type, &self.data[old_value_offset..old_value_offset+value_len]))
+        Some((
+            serial_type,
+            &self.data[old_value_offset..old_value_offset + value_len],
+        ))
     }
 }
 
@@ -188,10 +194,12 @@ fn test_value_iterator_one_byte_int() {
 
 #[test]
 fn test_value_iterator_five_one_byte_ints_value_ten_to_fourteen() {
-    let test_record: &[u8] = &[0x06, 0x01, 0x01, 0x01, 0x01, 0x01, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e];
+    let test_record: &[u8] = &[
+        0x06, 0x01, 0x01, 0x01, 0x01, 0x01, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+    ];
 
     let mut hi = ValueIterator::new(&test_record);
-    
+
     assert_eq!(hi.next(), Some((1, &[10][..])));
     assert_eq!(hi.next(), Some((1, &[11][..])));
     assert_eq!(hi.next(), Some((1, &[12][..])));
@@ -203,14 +211,20 @@ fn test_value_iterator_five_one_byte_ints_value_ten_to_fourteen() {
 #[test]
 fn test_value_iterator_various_types() {
     // literal 0 | literal 1 | float 3.1415 | "Ten" | NULL
-    let test_record: &[u8] = &[0x06, 0x08, 0x09, 0x07, 0x13, 0x00, 0x40, 0x09, 0x21, 0xca, 0xc0, 0x83, 0x12, 0x6f, 0x54, 0x65, 0x6e];
+    let test_record: &[u8] = &[
+        0x06, 0x08, 0x09, 0x07, 0x13, 0x00, 0x40, 0x09, 0x21, 0xca, 0xc0, 0x83, 0x12, 0x6f, 0x54,
+        0x65, 0x6e,
+    ];
 
     let mut hi = ValueIterator::new(&test_record);
-    
-    assert_eq!(hi.next(), Some((8,      &[][..])));                                                 // Literal 0
-    assert_eq!(hi.next(), Some((9,      &[][..])));                                                 // Literal 1
-    assert_eq!(hi.next(), Some((7,      &[0x40, 0x09, 0x21, 0xca, 0xc0, 0x83, 0x12, 0x6f][..])));   // Float 64
-    assert_eq!(hi.next(), Some((0x13,   &b"Ten"[..])));                                             // String of length 3; (19-13)/2 = 3
-    assert_eq!(hi.next(), Some((0, &[][..])));                                                      // NULL
+
+    assert_eq!(hi.next(), Some((8, &[][..]))); // Literal 0
+    assert_eq!(hi.next(), Some((9, &[][..]))); // Literal 1
+    assert_eq!(
+        hi.next(),
+        Some((7, &[0x40, 0x09, 0x21, 0xca, 0xc0, 0x83, 0x12, 0x6f][..]))
+    ); // Float 64
+    assert_eq!(hi.next(), Some((0x13, &b"Ten"[..]))); // String of length 3; (19-13)/2 = 3
+    assert_eq!(hi.next(), Some((0, &[][..]))); // NULL
     assert_eq!(hi.next(), None);
 }

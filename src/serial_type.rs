@@ -1,13 +1,13 @@
-use byteorder::{BigEndian};
+use byteorder::BigEndian;
 use byteorder::ReadBytesExt;
 use std::io::{Read, Seek};
 
 /// Convert a serial type number to a string.
-/// 
+///
 ///  # Arguments
 ///
 /// * `serial_type` - A SQLite serial type code.
-/// 
+///
 /// These are not SQL type, but informal names for debugging.
 pub fn typecode_to_string(serial_type: i64) -> &'static str {
     match serial_type {
@@ -37,15 +37,15 @@ pub fn typecode_to_string(serial_type: i64) -> &'static str {
         10 => "st:internal_10",
         11 => "st:internal_11",
         // N≥12 and even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
-        x if x >= 12 && (x % 2 == 0) => "st:blob", 
+        x if x >= 12 && (x % 2 == 0) => "st:blob",
         // N≥13 and odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
         x if x >= 13 && (x % 2 == 1) => "st:text",
         _ => panic!("Unknown column type: {}", serial_type),
-        }
+    }
 }
 
 /// Convert a sqlite value in "serial type" format into a new String suitable for debug printing.
-/// 
+///
 ///  # Arguments
 /// * `serial_type` - A SQLite serial type code.
 /// * `data` - A reader (e.g. Cursor), pointing to the data to read.  The cursor will be advanced to the byte after the last
@@ -53,10 +53,10 @@ pub fn typecode_to_string(serial_type: i64) -> &'static str {
 ///
 /// The strings are not suitable for direct SQL query output, since the serial type needs to be converted to the
 /// schema type.
-/// 
+///
 /// Does not handle overflowing TEXT or BLOB.
-/// 
-/// Panics on errors. 
+///
+/// Panics on errors.
 // TODO: handle errors better, by returning a Result.
 pub fn read_value_to_string<R: Read + Seek>(serial_type: &i64, c: &mut R) -> String {
     match serial_type {
@@ -73,7 +73,7 @@ pub fn read_value_to_string<R: Read + Seek>(serial_type: &i64, c: &mut R) -> Str
             bytes[0] = 1;
             c.read_exact(&mut bytes[1..]).unwrap();
             i32::from_be_bytes(bytes).to_string()
-        },
+        }
         // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
         4 => format!("{}", c.read_i32::<BigEndian>().unwrap()),
         // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
@@ -92,7 +92,7 @@ pub fn read_value_to_string<R: Read + Seek>(serial_type: &i64, c: &mut R) -> Str
             let mut buf = vec![0_u8; (*x as usize - 12) / 2];
             c.read_exact(&mut buf[..]).unwrap();
             format!("{:?}", buf)
-        },
+        }
         // N≥13 & odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
         x if *x >= 13 && (*x % 2 == 1) => {
             // TODO: avoid the copy somehow?
@@ -108,7 +108,6 @@ pub fn read_value_to_string<R: Read + Seek>(serial_type: &i64, c: &mut R) -> Str
 
 #[test]
 fn test_read_value_to_string() {
-
     // Null
     let mut c = std::io::Cursor::new(&b"");
     assert_eq!(read_value_to_string(&0, &mut c), "NULL".to_string());
@@ -132,7 +131,7 @@ fn test_read_value_to_string() {
 
     let mut c = std::io::Cursor::new(&[0x00, 0x01]);
     assert_eq!(read_value_to_string(&2, &mut c), "1".to_string());
-    
+
     let mut c = std::io::Cursor::new(&[0x01, 0x00]);
     assert_eq!(read_value_to_string(&2, &mut c), "256".to_string());
 
@@ -158,5 +157,4 @@ fn test_read_value_to_string() {
     // Blob
     let mut c = std::io::Cursor::new(&[0x00_u8, 0x01, 0xff]);
     assert_eq!(read_value_to_string(&18, &mut c), "[0, 1, 255]".to_string());
-
 }

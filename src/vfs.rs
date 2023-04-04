@@ -152,22 +152,28 @@ fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // 60	    4	    The "user version" as read and set by the user_version pragma.
     // 64	    4	    True (non-zero) for incremental-vacuum mode. False (zero) otherwise.
     // 68	    4	    The "Application ID" set by PRAGMA application_id.
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 { println!("a");
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+        println!("a");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {println!("b");
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+        println!("b");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x1 {println!("c");
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x1 {
+        println!("c");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {println!("d");
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+        println!("d");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {println!("e");
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+        println!("e");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {println!("f");
+    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+        println!("f");
         return Err(Error::Unsupported);
     }
 
