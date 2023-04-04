@@ -1,39 +1,16 @@
-// TODO: implement PrintTable using an inner method that emits rows and an outer method that formats (width, headers) and prints.
-//       subsequently, the inner method could be implemented as a "do select" method that interprets a parsed select statement and emits
-//       rows.
-
 // TODO: move below comments to the readme.md under code structure.
 
-// System Layers
-//
-// Intent is to have code structure which models Sqlite's architecture (https://www.sqlite.org/arch.html)
-// "vfs" - opens and locks database files, providing Read and Seek interfaces to them, and the header (readonly initially).
-mod vfs;
-// "pager" - provides an array of pages, which may or may not be present in memory (seek and load on first access).  Uses a vfs.
-mod pager;
-// "btree" - provides iterator (cursor) to walk over btree elements (in future could support writes.).  Uses a pager to get at pages.
 mod btree;
-// "parser" - parses SQL statement into a parse tree, e.g. using https://pest.rs/book/examples/ini.html
-// We use pest parser generator.
+mod formatting;
+mod pager;
 mod parser;
+mod vfs;
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
-// "bytecode" - makes a program from a parse tree.  Uses btree cursors to the referenced tables.  Emits rows.
-// "interface" - REPL loop that accepts a sql query to do on the file, using parser and vfs, and commands to open databases, etc.
-// Formats emitted rows to csv file or stdout.
-
 mod record;
 mod serial_type;
-
-// We only handle pages of type btree.
-// Rationale:  When Sqlite files are created from sessions that use only CREATE TABLE and INSERT statements,
-// the resulting files don't appear to have other page types.
-// TODO: support non-btree pages.
-
-use crate::vfs::DbAttachment;
-use std::io::Cursor;
 
 // TODO: make an iterator that can walk across multiple pages.  To do that,
 // the "btree iterator" needs to hold access to the pager.  This in turn requires.
@@ -75,7 +52,6 @@ fn print_table(
     col_types: Vec<&str>,
     detailed: bool,
 ) {
-    println!("Full Dump of Table {}", table_name);
     {
         let pr = new_reader_for_page(pgr, root_pgnum);
         let hdr = pr.check_header();
@@ -83,54 +59,14 @@ fn print_table(
             println!("{:?}", hdr);
         }
     }
-    println!(
-        "   | {} |",
-        col_names
-            .iter()
-            .map(|x| format!("{:15}", x))
-            .collect::<Vec<String>>()
-            .join(" | ")
-    );
-    if detailed {
-        println!(
-            "   | {} |",
-            col_types
-                .iter()
-                .map(|x| format!("{:15}", x))
-                .collect::<Vec<String>>()
-                .join(" | ")
-        );
-    }
-
-    {
-        let tci = new_table_leaf_cell_iterator_for_page(pgr, root_pgnum);
-        for (rowid, payload) in tci {
-            let rhi = record::HeaderIterator::new(payload);
-            if detailed {
-                print!("{:2} |", rowid);
-                for t in rhi {
-                    print!(" {:15} |", serial_type::typecode_to_string(t));
-                }
-                println!("");
-            }
-            print!("{:2} |", rowid);
-            let hi = record::ValueIterator::new(&payload[..]);
-            for (t, v) in hi {
-                // TODO: map the iterator using a closure that calls to_string, and then intersperses the delimiters and then reduces into a string.
-                // TODO: move cursor use into read_value_to_string, so it just uses a byte slice.
-                print!(
-                    " {:15} |",
-                    serial_type::read_value_to_string(&t, &mut Cursor::new(v))
-                );
-            }
-            println!("");
-        }
-    }
+    let mut tci = new_table_leaf_cell_iterator_for_page(pgr, root_pgnum);
+    formatting::print_table(&mut tci, table_name, col_names, col_types, detailed);
 }
 
+// TODO: make trait of a record iterator?
 fn main() {
     // Open the database file. This is a file in sqlite3 format.
-    let mut vfs = DbAttachment::open("./record.db").expect("Should have opened the DB");
+    let mut vfs = vfs::DbAttachment::open("./record.db").expect("Should have opened the DB");
 
     // Read db file header to confirm it is a valid file, and how many and what size pages it has.
     let dbhdr = vfs.get_header().expect("Should have gotten DB file header");
