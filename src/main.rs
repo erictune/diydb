@@ -12,6 +12,69 @@ extern crate pest_derive;
 mod record;
 mod serial_type;
 
+// Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
+// It has references to the root pages of other btrees.
+const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
+const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
+const SCHEMA_SCHEMA: &str =
+    "CREATE TABLE sqlite_schema (type text, name text, tbl_name text, rootpage integer, sql text)";
+const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
+const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
+const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
+const SCHEMA_TABLE_NUMCOLS: usize = 5;
+
+use std::io::Cursor;
+
+/// Get the SQL CREATE statement used to create `table_name`.
+fn get_creation_sql_and_root_pagenum(
+    pgr: &mut pager::Pager,
+    table_name: &str,
+) -> Option<(pager::PageNum, String)> {
+    if table_name == SCHEMA_TABLE_NAME {
+        return Some((SCHEMA_BTREE_ROOT_PAGENUM, String::from(SCHEMA_SCHEMA)));
+    } else {
+        let record_iterator = new_table_leaf_cell_iterator_for_page(pgr, SCHEMA_BTREE_ROOT_PAGENUM);
+        for (_, payload) in record_iterator {
+            let vi = record::ValueIterator::new(&payload[..]);
+            let mut idx = 0_usize;
+            let mut root_pagenum: Option<pager::PageNum> = None;
+            let mut creation_sql: Option<String> = None;
+            for (t, v) in vi {
+                match idx {
+                    SCHEMA_TABLE_TBL_NAME_COLIDX => {
+                        if serial_type::read_value_to_string(&t, &mut Cursor::new(v)) != table_name
+                        {
+                            continue;
+                        }
+                    }
+                    SCHEMA_TABLE_ROOTPAGE_COLIDX => {
+                        let tmp =
+                            serial_type::read_value_to_i64(&t, &mut Cursor::new(v), false).unwrap();
+                        root_pagenum = Some(tmp as pager::PageNum);
+                    }
+                    SCHEMA_TABLE_SQL_COLIDX => {
+                        creation_sql =
+                            Some(serial_type::read_value_to_string(&t, &mut Cursor::new(v)));
+                    }
+                    _ => (),
+                }
+                idx += 1;
+            }
+            if idx != SCHEMA_TABLE_NUMCOLS {
+                panic!("Invalid sqlite_schema table.")
+            }
+            return Some((
+                root_pagenum.expect("Should have gotten root page number from schema table."),
+                creation_sql.expect("Should have gotten creation sql from schema table."),
+            ));
+        }
+    }
+    None
+}
+
+// TODO: above actually scan the schema table.
+// TODO: add similar fn to find the root page by table name.
+
 // TODO: make an iterator that can walk across multiple pages.  To do that,
 // the "btree iterator" needs to hold access to the pager.  This in turn requires.
 // improvements to pager design, like:
@@ -78,33 +141,40 @@ fn main() {
 
     // ----------------------------------------------------//
 
-    // Page 1 (the first page) is always a btree page, and it is the root of the schema.  It has references
-    // to the roots of other btrees.
-    const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
-    let schema_table_column_names = vec!["type", "name", "tbl_name", "rootpage", "sql"];
-    let schema_table_column_types = vec!["text", "text", "text", "integer", "text"];
+    // Print the Schema table.
 
+    let table_name = "sqlite_schema";
+    let (root_pagenum, create_statement) =
+        get_creation_sql_and_root_pagenum(&mut pager, table_name)
+            .expect(format!("Should have looked up the schema for {}.", table_name).as_str());
+    let (_table_name2, column_names, column_types) =
+        parser::parse_create_statement(&create_statement);
+
+    // TODO: get the page number for the table using its name (similar function to get_creation_sql)
     print_table(
         &mut pager,
-        SCHEMA_BTREE_ROOT_PAGENUM,
-        "sqlite_schema",
-        schema_table_column_names,
-        schema_table_column_types,
+        root_pagenum,
+        table_name,
+        column_names,
+        column_types,
         false,
     );
 
     // ----------------------------------------------------//
-    // TODO: get from above table:
-    let create_statement = "CREATE TABLE record_test ( a int, b int, c real, d string, e int)";
-    // TODO: separate types and column names.  Just print the names.  Use the types to cast the serial_types.
-    let (table_name, column_names, column_types) = parser::parse_create_statement(create_statement);
-    // TODO: make the print_table function accept a vector<T> where T is str& or String?
-    // let column_names_as_str = column_names.iter().into_iter().map(|s| s.as_str()).collect();
 
+    // Do a query on table "record_test";
+
+    // TODO: get from above table:
+    let table_name = "record_test";
+    let (root_pagenum, create_statement) =
+        get_creation_sql_and_root_pagenum(&mut pager, table_name)
+            .expect(format!("Should have looked up the schema for {}.", table_name).as_str());
+    let (_table_name2, column_names, column_types) =
+        parser::parse_create_statement(&create_statement);
     print_table(
         &mut pager,
-        2,
-        table_name.as_str(),
+        root_pagenum,
+        table_name,
         column_names,
         column_types,
         false,

@@ -158,3 +158,125 @@ fn test_read_value_to_string() {
     let mut c = std::io::Cursor::new(&[0x00_u8, 0x01, 0xff]);
     assert_eq!(read_value_to_string(&18, &mut c), "[0, 1, 255]".to_string());
 }
+
+/// Convert a sqlite value in "serial type" format into Some(i64) or None if the type is unsuitable for conversion to i64.
+///
+///  # Arguments
+/// * `serial_type` - A SQLite serial type code.
+/// * `data` - A reader (e.g. Cursor), pointing to the data to read.  The cursor will be advanced to the byte after the last
+///            byte read.
+/// * `convert_nulls_to_zero`  - controls result when type is NULL.
+///
+/// If `convert_nulls_to_zero` is true, NULL results in a Zero value.  If false, NULL results in None.
+/// If the type is f64, None is returned.
+/// BLOB and TEXT always return NONE.
+/// Panics on errors.
+// TODO: handle errors better, by returning a Result instead of Option, with more detail on the error, and not panicing.
+pub fn read_value_to_i64<R: Read + Seek>(
+    serial_type: &i64,
+    c: &mut R,
+    convert_nulls_to_zero: bool,
+) -> Option<i64> {
+    match serial_type {
+        // Serial Type	Content Size	Meaning
+        // 0	        0	            Value is a NULL.
+        0 => {
+            if convert_nulls_to_zero {
+                Some(0)
+            } else {
+                None
+            }
+        }
+        // 1	        1	            Value is an 8-bit twos-complement integer.
+        1 => Some(c.read_i8().unwrap() as i64),
+        // 2	        2	            Value is a big-endian 16-bit twos-complement integer.
+        2 => Some(c.read_i16::<BigEndian>().unwrap() as i64),
+        // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
+        3 => {
+            let mut bytes = [0_u8; 4];
+            bytes[0] = 1;
+            c.read_exact(&mut bytes[1..]).unwrap();
+            Some(i32::from_be_bytes(bytes) as i64)
+        }
+        // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
+        4 => Some(c.read_i32::<BigEndian>().unwrap() as i64),
+        // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
+        5 => unimplemented!(),
+        // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
+        6 => Some(c.read_i64::<BigEndian>().unwrap()),
+        // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
+        7 => None,
+        // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
+        8 => Some(0_i64),
+        // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
+        9 => Some(1_i64),
+        // 10,11	    variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
+        // N≥12         variable    BLOB or TEXT
+        _ => None,
+    }
+}
+
+#[test]
+fn test_read_value_to_i64() {
+    // Null
+    let mut c = std::io::Cursor::new(&b"");
+    assert_eq!(read_value_to_i64(&0, &mut c, false), None);
+    let mut c = std::io::Cursor::new(&b"");
+    assert_eq!(read_value_to_i64(&0, &mut c, true), Some(0_i64));
+
+    // one byte ints
+    let mut c = std::io::Cursor::new(&[0x7f]);
+    assert_eq!(read_value_to_i64(&1, &mut c, false), Some(127));
+
+    let mut c = std::io::Cursor::new(&[0xff]);
+    assert_eq!(read_value_to_i64(&1, &mut c, true), Some(-1));
+
+    let mut c = std::io::Cursor::new(&[0x01]);
+    assert_eq!(read_value_to_i64(&1, &mut c, false), Some(1));
+
+    // two byte ints
+    let mut c = std::io::Cursor::new(&[0x00, 0x7f]);
+    assert_eq!(read_value_to_i64(&2, &mut c, false), Some(127));
+
+    let mut c = std::io::Cursor::new(&[0xff, 0xff]);
+    assert_eq!(read_value_to_i64(&2, &mut c, true), Some(-1));
+
+    let mut c = std::io::Cursor::new(&[0x00, 0x01]);
+    assert_eq!(read_value_to_i64(&2, &mut c, false), Some(1));
+
+    let mut c = std::io::Cursor::new(&[0x01, 0x00]);
+    assert_eq!(read_value_to_i64(&2, &mut c, true), Some(256));
+
+    // TODO: larger ints and float.
+
+    // Literal 0 and 1
+    let mut c = std::io::Cursor::new(&b"");
+    assert_eq!(read_value_to_i64(&8, &mut c, false), Some(0));
+    let mut c = std::io::Cursor::new(&b"");
+    assert_eq!(read_value_to_i64(&8, &mut c, true), Some(0));
+
+    let mut c = std::io::Cursor::new(&b"");
+    assert_eq!(read_value_to_i64(&9, &mut c, false), Some(1));
+    let mut c = std::io::Cursor::new(&b"");
+    assert_eq!(read_value_to_i64(&9, &mut c, true), Some(1));
+
+    // Text of various lengths
+    let mut c = std::io::Cursor::new(&b"");
+    assert_eq!(read_value_to_i64(&13, &mut c, false), None);
+    let mut c = std::io::Cursor::new(&b"");
+    assert_eq!(read_value_to_i64(&13, &mut c, true), None);
+
+    let mut c = std::io::Cursor::new(&b"Foo");
+    assert_eq!(read_value_to_i64(&19, &mut c, false), None);
+    let mut c = std::io::Cursor::new(&b"Foo");
+    assert_eq!(read_value_to_i64(&19, &mut c, true), None);
+
+    let mut c = std::io::Cursor::new(&b"FooBar");
+    assert_eq!(read_value_to_i64(&25, &mut c, false), None);
+    let mut c = std::io::Cursor::new(&b"FooBar");
+    assert_eq!(read_value_to_i64(&25, &mut c, true), None);
+
+    // Blob
+    let mut c = std::io::Cursor::new(&[0x00_u8, 0x01, 0xff]);
+    assert_eq!(read_value_to_i64(&18, &mut c, false), None);
+}

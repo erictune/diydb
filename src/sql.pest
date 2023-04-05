@@ -1,7 +1,7 @@
-WHITESPACE = _{ " " }
+WHITESPACE = _{ " " | "\n" }
 
 table_identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
-column_name = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
+column_name = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 
 column_def = {column_name ~ type_name}
 column_defs = { column_def ~ ("," ~ column_def)* }
@@ -9,9 +9,9 @@ column_defs = { column_def ~ ("," ~ column_def)* }
 // https://www.sqlite.org/syntax/create-table-stmt.html
 create = _{ ^"create" }
 table = _{ ^"table" }
-int = { ^"int" }
+int = { ^"integer"  | ^"int"}
 real = { ^"real" }
-text = { ^"string" }
+text = { ^"string" | ^"text" }
 type_name = {int | text | real}
 create_stmt = {SOI ~ create ~ table ~ table_identifier ~ "(" ~ column_defs ~ ")" ~ EOI}
 
