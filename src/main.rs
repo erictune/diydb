@@ -65,9 +65,6 @@ fn get_creation_sql_and_root_pagenum(
     None
 }
 
-// TODO: above actually scan the schema table.
-// TODO: add similar fn to find the root page by table name.
-
 // TODO: make an iterator that can walk across multiple pages.  To do that,
 // the "btree iterator" needs to hold access to the pager.  This in turn requires.
 // improvements to pager design, like:
@@ -129,7 +126,6 @@ fn main() {
     println!("Opened DB File. {:?}", dbhdr);
     // TODO: move checking magic and reading creation-time fields (like page size) into vfs.rs.
     //       but move access to modifiable fields to use a Pager from pager.rs, since that will require locking.
-
     let mut pager = pager::Pager::new(vfs);
 
     // ----------------------------------------------------//
@@ -143,7 +139,6 @@ fn main() {
     let (_table_name2, column_names, column_types) =
         parser::parse_create_statement(&create_statement);
 
-    // TODO: get the page number for the table using its name (similar function to get_creation_sql)
     print_table(
         &mut pager,
         root_pagenum,
@@ -154,11 +149,21 @@ fn main() {
     );
 
     // ----------------------------------------------------//
+    println!("-----");
+    // ----------------------------------------------------//
 
-    // Do a query on table "record_test";
+    let q = "SELECT * FROM record_test";
+    println!("Doing query: {}", q);
 
-    // TODO: get from above table:
-    let table_name = "record_test";
+    let (input_tables, output_cols) = parser::parse_select_statement(q);
+    println!("output_cols: {}", output_cols.join(", "));
+    println!("input_tables: {}", input_tables.join(", "));
+
+    // Execute the query (TODO: use code generation.)
+    if input_tables.len() > 1 { panic!("We don't support multiple table queries.")};
+    if input_tables.len() < 1 { panic!("We don't support selects without FROM.")};
+    let table_name = input_tables[0];
+    if output_cols.len() != 1 || output_cols[0] != "*" { panic!("We don't support selecting specific columns.")} 
     let (root_pagenum, create_statement) =
         get_creation_sql_and_root_pagenum(&mut pager, table_name)
             .expect(format!("Should have looked up the schema for {}.", table_name).as_str());
@@ -173,12 +178,6 @@ fn main() {
         false,
     );
 
-    // ----------------------------------------------------//
-
-    let q = "SELECT a FROM record_test";
-    let (input_tables, output_cols) = parser::parse_select_statement(q);
-    println!("output_cols: {}", output_cols.join(";"));
-    println!("input_tables: {}", input_tables.join(";"));
 
     // TODO: Generate a sequence of instruction for the above statement, like:
     //

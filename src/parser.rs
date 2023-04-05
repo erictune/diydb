@@ -28,7 +28,6 @@ pub fn parse_create_statement(c: &str) -> (String, Vec<&str>, Vec<&str>) {
     let mut table_name = String::from("");
     // Confirm it is a select statement.
     for c in create_stmt.into_inner() {
-        //println!("{:?}", s);
         match c.as_rule() {
             Rule::table_identifier => {
                 table_name = String::from(c.as_str());
@@ -57,6 +56,19 @@ pub fn parse_create_statement(c: &str) -> (String, Vec<&str>, Vec<&str>) {
     (table_name, colnames, coltypes)
 }
 
+#[test]
+fn test_parse_create_statement() {
+    assert_eq!(
+        parse_create_statement("CREATE TABLE t (a int, b integer, c text, d string, e real)"),
+        (String::from("t"), vec!["a", "b", "c", "d", "e"], vec!["int", "integer", "text", "string", "real"])
+    );
+    assert_eq!(
+        parse_create_statement("CREATE TABLE Tbl_Two(a int,b int)"),
+        (String::from("Tbl_Two"), vec!["a", "b"], vec!["int", "int"])
+    );
+
+}
+
 pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
     let select_stmt = SQLParser::parse(Rule::select_stmt, &query)
         .expect("unsuccessful parse") // unwrap the parse result
@@ -67,27 +79,31 @@ pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
     let mut input_tables = vec![];
     // Confirm it is a select statement.
     for s in select_stmt.into_inner() {
-        //println!("{:?}", s);
         match s.as_rule() {
-            Rule::select_item => {
-                for t in s.into_inner() {
-                    //println!("--- {:?}", t);
-
-                    match t.as_rule() {
-                        Rule::column_name => {
-                            input_tables.push(t.as_str());
-                        }
-                        Rule::star => unimplemented!(),
-                        _ => unreachable!(),
-                    };
-                }
-            }
             Rule::table_identifier => {
-                output_cols.push(s.as_str());
-            }
+                input_tables.push(s.as_str());
+            },
+            Rule::select_items => {
+                for t in s.into_inner() {
+                    output_cols.push(t.as_str());
+                }
+            },
             Rule::EOI => (),
             _ => unreachable!(),
         }
     }
     (input_tables, output_cols)
+}
+
+#[test]
+fn test_parse_select_statement() {
+    assert_eq!(
+        parse_select_statement("SELECT * FROM tbl"),
+        (vec!["tbl"], vec!["*"])
+    );
+    assert_eq!(
+        parse_select_statement("select a,b,c fRoM tbl"),
+        (vec!["tbl"], vec!["a", "b", "c"])
+    );
+
 }
