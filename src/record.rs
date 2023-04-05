@@ -14,7 +14,7 @@ impl<'a> HeaderIterator<'a> {
     /// Creates an iterator over a slice of bytes in SQLite record format.
     ///
     /// Iterator produces i64s which are SQLite serial types numbers.
-    /// See: https://www.sqlite.org/fileformat.html#record_format.
+    /// See: <https://www.sqlite.org/fileformat.html#record_format>
     ///
     /// # Arguments
     ///
@@ -45,7 +45,6 @@ impl<'a> Iterator for HeaderIterator<'a> {
         }
         let (serial_type, bytes_read) = sqlite_varint::read_varint(&self.data[self.offset..]);
         self.offset += bytes_read;
-        // TODO: read the sqlite_varint::read_varint to see what it does if it want to read past the end of the slice.
         Some(serial_type)
     }
 }
@@ -111,7 +110,7 @@ impl<'a> ValueIterator<'a> {
     /// Iterator produces tuples (t, bs).
     ///
     /// `t` is a SQLite serial type code
-    /// See: https://www.sqlite.org/fileformat.html#record_format.
+    /// See: <https://www.sqlite.org/fileformat.html#record_format>
     ///
     /// `bs` is byte slice accessing the value, valid for the lifetime of the iterator.
     ///

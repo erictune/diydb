@@ -10,13 +10,8 @@ use pest::Parser;
 #[grammar = "sql.pest"]
 pub struct SQLParser;
 
-// TODO: figure out how to move parsing and code generation out of main into codegen.rs.
-// TODO: expand star into list of all column names of all tables in the input table list.
 pub fn parse_create_statement(c: &str) -> (String, Vec<&str>, Vec<&str>) {
     use itertools::Itertools;
-
-    // TODO: get this from the schema table by looking it up.
-
     let create_stmt = SQLParser::parse(Rule::create_stmt, c)
         .expect("unsuccessful parse") // unwrap the parse result
         .next()
@@ -60,15 +55,19 @@ pub fn parse_create_statement(c: &str) -> (String, Vec<&str>, Vec<&str>) {
 fn test_parse_create_statement() {
     assert_eq!(
         parse_create_statement("CREATE TABLE t (a int, b integer, c text, d string, e real)"),
-        (String::from("t"), vec!["a", "b", "c", "d", "e"], vec!["int", "integer", "text", "string", "real"])
+        (
+            String::from("t"),
+            vec!["a", "b", "c", "d", "e"],
+            vec!["int", "integer", "text", "string", "real"]
+        )
     );
     assert_eq!(
         parse_create_statement("CREATE TABLE Tbl_Two(a int,b int)"),
         (String::from("Tbl_Two"), vec!["a", "b"], vec!["int", "int"])
     );
-
 }
 
+// TODO: expand star into list of all column names of all tables in the input table list.
 pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
     let select_stmt = SQLParser::parse(Rule::select_stmt, &query)
         .expect("unsuccessful parse") // unwrap the parse result
@@ -82,12 +81,12 @@ pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
         match s.as_rule() {
             Rule::table_identifier => {
                 input_tables.push(s.as_str());
-            },
+            }
             Rule::select_items => {
                 for t in s.into_inner() {
                     output_cols.push(t.as_str());
                 }
-            },
+            }
             Rule::EOI => (),
             _ => unreachable!(),
         }
@@ -105,5 +104,4 @@ fn test_parse_select_statement() {
         parse_select_statement("select a,b,c fRoM tbl"),
         (vec!["tbl"], vec!["a", "b", "c"])
     );
-
 }

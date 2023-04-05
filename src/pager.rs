@@ -46,7 +46,7 @@ pub enum Error {
 pub type PageNum = usize;
 
 // TODO: support variable page sizes, using the page size specified in the DB.
-const ASSUMED_PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE: usize = 4096;
 
 // TODO: support databases with more on-disk pages, limiting memory usage by paging out unused pages.
 const MAX_PAGE_NUM: PageNum = 10_000; // 10_000 * 4k page ~= 40MB
@@ -70,9 +70,9 @@ impl Pager {
         vfs: &mut crate::vfs::DbAttachment,
         pn: PageNum,
     ) -> Result<Vec<u8>, Error> {
-        let mut v = vec![0_u8; ASSUMED_PAGE_SIZE];
+        let mut v = vec![0_u8; PAGE_SIZE];
         vfs.f
-            .seek(SeekFrom::Start((pn - 1) as u64 * ASSUMED_PAGE_SIZE as u64))
+            .seek(SeekFrom::Start((pn - 1) as u64 * PAGE_SIZE as u64))
             .unwrap();
         match vfs.f.read_exact(&mut v[..]).map_err(|_| Error::ReadFailed) {
             Ok(()) => Ok(v),

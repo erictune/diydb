@@ -160,10 +160,16 @@ fn main() {
     println!("input_tables: {}", input_tables.join(", "));
 
     // Execute the query (TODO: use code generation.)
-    if input_tables.len() > 1 { panic!("We don't support multiple table queries.")};
-    if input_tables.len() < 1 { panic!("We don't support selects without FROM.")};
+    if input_tables.len() > 1 {
+        panic!("We don't support multiple table queries.")
+    };
+    if input_tables.len() < 1 {
+        panic!("We don't support selects without FROM.")
+    };
     let table_name = input_tables[0];
-    if output_cols.len() != 1 || output_cols[0] != "*" { panic!("We don't support selecting specific columns.")} 
+    if output_cols.len() != 1 || output_cols[0] != "*" {
+        panic!("We don't support selecting specific columns.")
+    }
     let (root_pagenum, create_statement) =
         get_creation_sql_and_root_pagenum(&mut pager, table_name)
             .expect(format!("Should have looked up the schema for {}.", table_name).as_str());
@@ -177,7 +183,6 @@ fn main() {
         column_types,
         false,
     );
-
 
     // TODO: Generate a sequence of instruction for the above statement, like:
     //

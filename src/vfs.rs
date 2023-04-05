@@ -50,7 +50,6 @@ const TWENTY_ZEROS: &[u8] = &[0; 20];
 const SQLITE_VERSION_NUMBER: u32 = 3037000; // This is the one I'm using for generating test files.
 
 // Sqlite supports different page sizes, but we are just going to support the default.
-// TODO: consolidate multiple definitions of this constant in other modules.
 const PAGESIZE: u32 = 4096;
 
 fn bytes_identical<T: Ord>(a: &[T], b: &[T]) -> bool {
@@ -203,7 +202,6 @@ fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
 }
 
 impl DbAttachment {
-    // TODO: allow filename to be specified.
     // Why does std::fs::File::open use AsRef<Path> trait on the filename argument?
     // TODO: return errors
     // Is it better to use the Box<dyn Error> pattern or
@@ -211,6 +209,7 @@ impl DbAttachment {
     pub fn open(path: &str) -> Result<DbAttachment, Error> {
         // TODO: Lock file when opening so that other processes do not also
         // open and modify it, and so that is not modified while reading.
+        // See https://docs.rs/file-lock/latest/file_lock/
         let result = std::fs::OpenOptions::new()
             .read(true)
             .write(false)

@@ -14,9 +14,6 @@
 
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Cursor, Seek, SeekFrom};
-// Sqlite supports different page sizes, but we are just going to support the default.
-// TODO: consolidate multiple definitions of this constant in other modules.
-const PAGESIZE: u32 = 4096;
 
 // The database file header.
 #[derive(Debug, Clone)]
@@ -161,7 +158,7 @@ impl<'a> CellIterator<'a> {
         // left-most cell (the cell with the smallest key) first and the right-most cell (the cell
         // with the largest key) last.
         // """()
-        let mut last_offset: usize = PAGESIZE as usize; // First cell in pointer list is the last cell on the page, so it ends on byte PAGESIZE, I think (?).
+        let mut last_offset: usize = crate::pager::PAGE_SIZE as usize; // First cell in pointer list is the last cell on the page, so it ends on byte PAGESIZE, I think (?).
         for _ in 0..num_cells {
             let off = c
                 .read_u16::<BigEndian>()

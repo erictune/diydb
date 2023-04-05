@@ -70,8 +70,11 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> String {
         // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
         3 => {
             let mut bytes = [0_u8; 4];
-            bytes[0] = 1;
             c.read_exact(&mut bytes[1..]).unwrap();
+            bytes[0] = match (bytes[1] & 0b1000_0000) > 0 {
+                false => 0,
+                true => 0xff,
+            };
             i32::from_be_bytes(bytes).to_string()
         }
         // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
@@ -113,19 +116,24 @@ fn test_value_to_string() {
 
     // one byte ints
     assert_eq!(value_to_string(&1, &[0x7f]), "127".to_string());
-
     assert_eq!(value_to_string(&1, &[0xff]), "-1".to_string());
-
     assert_eq!(value_to_string(&1, &[0x01]), "1".to_string());
 
     // two byte ints
     assert_eq!(value_to_string(&2, &[0x00, 0x7f]), "127".to_string());
-
     assert_eq!(value_to_string(&2, &[0xff, 0xff]), "-1".to_string());
-
     assert_eq!(value_to_string(&2, &[0x00, 0x01]), "1".to_string());
-
     assert_eq!(value_to_string(&2, &[0x01, 0x00]), "256".to_string());
+
+    // three byte ints
+    assert_eq!(value_to_string(&3, &[0x00, 0x00, 0x7f]), "127".to_string());
+    assert_eq!(value_to_string(&3, &[0xff, 0xff, 0xff]), "-1".to_string());
+    assert_eq!(value_to_string(&3, &[0x00, 0x00, 0x01]), "1".to_string());
+    assert_eq!(value_to_string(&3, &[0x00, 0x01, 0x00]), "256".to_string());
+    assert_eq!(
+        value_to_string(&3, &[0x01, 0x00, 0x00]),
+        "65536".to_string()
+    );
 
     // TODO: larger ints and float.
 
@@ -179,8 +187,11 @@ pub fn value_to_i64(serial_type: &i64, data: &[u8], convert_nulls_to_zero: bool)
         // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
         3 => {
             let mut bytes = [0_u8; 4];
-            bytes[0] = 1;
             c.read_exact(&mut bytes[1..]).unwrap();
+            bytes[0] = match (bytes[1] & 0b1000_0000) > 0 {
+                false => 0,
+                true => 0xff,
+            };
             Some(i32::from_be_bytes(bytes) as i64)
         }
         // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
@@ -209,19 +220,21 @@ fn test_value_to_i64() {
 
     // one byte ints
     assert_eq!(value_to_i64(&1, &[0x7f], false), Some(127));
-
     assert_eq!(value_to_i64(&1, &[0xff], true), Some(-1));
-
     assert_eq!(value_to_i64(&1, &[0x01], false), Some(1));
 
     // two byte ints
     assert_eq!(value_to_i64(&2, &[0x00, 0x7f], false), Some(127));
-
     assert_eq!(value_to_i64(&2, &[0xff, 0xff], true), Some(-1));
-
     assert_eq!(value_to_i64(&2, &[0x00, 0x01], false), Some(1));
-
     assert_eq!(value_to_i64(&2, &[0x01, 0x00], true), Some(256));
+
+    // three byte ints
+    assert_eq!(value_to_i64(&3, &[0x00, 0x00, 0x7f], true), Some(127));
+    assert_eq!(value_to_i64(&3, &[0xff, 0xff, 0xff], false), Some(-1));
+    assert_eq!(value_to_i64(&3, &[0x00, 0x00, 0x01], true), Some(1));
+    assert_eq!(value_to_i64(&3, &[0x00, 0x01, 0x00], false), Some(256));
+    assert_eq!(value_to_i64(&3, &[0x01, 0x00, 0x00], true), Some(65536));
 
     // TODO: larger ints and float.
 
