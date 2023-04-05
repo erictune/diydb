@@ -1,5 +1,3 @@
-// TODO: move below comments to the readme.md under code structure.
-
 mod btree;
 mod formatting;
 mod pager;
@@ -23,8 +21,6 @@ const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
 const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 const SCHEMA_TABLE_NUMCOLS: usize = 5;
 
-use std::io::Cursor;
-
 /// Get the SQL CREATE statement used to create `table_name`.
 fn get_creation_sql_and_root_pagenum(
     pgr: &mut pager::Pager,
@@ -42,19 +38,16 @@ fn get_creation_sql_and_root_pagenum(
             for (t, v) in vi {
                 match idx {
                     SCHEMA_TABLE_TBL_NAME_COLIDX => {
-                        if serial_type::read_value_to_string(&t, &mut Cursor::new(v)) != table_name
-                        {
+                        if serial_type::value_to_string(&t, v) != table_name {
                             continue;
                         }
                     }
                     SCHEMA_TABLE_ROOTPAGE_COLIDX => {
-                        let tmp =
-                            serial_type::read_value_to_i64(&t, &mut Cursor::new(v), false).unwrap();
+                        let tmp = serial_type::value_to_i64(&t, v, false).unwrap();
                         root_pagenum = Some(tmp as pager::PageNum);
                     }
                     SCHEMA_TABLE_SQL_COLIDX => {
-                        creation_sql =
-                            Some(serial_type::read_value_to_string(&t, &mut Cursor::new(v)));
+                        creation_sql = Some(serial_type::value_to_string(&t, v));
                     }
                     _ => (),
                 }
