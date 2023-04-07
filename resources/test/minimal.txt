@@ -1,0 +1,11 @@
+tests/minimal.db
+Simplest test database.
+Created with: SQLite version 3.37.0 2021-12-09 01:34:53
+Commands:
+```
+.open test
+create table a (b int);
+insert into a values (1);
+^D
+```
+Contains 2 pages of 4096 bytes each.
