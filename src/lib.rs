@@ -20,9 +20,8 @@ const SCHEMA_SCHEMA: &str =
 const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
 const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
 const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
-const SCHEMA_TABLE_NUMCOLS: usize = 5;
 
-/// Get the SQL CREATE statement used to create `table_name`.
+/// Get the root page number for, and the SQL CREATE statement used to create `table_name`.
 pub fn get_creation_sql_and_root_pagenum(
     pgr: &mut pager::Pager,
     table_name: &str,
@@ -33,67 +32,23 @@ pub fn get_creation_sql_and_root_pagenum(
         let record_iterator = new_table_leaf_cell_iterator_for_page(pgr, SCHEMA_BTREE_ROOT_PAGENUM);
         for (_, payload) in record_iterator {
             let vi = record::ValueIterator::new(&payload[..]);
-            let mut idx = 0_usize;
-            let mut root_pagenum: Option<pager::PageNum> = None;
-            let mut creation_sql: Option<String> = None;
-            for (t, v) in vi {
-                match idx {
-                    SCHEMA_TABLE_TBL_NAME_COLIDX => {
-                        if serial_type::value_to_string(&t, v) != table_name {
-                            continue;
-                        }
-                    }
-                    SCHEMA_TABLE_ROOTPAGE_COLIDX => {
-                        let tmp = serial_type::value_to_i64(&t, v, false).unwrap();
-                        root_pagenum = Some(tmp as pager::PageNum);
-                    }
-                    SCHEMA_TABLE_SQL_COLIDX => {
-                        creation_sql = Some(serial_type::value_to_string(&t, v));
-                    }
-                    _ => (),
-                }
-                idx += 1;
-            }
-            if idx != SCHEMA_TABLE_NUMCOLS {
-                panic!("Invalid sqlite_schema table.")
-            }
-            return Some((
-                root_pagenum.expect("Should have gotten root page number from schema table."),
-                creation_sql.expect("Should have gotten creation sql from schema table."),
-            ));
+            let row = vi.collect::<Vec<(i64, &[u8])>>();
+            let this_table_name = serial_type::value_to_string(
+                &row[SCHEMA_TABLE_TBL_NAME_COLIDX].0,
+                row[SCHEMA_TABLE_TBL_NAME_COLIDX].1);
+            if this_table_name != table_name { continue; }
+            let root_pagenum = serial_type::value_to_i64(
+                &row[SCHEMA_TABLE_ROOTPAGE_COLIDX].0,
+                row[SCHEMA_TABLE_ROOTPAGE_COLIDX].1,
+                false).expect("Should have gotten root page number from schema table.") as pager::PageNum;
+            let creation_sql = serial_type::value_to_string(
+                &row[SCHEMA_TABLE_SQL_COLIDX].0,
+                row[SCHEMA_TABLE_SQL_COLIDX].1);
+            return Some((root_pagenum, creation_sql));
         }
     }
     None
 }
-
-// /// Get the SQL CREATE statement used to create `table_name`.
-// fn get_creation_sql_and_root_pagenum(
-//     pgr: &mut pager::Pager,
-//     table_name: &str,
-// ) -> Option<(pager::PageNum, String)> {
-//     if table_name == SCHEMA_TABLE_NAME {
-//         return Some((SCHEMA_BTREE_ROOT_PAGENUM, String::from(SCHEMA_SCHEMA)));
-//     } else {
-//         let record_iterator = new_table_leaf_cell_iterator_for_page(pgr, SCHEMA_BTREE_ROOT_PAGENUM);
-//         for (_, payload) in record_iterator {
-//             let vi = record::ValueIterator::new(&payload[..]);
-//             let row = vi.collect::<Vec<(i64, &[u8])>>();
-//             let this_table_name = serial_type::value_to_string(
-//                 &row[SCHEMA_TABLE_TBL_NAME_COLIDX].0,
-//                 row[SCHEMA_TABLE_TBL_NAME_COLIDX].1);
-//             if this_table_name != table_name { continue; }
-//             let root_pagenum = serial_type::value_to_i64(
-//                 &row[SCHEMA_TABLE_ROOTPAGE_COLIDX].0,
-//                 row[SCHEMA_TABLE_ROOTPAGE_COLIDX].1,
-//                 false).expect("Should have gotten root page number from schema table.") as pager::PageNum;
-//             let creation_sql = serial_type::value_to_string(
-//                 &row[SCHEMA_TABLE_SQL_COLIDX].0,
-//                 row[SCHEMA_TABLE_SQL_COLIDX].1);
-//             return Some((root_pagenum, creation_sql));
-//         }
-//     }
-//     None
-// }
 
 // TODO: make an iterator that can walk across multiple pages.  To do that,
 // the "btree iterator" needs to hold access to the pager.  This in turn requires.
