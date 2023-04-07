@@ -1,217 +1,30 @@
-mod btree;
-mod formatting;
-mod pager;
-mod parser;
-mod vfs;
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
-
-mod record;
-mod serial_type;
-
-// Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
-// It has references to the root pages of other btrees.
-const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
-const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
-const SCHEMA_SCHEMA: &str =
-    "CREATE TABLE sqlite_schema (type text, name text, tbl_name text, rootpage integer, sql text)";
-const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
-const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
-const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
-const SCHEMA_TABLE_NUMCOLS: usize = 5;
-
-/// Get the SQL CREATE statement used to create `table_name`.
-fn get_creation_sql_and_root_pagenum(
-    pgr: &mut pager::Pager,
-    table_name: &str,
-) -> Option<(pager::PageNum, String)> {
-    if table_name == SCHEMA_TABLE_NAME {
-        return Some((SCHEMA_BTREE_ROOT_PAGENUM, String::from(SCHEMA_SCHEMA)));
-    } else {
-        let record_iterator = new_table_leaf_cell_iterator_for_page(pgr, SCHEMA_BTREE_ROOT_PAGENUM);
-        for (_, payload) in record_iterator {
-            let vi = record::ValueIterator::new(&payload[..]);
-            let mut idx = 0_usize;
-            let mut root_pagenum: Option<pager::PageNum> = None;
-            let mut creation_sql: Option<String> = None;
-            for (t, v) in vi {
-                match idx {
-                    SCHEMA_TABLE_TBL_NAME_COLIDX => {
-                        if serial_type::value_to_string(&t, v) != table_name {
-                            continue;
-                        }
-                    }
-                    SCHEMA_TABLE_ROOTPAGE_COLIDX => {
-                        let tmp = serial_type::value_to_i64(&t, v, false).unwrap();
-                        root_pagenum = Some(tmp as pager::PageNum);
-                    }
-                    SCHEMA_TABLE_SQL_COLIDX => {
-                        creation_sql = Some(serial_type::value_to_string(&t, v));
-                    }
-                    _ => (),
-                }
-                idx += 1;
-            }
-            if idx != SCHEMA_TABLE_NUMCOLS {
-                panic!("Invalid sqlite_schema table.")
-            }
-            return Some((
-                root_pagenum.expect("Should have gotten root page number from schema table."),
-                creation_sql.expect("Should have gotten creation sql from schema table."),
-            ));
-        }
-    }
-    None
-}
-
-// TODO: make an iterator that can walk across multiple pages.  To do that,
-// the "btree iterator" needs to hold access to the pager.  This in turn requires.
-// improvements to pager design, like:
-// (pager object static lifetime, page interior mutability, concurrency controls)
-fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::PageReader {
-    let page = match pgr.get_page_ro(pgnum) {
-        Ok(p) => p,
-        Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
-    };
-    let btree_start_offset = match pgnum {
-        1 => 100,
-        _ => 0,
-    };
-    btree::PageReader::new(page, btree_start_offset)
-}
-
-fn new_table_leaf_cell_iterator_for_page(
-    pgr: &mut pager::Pager,
-    pgnum: usize,
-) -> btree::TableLeafCellIterator {
-    let page = match pgr.get_page_ro(pgnum) {
-        Ok(p) => p,
-        Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
-    };
-    let btree_start_offset = match pgnum {
-        1 => 100,
-        _ => 0,
-    };
-    // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
-    btree::TableLeafCellIterator::new(btree::CellIterator::new(page, btree_start_offset))
-}
-
-fn print_table(
-    pgr: &mut pager::Pager,
-    root_pgnum: usize,
-    table_name: &str,
-    col_names: Vec<&str>,
-    col_types: Vec<&str>,
-    detailed: bool,
-) {
-    {
-        let pr = new_reader_for_page(pgr, root_pgnum);
-        let hdr = pr.check_header();
-        if detailed {
-            println!("{:?}", hdr);
-        }
-    }
-    let mut tci = new_table_leaf_cell_iterator_for_page(pgr, root_pgnum);
-    formatting::print_table(&mut tci, table_name, col_names, col_types, detailed);
-}
-
-// TODO: make trait of a record iterator?
+// TODO: main should just be a REPL like the sqlite3 cli.
 fn main() {
-    // Open the database file. This is a file in sqlite3 format.
-    let mut vfs = vfs::DbAttachment::open("./record.db").expect("Should have opened the DB");
-
+    let mut vfs = diydb::vfs::DbAttachment::open("./record.db").expect("Should have opened the DB");
     // Read db file header to confirm it is a valid file, and how many and what size pages it has.
     let dbhdr = vfs.get_header().expect("Should have gotten DB file header");
     println!("Opened DB File. {:?}", dbhdr);
-    // TODO: move checking magic and reading creation-time fields (like page size) into vfs.rs.
-    //       but move access to modifiable fields to use a Pager from pager.rs, since that will require locking.
-    let mut pager = pager::Pager::new(vfs);
-
-    // ----------------------------------------------------//
-
-    // Print the Schema table.
-
-    let table_name = "sqlite_schema";
-    let (root_pagenum, create_statement) =
-        get_creation_sql_and_root_pagenum(&mut pager, table_name)
-            .expect(format!("Should have looked up the schema for {}.", table_name).as_str());
-    let (_table_name2, column_names, column_types) =
-        parser::parse_create_statement(&create_statement);
-
-    print_table(
-        &mut pager,
-        root_pagenum,
-        table_name,
-        column_names,
-        column_types,
-        false,
-    );
-
-    // ----------------------------------------------------//
+    // TODO: combine pager and vfs references as interal details of DbAttachment struct.
+    // DbAttachment can be in its own module.
+    // A DbAttachment contains a pager [1] and any settings of the session (ro vs rw).
+    // A DbAttachment offers access to the current state of the db header.
+    // A DbAttachment checks magic opening the file.
+    // A DbAttachment checks that fixed header values are valid/supported (like page size).
+    // A vfs is an implementation detail of a DBAttachment, and only has the one implementation for us (posix locking)
+    //  (maybe ":memory:" in the future.)
+    // A DbAttachment gives access to modifiable header fields, using Pager to lock concurrent access to page 1.
+    // [1] When we open the file, we will lock it.  So there should be only one instance of the file open
+    // across all processes. (might two processess open readonly without locking?  Okay, but they have separate pagers.)
+    // When diydb is used as a library, then there is only one DBAttachment to a give file in that process as well.
+    // So only one pager is needed.
+    // So the pager can be embedded in the db attachment.
+    // That raises the question of how to make the DBAttachment threadsafe, but that is for another day.
+    let mut pager = diydb::pager::Pager::new(vfs);
     println!("-----");
-    // ----------------------------------------------------//
-
+    println!("Printing schema table...");
+    diydb::print_schema(&mut pager);
+    println!("-----");
     let q = "SELECT * FROM record_test";
     println!("Doing query: {}", q);
-
-    let (input_tables, output_cols) = parser::parse_select_statement(q);
-    println!("output_cols: {}", output_cols.join(", "));
-    println!("input_tables: {}", input_tables.join(", "));
-
-    // Execute the query (TODO: use code generation.)
-    if input_tables.len() > 1 {
-        panic!("We don't support multiple table queries.")
-    };
-    if input_tables.len() < 1 {
-        panic!("We don't support selects without FROM.")
-    };
-    let table_name = input_tables[0];
-    if output_cols.len() != 1 || output_cols[0] != "*" {
-        panic!("We don't support selecting specific columns.")
-    }
-    let (root_pagenum, create_statement) =
-        get_creation_sql_and_root_pagenum(&mut pager, table_name)
-            .expect(format!("Should have looked up the schema for {}.", table_name).as_str());
-    let (_table_name2, column_names, column_types) =
-        parser::parse_create_statement(&create_statement);
-    print_table(
-        &mut pager,
-        root_pagenum,
-        table_name,
-        column_names,
-        column_types,
-        false,
-    );
-
-    // TODO: Generate a sequence of instruction for the above statement, like:
-    //
-    // let prog = vec![
-    //      OpOpenTable("a", Cursor1),  // addr 0
-    //      OpBreakIfDone(Cursor1),
-    //      // Maybe one op for each column to be selected?
-    //      OpReadFromCursor(Cursor1, RowReg1),
-    //      OpSelect(RowReg1, SelExpr),
-    //      OpWriteToOutputStream(RowReg1),
-    //      OpJumpToAddr(0),
-    // ];
-
-    // Explain the program to the user.
-    // println!("{}", program.explain());
-
-    // Define a VM to run the program:
-    // let cursor = get_read_cursor(prog.input_table_name());
-    // vm.reset();
-    // vm.load_program(prog);
-    // while true {
-    //     match prog.step() {
-    //         StepResult::Halt => break,
-    //         StepResult::Result(row) => println!(row),
-    //         StepResult::Processed => _,
-    //     }
-    // }
-
-    // Define interface convenience functions to run a query while formatting the output to a text table, etc.
-
-    // Make a REPL to run queries.
+    diydb::run_query(&mut pager, q);
 }
