@@ -1,11 +1,11 @@
-tests/minimal.db
-Simplest test database.
-Created with: SQLite version 3.37.0 2021-12-09 01:34:53
-Commands:
+file: $CARGO_MANIFEST_DIR/tests/minimal.db
+purpose: Simplest test database.
+created_with_version: SQLite version 3.37.0 2021-12-09 01:34:53
+sql_create_commands:
 ```
-.open test
+.open minimal.db
 create table a (b int);
 insert into a values (1);
 ^D
 ```
-Contains 2 pages of 4096 bytes each.
+pages: Contains 2 pages of 4096 bytes each.
