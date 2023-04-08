@@ -48,10 +48,27 @@ fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
     }
 }
 
-// TODO: test print_table()
+#[test]
+fn test_record_iterator_on_minimal_db() {
+    let path = path_to_testdata("minimal.db");
+    let mut pager = diydb::pager::Pager::open(path.as_str());
+    let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, "a");
+    let mut ri = diydb::new_table_leaf_cell_iterator_for_page(&mut pager, x.unwrap().0);
+    let first_item = ri.next().clone();
+    assert!(first_item.is_some());
+    assert_eq!(first_item.unwrap().0, 1);
+    assert!(ri.next().is_none());
 
-// #[test]
-// fn test_record_iterator_real_db() {
-//     let record_iterator = new_table_leaf_cell_iterator_for_page(pgr, SCHEMA_BTREE_ROOT_PAGENUM);
-//     assert_eq!(adder::add(3, 2), 5);
-// }
+}
+
+#[test]
+#[should_panic]
+// TODO: make this not panic by supporting index pages.
+fn test_record_iterator_on_multipage_db() {
+    let path = path_to_testdata("multipage.db");
+    let mut pager = diydb::pager::Pager::open(path.as_str());
+    let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, "thousandrows");
+    let ri = diydb::new_table_leaf_cell_iterator_for_page(&mut pager, x.unwrap().0);
+    assert_eq!(ri.count(), 1000);
+    //println!("{:?}", ri.collect::<Vec<u8>>());
+}

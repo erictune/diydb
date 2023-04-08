@@ -1,0 +1,20 @@
+TODO after that:
+- copy script to generate multipage.db,  
+- generate it
+- add it
+- test reading a page from it.
+- discover the bug that it isn't printing the right stuff (may manifest as overflow unimplemented)
+- pull in the fix from src/main.rs.better which checks the page type.
+- define an InteralTree iterator which uses CellIterator to iterate over the cells in an internal tree.
+- define new Btree struct with member root_page and private method least_page and fulfilling the iterator trait.
+- least_page() will use the  the rightmost pointer of InternalTree page and the InternalTree iterator to find the lowest leaf page number.
+- from there it can iterate over the whole btree (scan).
+- This iterator is a TableIterator. Other iterators can be hidden as internal details.
+- A Table type could wrap a Btree type, imposing the tables sql schema on the btree.
+
+TODO LATER:
+- We will eventually need all of:
+    - table locking (when e.g. changing the definition of a table schema)
+    - btree locking (when growing/shrinking the btree (this might take the form of just locking certain pages?))
+    - single page locking (when modifying a value in a row) - several rows can be modified concurrently.
+- Are Indexes children of the Table, since they need to be updated in sync with the table?

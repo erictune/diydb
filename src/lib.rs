@@ -72,7 +72,7 @@ fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::PageReade
     btree::PageReader::new(page, btree_start_offset)
 }
 
-fn new_table_leaf_cell_iterator_for_page(
+pub fn new_table_leaf_cell_iterator_for_page(
     pgr: &mut pager::Pager,
     pgnum: usize,
 ) -> btree::TableLeafCellIterator {
@@ -85,7 +85,19 @@ fn new_table_leaf_cell_iterator_for_page(
         _ => 0,
     };
     // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
-    btree::TableLeafCellIterator::new(btree::CellIterator::new(page, btree_start_offset))
+    let pr = btree::PageReader::new(page, btree_start_offset);
+    let hdr = pr.check_header();
+    println!("Examining page {} with header {:?}", pgnum, hdr);
+    match hdr.btree_page_type {
+        btree::PageType::TableLeaf => {
+            // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
+            btree::TableLeafCellIterator::new(btree::CellIterator::new(page, btree_start_offset))
+        }
+        btree::PageType::TableInterior => { unimplemented!("Interior pages not supported yet") }
+        btree::PageType::IndexLeaf => { unimplemented!("Index pages not supported yet") }
+        btree::PageType::IndexInterior => { unimplemented!("Index pages not supported yet") }
+    }
+
 }
 
 fn print_table(
