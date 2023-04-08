@@ -36,8 +36,8 @@ Files are organized similarly:
 * `serial_types.rs` - handles SQLite *serial types* (which can differ from row to row within a column, and are different from SQL types).
 * `record.rs` - iterates over and parses row records that are stored in btree cells.
 * `btree.rs` - provides iterator (cursor) to walk over btree elements (in future could support writes.).  Uses a pager to get at pages.
-* `pager.rs` - provides an array of pages, which may or may not be present in memory (seek and load on first access).  Uses a vfs.  This will eventually enforce R/W locking of pages among multiple cursors.
-* `vfs.rs` - opens database files. Reads the db file header. Will someday lock the files at the OS level.  
+* `pager.rs` - provides an array of pages, which may or may not be present in memory (seek and load on first access).  It will eventually enforce R/W locking of pages among multiple cursors.  It holds the handle to the open database file.  Will someday lock the files at the OS level.  
+* There is no vfs layer yet, as we don't care to support non-posix filesystems at this time.
 * There is no bytecode yet.  I may add a bytecode VM to execute SQL, and a code generator to emit bytecode from parsed SQL, and a query planner of sorts.
 * There is no interface yet.  I may add a REPL that parses SQL and meta-commands.
 
