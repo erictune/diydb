@@ -5,7 +5,6 @@ pub mod pager;
 pub mod parser;
 mod record;
 mod serial_type;
-pub mod vfs;
 
 extern crate pest;
 #[macro_use]
