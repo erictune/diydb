@@ -3,10 +3,6 @@ use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
 
-pub struct DbAttachment {
-    pub f: std::fs::File,
-}
-
 // TODO: consider whether the Error types should be "per-architectural layer" or common to all methods in the DB.
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
@@ -72,7 +68,7 @@ fn bytes_identical<T: Ord>(a: &[T], b: &[T]) -> bool {
     true
 }
 
-fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
+pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     f.seek(SeekFrom::Start(0)).unwrap();
     // Offset	Size	Description
     // 0        16	    The header string: "SQLite format 3\000"
@@ -199,29 +195,4 @@ fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
         changecnt: changecnt,
         numpages: numpages,
     })
-}
-
-impl DbAttachment {
-    // Why does std::fs::File::open use AsRef<Path> trait on the filename argument?
-    // TODO: return errors
-    // Is it better to use the Box<dyn Error> pattern or
-    // to define a new error type in this crate and map the std::fs errors to it?
-    pub fn open(path: &str) -> Result<DbAttachment, Error> {
-        // TODO: Lock file when opening so that other processes do not also
-        // open and modify it, and so that is not modified while reading.
-        // See https://docs.rs/file-lock/latest/file_lock/
-        let result = std::fs::OpenOptions::new()
-            .read(true)
-            .write(false)
-            .create(false)
-            .open(path);
-        match result {
-            Ok(ff) => Ok(DbAttachment { f: ff }),
-            Err(_) => Err(Error::OpenFailed),
-        }
-    }
-
-    pub fn get_header(&mut self) -> Result<DbfileHeader, Error> {
-        get_header(&mut self.f)
-    }
 }

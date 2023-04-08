@@ -26,8 +26,11 @@
 
 use std::io::{Read, Seek, SeekFrom};
 
+/// A pager manages the file locking and the memory use for one open database file.
+// TODO: When several files are open, coordinate between different pagers to maintain an overall memory limit.
+// TODO: rw locking for concurrent accesses by multiple cursors to one file.
 pub struct Pager {
-    vfs: crate::vfs::DbAttachment,
+    f: std::fs::File,
     pages: Vec<Option<Vec<u8>>>,
 }
 
@@ -52,9 +55,20 @@ pub const PAGE_SIZE: usize = 4096;
 const MAX_PAGE_NUM: PageNum = 10_000; // 10_000 * 4k page ~= 40MB
 
 impl Pager {
-    pub fn new(vfs: crate::vfs::DbAttachment) -> Self {
+    pub fn open(path: &str) -> Self {
         Pager {
-            vfs: vfs,
+            f: {
+                // TODO: Lock file when opening so that other processes do not also
+                // open and modify it, and so that is not modified while reading.
+                // See https://docs.rs/file-lock/latest/file_lock/
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(false)
+                    .create(false)
+                    .open(path)
+                    .expect("Should have opened file.")
+                // let h = crate::vfs::get_header(&mut self.f.unwrap().borrow());
+            },
             pages: vec![],
         }
         // TODO: get the header and check that the number of pages in the DB is less than the maximum number of pages allowed.
@@ -66,15 +80,12 @@ impl Pager {
         unimplemented!()
     }
 
-    fn read_page_from_vfs(
-        vfs: &mut crate::vfs::DbAttachment,
-        pn: PageNum,
-    ) -> Result<Vec<u8>, Error> {
+    fn read_page_from_file(&mut self, pn: PageNum) -> Result<Vec<u8>, Error> {
         let mut v = vec![0_u8; PAGE_SIZE];
-        vfs.f
+        self.f
             .seek(SeekFrom::Start((pn - 1) as u64 * PAGE_SIZE as u64))
             .unwrap();
-        match vfs.f.read_exact(&mut v[..]).map_err(|_| Error::ReadFailed) {
+        match self.f.read_exact(&mut v[..]).map_err(|_| Error::ReadFailed) {
             Ok(()) => Ok(v),
             Err(e) => Err(e),
         }
@@ -95,7 +106,8 @@ impl Pager {
             return;
         }
         // println!("Reading page {} on demand.", pn);
-        let v = Self::read_page_from_vfs(&mut self.vfs, pn)
+        let v = self
+            .read_page_from_file(pn)
             .map_err(|_| Error::ReadFailed)
             .unwrap();
         self.pages[pn - 1] = Some(v);
