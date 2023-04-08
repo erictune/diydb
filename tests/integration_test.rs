@@ -38,14 +38,18 @@ fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
     let expected_tables = vec![
         ("t1", 2, "create table t1 (a int)"),
         ("t2", 3, "create table t2 (a int, b int)"),
-        ("t3", 4, "create table t3 (a text, b int, c text, d int, e real)"),
+        (
+            "t3",
+            4,
+            "create table t3 (a text, b int, c text, d int, e real)",
+        ),
     ];
     for expect in expected_tables {
         let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, expect.0);
         assert!(x.is_some());
         let (pgnum, csql) = x.unwrap();
         assert_eq!(pgnum, expect.1); // first page after schema_table page.
-        assert_eq!(csql.to_lowercase().replace('\n', " "), expect.2);    
+        assert_eq!(csql.to_lowercase().replace('\n', " "), expect.2);
     }
 }
 

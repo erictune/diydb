@@ -35,15 +35,22 @@ pub fn get_creation_sql_and_root_pagenum(
             let row = vi.collect::<Vec<(i64, &[u8])>>();
             let this_table_name = serial_type::value_to_string(
                 &row[SCHEMA_TABLE_TBL_NAME_COLIDX].0,
-                row[SCHEMA_TABLE_TBL_NAME_COLIDX].1);
-            if this_table_name != table_name { continue; }
+                row[SCHEMA_TABLE_TBL_NAME_COLIDX].1,
+            );
+            if this_table_name != table_name {
+                continue;
+            }
             let root_pagenum = serial_type::value_to_i64(
                 &row[SCHEMA_TABLE_ROOTPAGE_COLIDX].0,
                 row[SCHEMA_TABLE_ROOTPAGE_COLIDX].1,
-                false).expect("Should have gotten root page number from schema table.") as pager::PageNum;
+                false,
+            )
+            .expect("Should have gotten root page number from schema table.")
+                as pager::PageNum;
             let creation_sql = serial_type::value_to_string(
                 &row[SCHEMA_TABLE_SQL_COLIDX].0,
-                row[SCHEMA_TABLE_SQL_COLIDX].1);
+                row[SCHEMA_TABLE_SQL_COLIDX].1,
+            );
             return Some((root_pagenum, creation_sql));
         }
     }
@@ -176,4 +183,34 @@ pub fn run_query(pager: &mut pager::Pager, query: &str) {
     // }
 
     // Define interface convenience functions to run a query while formatting the output to a text table, etc.
+}
+
+pub fn open_db(path: &str) -> pager::Pager {
+    // TODO: move this inside DbAttachment::open() to check header under file locking.
+    {
+        let dbhdr = vfs::DbAttachment::open(path)
+            .expect("Should have opened the DB")
+            .get_header()
+            .expect("Should have gotten DB file header");
+        println!("Opened DB File. {:?}", dbhdr);
+    }
+    // TODO: pager should be a main()-scope lifetime object.
+    // Hide vfs in Database object.
+    // Check magic when opening the file.
+    // combine pager and vfs references as interal details of DbAttachment struct.
+    // DbAttachment can be in its own module.
+    // A DbAttachment contains a pager [1] and any settings of the session (ro vs rw).
+    // A DbAttachment offers access to the current state of the db header.
+    // A DbAttachment checks magic opening the file.
+    // A DbAttachment checks that fixed header values are valid/supported (like page size).
+    // A vfs is an implementation detail of a DBAttachment, and only has the one implementation for us (posix locking)
+    //  (maybe ":memory:" in the future.)
+    // A DbAttachment gives access to modifiable header fields, using Pager to lock concurrent access to page 1.
+    // [1] When we open the file, we will lock it.  So there should be only one instance of the file open
+    // across all processes. (might two processess open readonly without locking?  Okay, but they have separate pagers.)
+    // When diydb is used as a library, then there is only one DBAttachment to a give file in that process as well.
+    // So only one pager is needed.
+    // So the pager can be embedded in the db attachment.
+    // That raises the question of how to make the DBAttachment threadsafe, but that is for another day.
+    pager::Pager::new(vfs::DbAttachment::open(path).expect("Should have opened the DB"))
 }
