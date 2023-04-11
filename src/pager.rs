@@ -33,6 +33,7 @@ pub struct Pager {
     f: std::fs::File,
     pages: Vec<Option<Vec<u8>>>,
     initialized: bool,
+    page_size: Option<u32>,
 }
 
 #[derive(thiserror::Error, Debug, Clone)]
@@ -48,9 +49,6 @@ pub enum Error {
 // Page numbers are 1-based, to match how Sqlite numbers pages.  PageNum ensures people pass something that is meant to be a page number
 // to a function that expects a page number.
 pub type PageNum = usize;
-
-// TODO: support variable page sizes, using the page size specified in the DB.
-pub const PAGE_SIZE: usize = 4096;
 
 // TODO: support databases with more on-disk pages, limiting memory usage by paging out unused pages.
 const MAX_PAGE_NUM: PageNum = 10_000; // 10_000 * 4k page ~= 40MB
@@ -68,10 +66,10 @@ impl Pager {
                     .create(false)
                     .open(path)
                     .expect("Should have opened file.")
-                // let h = crate::vfs::get_header(&mut self.f.unwrap().borrow());
             },
             pages: vec![],
             initialized: false,
+            page_size: None
         }
         // TODO: get the header and check that the number of pages in the DB is less than the maximum number of pages allowed.
     }
@@ -91,6 +89,7 @@ impl Pager {
         if h.numpages > MAX_PAGE_NUM as u32 { 
             panic!("Too many pages");
         }               
+        self.page_size = Some(h.pagesize as u32);
         self.initialized = true;
         Ok(())
     }
@@ -102,9 +101,9 @@ impl Pager {
     }
 
     fn read_page_from_file(&mut self, pn: PageNum) -> Result<Vec<u8>, Error> {
-        let mut v = vec![0_u8; PAGE_SIZE];
+        let mut v = vec![0_u8; self.page_size.unwrap() as usize];
         self.f
-            .seek(SeekFrom::Start((pn - 1) as u64 * PAGE_SIZE as u64))
+            .seek(SeekFrom::Start((pn - 1) as u64 * self.page_size.unwrap() as u64))
             .unwrap();
         match self.f.read_exact(&mut v[..]).map_err(|_| Error::ReadFailed) {
             Ok(()) => Ok(v),
@@ -136,6 +135,11 @@ impl Pager {
 
     // I think this says that the self object, has lifetime 'b which must be longer than the lifetime of the returned reference
     // to the vector it contains.
+    // That is currently true, since we don't get rid of or modify pages.
+    // Once we implement writing or paging-out, we will need to provide a shorter lifetime for the 
+    // Page and/or use runtime locking to ensure we don't page out or write to something
+    // that is in use.  So, the returned object (say, struct PageRef?) will need to participate in reference
+    // counting.
     pub fn get_page_ro<'a, 'b: 'a>(&'b mut self, pn: PageNum) -> Result<&'a Vec<u8>, Error> {
 	    self.ensure_initialized().unwrap();
         if pn > MAX_PAGE_NUM {
@@ -155,4 +159,9 @@ impl Pager {
         // TODO: support writing pages. This will need reader/writer locks.
         unimplemented!("Writing not implemented")
     }
+    pub fn get_page_size(&mut self) -> u32 {
+        self.ensure_initialized().unwrap();
+        self.page_size.unwrap()
+    }
+
 }

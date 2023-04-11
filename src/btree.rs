@@ -122,7 +122,7 @@ impl<'a> CellIterator<'a> {
     ///
     /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
     ///         slives ends with the last byte of the record body.
-    pub fn new(p: &Vec<u8>, non_btree_header_bytes: usize) -> CellIterator {
+    pub fn new(p: &Vec<u8>, non_btree_header_bytes: usize, page_size: u32) -> CellIterator {
         let mut c = Cursor::new(p);
         c.seek(SeekFrom::Start(non_btree_header_bytes as u64))
             .expect("Should have seeked.");
@@ -163,7 +163,7 @@ impl<'a> CellIterator<'a> {
         // left-most cell (the cell with the smallest key) first and the right-most cell (the cell
         // with the largest key) last.
         // """()
-        let mut last_offset: usize = crate::pager::PAGE_SIZE as usize; // First cell in pointer list is the last cell on the page, so it ends on byte PAGESIZE, I think (?).
+        let mut last_offset: usize = page_size as usize; // First cell in pointer list is the last cell on the page, so it ends on byte PAGESIZE, I think (?).
         for _ in 0..num_cells {
             let off = c
                 .read_u16::<BigEndian>()

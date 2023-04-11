@@ -61,6 +61,7 @@ fn test_record_iterator_on_minimal_db() {
 
 }
 
+
 #[test]
 fn test_record_iterator_on_multipage_db() {
     // This tests iterating over the root page which is interor type.
@@ -90,3 +91,20 @@ fn test_record_iterator_on_multipage_db() {
     assert_eq!(rp, 6) 
     // TODO: test a large enough table to have a rightmost pointer.
 }
+
+#[test]
+fn test_record_iterator_on_multipage_withvarious_page_sizes() {
+    let dbs = vec![
+        "multipage-512B-page.db",
+        "multipage-1kB-page.db",
+        "multipage.db", // 4k.
+    ];
+    for db in dbs {
+        let path = path_to_testdata(db);
+        println!("{}", path);
+        let mut pager = diydb::pager::Pager::open(path.as_str());
+        let _ = diydb::get_creation_sql_and_root_pagenum(&mut pager, "thousandrows");
+        // TODO: test queries on the table once btree table iterator support done.
+    }
+}
+
