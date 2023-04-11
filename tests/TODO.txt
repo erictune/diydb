@@ -1,16 +1,12 @@
-TODO after that:
-- copy script to generate multipage.db,  
-- generate it
-- add it
-- test reading a page from it.
-- discover the bug that it isn't printing the right stuff (may manifest as overflow unimplemented)
-- pull in the fix from src/main.rs.better which checks the page type.
-- define an InteralTree iterator which uses CellIterator to iterate over the cells in an internal tree.
-- define new Btree struct with member root_page and private method least_page and fulfilling the iterator trait.
-- least_page() will use the  the rightmost pointer of InternalTree page and the InternalTree iterator to find the lowest leaf page number.
-- from there it can iterate over the whole btree (scan).
+TODO next: 
+- Write a traverse function that a stack of Table{Leaf,Interior}CellIterator
+  und se it to serialize a file.
+- Make an interator using the traverse function as a basis.
 - This iterator is a TableIterator. Other iterators can be hidden as internal details.
-- A Table type could wrap a Btree type, imposing the tables sql schema on the btree.
+- Test that it can walk the whole "multipage" table.
+- Need testing of a 3 level table.  With 512B pages, need at least 85 leaf pages to force more than 1 index page.
+  More than 1 index page means 3 levels for at least some leaves.  At 512B pages, 4k rows of 4 character codes.
+  will work (roughly 44 per page, 85 pages).
 
 TODO LATER:
 - We will eventually need all of:
@@ -18,3 +14,12 @@ TODO LATER:
     - btree locking (when growing/shrinking the btree (this might take the form of just locking certain pages?))
     - single page locking (when modifying a value in a row) - several rows can be modified concurrently.
 - Are Indexes children of the Table, since they need to be updated in sync with the table?
+
+TODO Later: 
+- Build Parse Tree / IR from queries.
+- Start by representing a select * from T as Scan(T).
+- Add Project when it is a list of columns rather than just a '*'. (Project(cols) <- Scan(T))
+- Add arithmetic expressions in the Project . 
+- Add filter for Where (Filter(expr) -> Project(cols) <- Scan(T)
+- Apply rules to reorder the tree (e.g. when the where is simple, convert the Scan(T) to Lookup(T) and push that down from Filter)
+- Take inspiration from https://www.querifylabs.com/blog/relational-operators-in-apache-calcite

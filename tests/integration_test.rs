@@ -62,13 +62,31 @@ fn test_record_iterator_on_minimal_db() {
 }
 
 #[test]
-#[should_panic]
-// TODO: make this not panic by supporting index pages.
 fn test_record_iterator_on_multipage_db() {
+    // This tests iterating over the root page which is interor type.
+    // The table has these rows:
+    // row 1: "AAA"
+    // row 2: "AAB"
+    // ...
+    // row 1000: "JJJ"
+    //
+    // The file has 4 x 4k pages:
+    // Page 1: schema
+    // Page 2: root of "digits" table.
+    // Page 3: Index type page.
+    // Page 4: first leaf page (AAA to DFA ; rows 1-351)
+    // Page 5: second leaf page (DFB to GJA ; rows 352-691)
+    // Page 6: third leaf page (GJB to JJJ ; 692-1000)
     let path = path_to_testdata("multipage.db");
     let mut pager = diydb::pager::Pager::open(path.as_str());
     let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, "thousandrows");
-    let ri = diydb::new_table_leaf_cell_iterator_for_page(&mut pager, x.unwrap().0);
-    assert_eq!(ri.count(), 1000);
-    //println!("{:?}", ri.collect::<Vec<u8>>());
+    let pgnum = x.unwrap().0;
+    assert_eq!(pgnum, 3);    
+    let mut ri = diydb::new_table_interior_cell_iterator_for_page(&mut pager, pgnum);
+    assert_eq!(ri.next(), Some((4, 351)));    
+    assert_eq!(ri.next(), Some((5, 691)));    
+    assert_eq!(ri.next(), None);   
+    let rp = diydb::get_table_interior_cell_rightmost_pointer_for_page(&mut pager, pgnum);
+    assert_eq!(rp, 6) 
+    // TODO: test a large enough table to have a rightmost pointer.
 }
