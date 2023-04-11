@@ -1,7 +1,5 @@
 use byteorder::{BigEndian, ReadBytesExt};
-use std::io::Read;
-use std::io::Seek;
-use std::io::SeekFrom;
+use std::io::{Cursor, Read, Seek, SeekFrom};
 
 // TODO: consider whether the Error types should be "per-architectural layer" or common to all methods in the DB.
 #[derive(thiserror::Error, Debug, Clone)]
@@ -20,8 +18,6 @@ pub enum Error {
     Invalid,
     #[error("Error reading file.")]
     ReadFailed,
-    #[error("Error opening db file file.")]
-    OpenFailed,
 }
 
 // Code to open db files and (in the future) lock the file at the OS level.
@@ -39,6 +35,7 @@ pub struct DbfileHeader {
     pub changecnt: u32,
 }
 
+const SQLITE_DB_HEADER_BYTES: usize = 100;
 const SQLITE3_MAGIC_STRING: &[u8] = &[
     0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00,
 ];
@@ -67,6 +64,14 @@ fn bytes_identical<T: Ord>(a: &[T], b: &[T]) -> bool {
     }
     true
 }
+
+pub fn get_header_clone(f: &mut std::fs::File) -> Result<DbfileHeader, Error> {
+    let mut v = vec![0_u8; crate::dbheader::SQLITE_DB_HEADER_BYTES];
+    f.seek(SeekFrom::Start(0)).unwrap();
+    f.read_exact(&mut v[..]).map_err(|_| Error::ReadFailed)?;
+    let mut c = Cursor::new(v);
+	get_header(&mut c)
+    }
 
 pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     f.seek(SeekFrom::Start(0)).unwrap();
@@ -133,9 +138,7 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
         return Err(Error::UnsupportedFreelistUse);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x1 {
-        return Err(Error::UnsupportedSchema);
-    }
+    let _ = f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)?;
     if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x4 {
         return Err(Error::UnsupportedSchema);
     }

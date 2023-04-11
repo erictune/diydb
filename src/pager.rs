@@ -32,6 +32,7 @@ use std::io::{Read, Seek, SeekFrom};
 pub struct Pager {
     f: std::fs::File,
     pages: Vec<Option<Vec<u8>>>,
+    initialized: bool,
 }
 
 #[derive(thiserror::Error, Debug, Clone)]
@@ -70,8 +71,28 @@ impl Pager {
                 // let h = crate::vfs::get_header(&mut self.f.unwrap().borrow());
             },
             pages: vec![],
+            initialized: false,
         }
         // TODO: get the header and check that the number of pages in the DB is less than the maximum number of pages allowed.
+    }
+
+    // Reads the header of a file after the file has been opened to 
+    // ensure it is a valid file.
+    // Separate from open because I could not figure out how to return a
+    // file from the constructor and use the file in one function.
+    // To be called before using other methods.
+    // TODO: figure out how to do this in the constructor or with
+    // interior mutability so that it doesn't force all other methods
+    // to be mutable.
+    fn ensure_initialized(&mut self) -> Result<(), Error> {
+	    if self.initialized	{ return Ok(()) }
+        let h = crate::dbheader::get_header_clone(&mut self.f).expect("Should have parsed db header"); 
+        self.f.seek(SeekFrom::Start(0)).expect("Should have returned file cursor to start");
+        if h.numpages > MAX_PAGE_NUM as u32 { 
+            panic!("Too many pages");
+        }               
+        self.initialized = true;
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -116,6 +137,7 @@ impl Pager {
     // I think this says that the self object, has lifetime 'b which must be longer than the lifetime of the returned reference
     // to the vector it contains.
     pub fn get_page_ro<'a, 'b: 'a>(&'b mut self, pn: PageNum) -> Result<&'a Vec<u8>, Error> {
+	    self.ensure_initialized().unwrap();
         if pn > MAX_PAGE_NUM {
             return Err(Error::PageNumberBeyondLimits);
         }
@@ -129,6 +151,7 @@ impl Pager {
 
     #[allow(dead_code)]
     pub fn get_page_rw(self, _: PageNum) -> Result<Vec<u8>, Error> {
+	    //self.ensure_initialized().unwrap();
         // TODO: support writing pages. This will need reader/writer locks.
         unimplemented!("Writing not implemented")
     }

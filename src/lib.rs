@@ -5,6 +5,7 @@ pub mod pager;
 pub mod parser;
 mod record;
 mod serial_type;
+mod dbheader;
 
 extern crate pest;
 #[macro_use]
