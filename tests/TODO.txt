@@ -1,12 +1,82 @@
-TODO next: 
+TODO next:
+- Fork TableInteriorCellIterator to InteriorPointerIterator and InteriorValueIterator
+    - fn InteriorValueIterator() -> (PageNum, value, PageNum) 
+        - used for searching for a specific value.
+        - Okay to leave as TODO.
+    - fn InteriorPointerIterator() -> PageNum
+        - on penultimate iteration, returns left pointer from last cell.
+        - on last iteration, returns righmost.
+        - used for full scans.
+- unstash
+- In pub fn TableIterator::next():
+    ```
+    if stack.is_empty() { self.seek_leftmost_leaf(self.root_pagenum) }
+    return self.internal_next(); requires that stack be filled.
+    ```
+- In TableIterator::internal_next():
+    ```
+    // Stack must not be is_empty() before loop.
+    assert!(!stack.is_empty(), "Internal logical error");
+    loop {
+        match stack.is_empty() {
+            true => None,
+            false => {
+                match self.stack.top() {
+                    Leaf(l) => match l.next() {
+                        Some(x) => Some(x),
+                        None => { self.stack.pop() }
+                    }
+                    Interior(i) => match i.next() {
+                        Some(x) => match x {
+                            _, _, Some(p) => { self.seek_leftmost_leaf(p) }
+                            _, _, None => {}
+                        }
+                        None => { self.stack.pop() }
+                    }
+                }
+            }
+        }
+    }
+    ```
+
+- In TableIterator::seek_leftmost_leaf(pagenum):
+    ```
+    let next_page = pagenum
+    loop {
+        p = get_pagenum_from_pager();
+        match p.get_page_type {
+            Leaf(l) => {
+                self.stack.push(LeafIterator(l));
+                return;
+            }
+            Interior(i) => {
+                self.stack.push(InteriorPointerIterator(i));
+                next_page = self.stack.top().next().unwrap("Did not expect empty cell list on interior page");
+                }
+            }
+        }
+    }
+    ```
+
 - Write a traverse function that a stack of Table{Leaf,Interior}CellIterator
-  und se it to serialize a file.
 - Make an interator using the traverse function as a basis.
 - This iterator is a TableIterator. Other iterators can be hidden as internal details.
 - Test that it can walk the whole "multipage" table.
-- Need testing of a 3 level table.  With 512B pages, need at least 85 leaf pages to force more than 1 index page.
-  More than 1 index page means 3 levels for at least some leaves.  At 512B pages, 4k rows of 4 character codes.
-  will work (roughly 44 per page, 85 pages).
+- Testing with a 3 level table, which we have.
+
+Little Cleanups:
+- As of Rust 1.32, the standard numeric types provide built-in methods like to_le_bytes and from_le_bytes,
+  which support some of the same use cases as byteorder.  Consider using those.  Esp in dbheader.rs, but other places too.
+- Rewrite most of the methods in dbheader as single-field accessors rather than defining the header as an object.
+
+TODO LATER:
+- decide how to handle spilled payloads.
+    - Make a copy eagerly ... how to make the accessor take that memory ... lifetimes.
+    - Provide lazy access to the data through a spilled string iterator?  -- Holds locks on the spill page too?  Gets complex?
+    - Expose via enum { CompleteString, SpilledString }, complicating callers.
+    - Have the iterator own a heap allocation that contains a clone, but only when necessary. *like*
+    - Have the iterator return a text/blob iterator that knows how to iterate over the split, with string/slice-like Traits *like*
+
 
 TODO LATER:
 - We will eventually need all of:

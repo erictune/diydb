@@ -70,8 +70,8 @@ pub fn get_header_clone(f: &mut std::fs::File) -> Result<DbfileHeader, Error> {
     f.seek(SeekFrom::Start(0)).unwrap();
     f.read_exact(&mut v[..]).map_err(|_| Error::ReadFailed)?;
     let mut c = Cursor::new(v);
-	get_header(&mut c)
-    }
+    get_header(&mut c)
+}
 
 pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     f.seek(SeekFrom::Start(0)).unwrap();

@@ -58,9 +58,7 @@ fn test_record_iterator_on_minimal_db() {
     assert!(first_item.is_some());
     assert_eq!(first_item.unwrap().0, 1);
     assert!(ri.next().is_none());
-
 }
-
 
 #[test]
 fn test_record_iterator_on_multipage_db() {
@@ -82,13 +80,13 @@ fn test_record_iterator_on_multipage_db() {
     let mut pager = diydb::pager::Pager::open(path.as_str());
     let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, "thousandrows");
     let pgnum = x.unwrap().0;
-    assert_eq!(pgnum, 3);    
+    assert_eq!(pgnum, 3);
     let mut ri = diydb::new_table_interior_cell_iterator_for_page(&mut pager, pgnum);
-    assert_eq!(ri.next(), Some((4, 351)));    
-    assert_eq!(ri.next(), Some((5, 691)));    
-    assert_eq!(ri.next(), None);   
+    assert_eq!(ri.next(), Some((4, 351)));
+    assert_eq!(ri.next(), Some((5, 691)));
+    assert_eq!(ri.next(), None);
     let rp = diydb::get_table_interior_cell_rightmost_pointer_for_page(&mut pager, pgnum);
-    assert_eq!(rp, 6) 
+    assert_eq!(rp, 6)
     // TODO: test a large enough table to have a rightmost pointer.
 }
 
@@ -107,4 +105,3 @@ fn test_record_iterator_on_multipage_withvarious_page_sizes() {
         // TODO: test queries on the table once btree table iterator support done.
     }
 }
-

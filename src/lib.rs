@@ -1,15 +1,17 @@
 mod btree;
 mod formatting;
 // TODO: mod pager should not be public.  It should be allocated when you open a file, and be private to the DbAttachement.
+mod dbheader;
 pub mod pager;
 pub mod parser;
 mod record;
 mod serial_type;
-mod dbheader;
 
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
+
+use btree::PageType;
 
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
@@ -61,7 +63,7 @@ pub fn get_creation_sql_and_root_pagenum(
 // the "btree iterator" needs to hold access to the pager.  This in turn requires.
 // improvements to pager design, like:
 // (pager object static lifetime, page interior mutability, concurrency controls)
-fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::PageReader {
+fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::header::PageReader {
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
         Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
@@ -70,13 +72,13 @@ fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::PageReade
         1 => 100,
         _ => 0,
     };
-    btree::PageReader::new(page, btree_start_offset)
+    btree::header::PageReader::new(page, btree_start_offset)
 }
 
 pub fn new_table_leaf_cell_iterator_for_page(
     pgr: &mut pager::Pager,
     pgnum: usize,
-) -> btree::TableLeafCellIterator {
+) -> btree::leaf::TableLeafCellIterator {
     let pgsz = pgr.get_page_size();
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
@@ -87,25 +89,34 @@ pub fn new_table_leaf_cell_iterator_for_page(
         _ => 0,
     };
     // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
-    let pr = btree::PageReader::new(page, btree_start_offset);
+    let pr = btree::header::PageReader::new(page, btree_start_offset);
     let hdr = pr.check_header();
     println!("Examining page {} with header {:?}", pgnum, hdr);
     match hdr.btree_page_type {
-        btree::PageType::TableLeaf => {
+        PageType::TableLeaf => {
             // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
-            btree::TableLeafCellIterator::new(btree::CellIterator::new(page, btree_start_offset, pgsz))
+            btree::leaf::TableLeafCellIterator::new(btree::cell::CellIterator::new(
+                page,
+                btree_start_offset,
+                pgsz,
+            ))
         }
-        btree::PageType::TableInterior => { panic!("Convenience function called on wrong page type.") }
-        btree::PageType::IndexLeaf => { unimplemented!("Index pages not supported yet") }
-        btree::PageType::IndexInterior => { unimplemented!("Index pages not supported yet") }
+        PageType::TableInterior => {
+            panic!("Convenience function called on wrong page type.")
+        }
+        PageType::IndexLeaf => {
+            unimplemented!("Index pages not supported yet")
+        }
+        PageType::IndexInterior => {
+            unimplemented!("Index pages not supported yet")
+        }
     }
-
 }
 
 pub fn new_table_interior_cell_iterator_for_page(
     pgr: &mut pager::Pager,
     pgnum: usize,
-) -> btree::TableInteriorCellIterator {
+) -> btree::interior::TableInteriorCellIterator {
     let pgsz = pgr.get_page_size();
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
@@ -116,18 +127,23 @@ pub fn new_table_interior_cell_iterator_for_page(
         _ => 0,
     };
     // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
-    let pr = btree::PageReader::new(page, btree_start_offset);
+    let pr = btree::header::PageReader::new(page, btree_start_offset);
     let hdr = pr.check_header();
     println!("Examining page {} with header {:?}", pgnum, hdr);
     match hdr.btree_page_type {
-        btree::PageType::TableLeaf => { panic!("Convenience function called on wrong page type.") }
-        btree::PageType::TableInterior => { 
-            btree::TableInteriorCellIterator::new(btree::CellIterator::new(page, btree_start_offset, pgsz))
+        btree::PageType::TableLeaf => {
+            panic!("Convenience function called on wrong page type.")
         }
-        btree::PageType::IndexLeaf => { unimplemented!("Index pages not supported yet") }
-        btree::PageType::IndexInterior => { unimplemented!("Index pages not supported yet") }
+        btree::PageType::TableInterior => btree::interior::TableInteriorCellIterator::new(
+            btree::cell::CellIterator::new(page, btree_start_offset, pgsz),
+        ),
+        btree::PageType::IndexLeaf => {
+            unimplemented!("Index pages not supported yet")
+        }
+        btree::PageType::IndexInterior => {
+            unimplemented!("Index pages not supported yet")
+        }
     }
-
 }
 pub fn get_table_interior_cell_rightmost_pointer_for_page(
     pgr: &mut pager::Pager,
@@ -142,13 +158,14 @@ pub fn get_table_interior_cell_rightmost_pointer_for_page(
         _ => 0,
     };
     // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
-    let pr = btree::PageReader::new(page, btree_start_offset);
+    let pr = btree::header::PageReader::new(page, btree_start_offset);
     let hdr = pr.check_header();
     println!("Examining page {} with header {:?}", pgnum, hdr);
-    hdr.rightmost_pointer.expect("Should have found rightmost pointer in header or wrong page type.") as pager::PageNum
+    hdr.rightmost_pointer
+        .expect("Should have found rightmost pointer in header or wrong page type.")
+        as pager::PageNum
     // TODO: make it a u32 not a usize.
 }
-
 
 fn print_table(
     pgr: &mut pager::Pager,

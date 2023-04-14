@@ -69,12 +69,12 @@ impl Pager {
             },
             pages: vec![],
             initialized: false,
-            page_size: None
+            page_size: None,
         }
         // TODO: get the header and check that the number of pages in the DB is less than the maximum number of pages allowed.
     }
 
-    // Reads the header of a file after the file has been opened to 
+    // Reads the header of a file after the file has been opened to
     // ensure it is a valid file.
     // Separate from open because I could not figure out how to return a
     // file from the constructor and use the file in one function.
@@ -83,12 +83,17 @@ impl Pager {
     // interior mutability so that it doesn't force all other methods
     // to be mutable.
     fn ensure_initialized(&mut self) -> Result<(), Error> {
-	    if self.initialized	{ return Ok(()) }
-        let h = crate::dbheader::get_header_clone(&mut self.f).expect("Should have parsed db header"); 
-        self.f.seek(SeekFrom::Start(0)).expect("Should have returned file cursor to start");
-        if h.numpages > MAX_PAGE_NUM as u32 { 
+        if self.initialized {
+            return Ok(());
+        }
+        let h =
+            crate::dbheader::get_header_clone(&mut self.f).expect("Should have parsed db header");
+        self.f
+            .seek(SeekFrom::Start(0))
+            .expect("Should have returned file cursor to start");
+        if h.numpages > MAX_PAGE_NUM as u32 {
             panic!("Too many pages");
-        }               
+        }
         self.page_size = Some(h.pagesize as u32);
         self.initialized = true;
         Ok(())
@@ -103,7 +108,9 @@ impl Pager {
     fn read_page_from_file(&mut self, pn: PageNum) -> Result<Vec<u8>, Error> {
         let mut v = vec![0_u8; self.page_size.unwrap() as usize];
         self.f
-            .seek(SeekFrom::Start((pn - 1) as u64 * self.page_size.unwrap() as u64))
+            .seek(SeekFrom::Start(
+                (pn - 1) as u64 * self.page_size.unwrap() as u64,
+            ))
             .unwrap();
         match self.f.read_exact(&mut v[..]).map_err(|_| Error::ReadFailed) {
             Ok(()) => Ok(v),
@@ -136,12 +143,12 @@ impl Pager {
     // I think this says that the self object, has lifetime 'b which must be longer than the lifetime of the returned reference
     // to the vector it contains.
     // That is currently true, since we don't get rid of or modify pages.
-    // Once we implement writing or paging-out, we will need to provide a shorter lifetime for the 
+    // Once we implement writing or paging-out, we will need to provide a shorter lifetime for the
     // Page and/or use runtime locking to ensure we don't page out or write to something
     // that is in use.  So, the returned object (say, struct PageRef?) will need to participate in reference
     // counting.
     pub fn get_page_ro<'a, 'b: 'a>(&'b mut self, pn: PageNum) -> Result<&'a Vec<u8>, Error> {
-	    self.ensure_initialized().unwrap();
+        self.ensure_initialized().unwrap();
         if pn > MAX_PAGE_NUM {
             return Err(Error::PageNumberBeyondLimits);
         }
@@ -155,7 +162,7 @@ impl Pager {
 
     #[allow(dead_code)]
     pub fn get_page_rw(self, _: PageNum) -> Result<Vec<u8>, Error> {
-	    //self.ensure_initialized().unwrap();
+        //self.ensure_initialized().unwrap();
         // TODO: support writing pages. This will need reader/writer locks.
         unimplemented!("Writing not implemented")
     }
@@ -163,5 +170,4 @@ impl Pager {
         self.ensure_initialized().unwrap();
         self.page_size.unwrap()
     }
-
 }

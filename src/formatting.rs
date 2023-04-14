@@ -1,4 +1,4 @@
-use crate::btree::TableLeafCellIterator;
+use crate::btree::leaf::TableLeafCellIterator;
 use crate::record::{HeaderIterator, ValueIterator};
 use crate::serial_type::{typecode_to_string, value_to_string};
 
