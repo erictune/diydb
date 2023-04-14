@@ -6,25 +6,18 @@ use super::PageType;
 //     - An index b-tree interior page
 //     - An index b-tree leaf page
 
-// A b-tree page is divided into regions in the following order
-// 1 The 100-byte database file header (found on page 1 only)
-// 2 The 8 or 12 byte b-tree page header
-// 3 The cell pointer array
-// 4 Unallocated space
-// 5 The cell content area
-// 6 The reserved region.  (hope to assume always 0)
-
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Cursor, Seek, SeekFrom};
 
-pub struct CellIterator<'a> {
+/// Iterator over cells within a page, without interpreting the cell contents.
+pub struct Iterator<'a> {
     page: &'a Vec<u8>,
     cell_idx: usize,
     cell_offsets: Vec<usize>,
     cell_lengths: Vec<usize>,
 }
 
-impl<'a> CellIterator<'a> {
+impl<'a> Iterator<'a> {
     /// Creates an iterator over the cells of a single page of a btree.
     ///
     /// Iterator produces cells which are slices of bytes, which contain a record.
@@ -33,7 +26,7 @@ impl<'a> CellIterator<'a> {
     ///
     /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
     ///         slives ends with the last byte of the record body.
-    pub fn new(p: &Vec<u8>, non_btree_header_bytes: usize, page_size: u32) -> CellIterator {
+    pub fn new(p: &Vec<u8>, non_btree_header_bytes: usize, page_size: u32) -> Iterator {
         let mut c = Cursor::new(p);
         c.seek(SeekFrom::Start(non_btree_header_bytes as u64))
             .expect("Should have seeked.");
@@ -59,7 +52,7 @@ impl<'a> CellIterator<'a> {
         ))
         .expect("Should have seeked to cell offset.");
 
-        let mut it = CellIterator {
+        let mut it = Iterator {
             page: p,
             cell_idx: 0,
             cell_offsets: Vec::new(),
@@ -87,7 +80,7 @@ impl<'a> CellIterator<'a> {
     }
 }
 
-impl<'a> Iterator for CellIterator<'a> {
+impl<'a> core::iter::Iterator for Iterator<'a> {
     // The iterator returns a reference to a cell (&[u8]).  The format of the data in the cell
     // is dependent on the type of the btree page.
     type Item = &'a [u8];
@@ -129,4 +122,3 @@ impl<'a> Iterator for CellIterator<'a> {
 // A varint which is the total number of bytes of key payload, including any overflow
 // The initial portion of the payload that does not spill to overflow pages.
 // A 4-byte big-endian integer page number for the first page of the overflow page list - omitted if all payload fits on the b-tree page.
-

@@ -1,11 +1,11 @@
 use super::cell;
 use super::RowId;
 
-pub struct TableLeafCellIterator<'a> {
-    ci: cell::CellIterator<'a>,
+pub struct Iterator<'a> {
+    ci: cell::Iterator<'a>,
 }
 
-impl<'a> TableLeafCellIterator<'a> {
+impl<'a> Iterator<'a> {
     /// Creates an iterator over the cells of a single page of a btree, with page of type TableLeaf.
     ///
     /// Iterator produces cells which are slices of bytes, which contain a record.
@@ -14,12 +14,12 @@ impl<'a> TableLeafCellIterator<'a> {
     ///
     /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
     ///         slives ends with the last byte of the record body.
-    pub fn new(ci: cell::CellIterator) -> TableLeafCellIterator {
-        TableLeafCellIterator { ci: ci }
+    pub fn new(ci: cell::Iterator) -> Iterator {
+        Iterator { ci: ci }
     }
 }
 
-impl<'a> Iterator for TableLeafCellIterator<'a> {
+impl<'a> core::iter::Iterator for Iterator<'a> {
     // The iterator returns a tuple of (rowid, cell_payload).
     // Overflowing payloads are not supported.
     type Item = (RowId, &'a [u8]);

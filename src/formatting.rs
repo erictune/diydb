@@ -1,4 +1,3 @@
-use crate::btree::leaf::TableLeafCellIterator;
 use crate::record::{HeaderIterator, ValueIterator};
 use crate::serial_type::{typecode_to_string, value_to_string};
 
@@ -6,7 +5,7 @@ use crate::serial_type::{typecode_to_string, value_to_string};
 /// In the future, also csv output, etc.
 
 pub fn print_table(
-    record_iterator: &mut TableLeafCellIterator,
+    record_iterator: &mut crate::btree::leaf::Iterator,
     table_name: &str,
     col_names: Vec<&str>,
     col_types: Vec<&str>,

@@ -78,7 +78,7 @@ fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::header::P
 pub fn new_table_leaf_cell_iterator_for_page(
     pgr: &mut pager::Pager,
     pgnum: usize,
-) -> btree::leaf::TableLeafCellIterator {
+) -> btree::leaf::Iterator {
     let pgsz = pgr.get_page_size();
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
@@ -95,11 +95,7 @@ pub fn new_table_leaf_cell_iterator_for_page(
     match hdr.btree_page_type {
         PageType::TableLeaf => {
             // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
-            btree::leaf::TableLeafCellIterator::new(btree::cell::CellIterator::new(
-                page,
-                btree_start_offset,
-                pgsz,
-            ))
+            btree::leaf::Iterator::new(btree::cell::Iterator::new(page, btree_start_offset, pgsz))
         }
         PageType::TableInterior => {
             panic!("Convenience function called on wrong page type.")
@@ -116,7 +112,7 @@ pub fn new_table_leaf_cell_iterator_for_page(
 pub fn new_table_interior_cell_iterator_for_page(
     pgr: &mut pager::Pager,
     pgnum: usize,
-) -> btree::interior::TableInteriorCellIterator {
+) -> btree::interior::Iterator {
     let pgsz = pgr.get_page_size();
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
@@ -134,8 +130,8 @@ pub fn new_table_interior_cell_iterator_for_page(
         btree::PageType::TableLeaf => {
             panic!("Convenience function called on wrong page type.")
         }
-        btree::PageType::TableInterior => btree::interior::TableInteriorCellIterator::new(
-            btree::cell::CellIterator::new(page, btree_start_offset, pgsz),
+        btree::PageType::TableInterior => btree::interior::Iterator::new(
+            btree::cell::Iterator::new(page, btree_start_offset, pgsz),
         ),
         btree::PageType::IndexLeaf => {
             unimplemented!("Index pages not supported yet")
