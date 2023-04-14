@@ -1,3 +1,5 @@
+//! formatting prints out tables nicely.
+
 use crate::record::{HeaderIterator, ValueIterator};
 use crate::serial_type::{typecode_to_string, value_to_string};
 

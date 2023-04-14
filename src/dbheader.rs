@@ -1,3 +1,5 @@
+//! dbheader reads the header of a database file.
+
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Cursor, Read, Seek, SeekFrom};
 

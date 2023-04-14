@@ -1,6 +1,7 @@
-/// SQLlite btrees come in two types: Tables and Indexes.  
-/// Btree pages are either leaves or interior pages.
-/// Each of these 4 combinations has a different cell format.
+//! Btree provides iterators over tables stored in SQLlite btrees.
+//! SQLlite btrees come in two types: Tables and Indexes.    Indexes are not implemented yet.
+//! Btree pages are either leaves or interior pages.
+//! Each of these 4 combinations has a different cell format.
 #[derive(Debug, Clone)]
 pub enum PageType {
     IndexInterior,
@@ -9,16 +10,13 @@ pub enum PageType {
     TableLeaf,
 }
 
-/// A b-tree page is divided into regions in the following order
-/// 1 The 100-byte database file header (found on page 1 only)
-/// 2 The 8 or 12 byte b-tree page header
-/// 3 The cell pointer array
-/// 4 Unallocated space
-/// 5 The cell content area
-/// 6 The reserved region.  (hope to assume always 0)
-
 // SQLite row ids are 64b integers.
 type RowId = i64;
+
+/// Organization of private types:
+/// *  `pub table::Iterator` iterates over all the pages of one btree.
+/// *  `pub table::Iterator` uses either `leaf::Iterator` or `interior::ScanIterator` on a given page.
+/// *  `leaf::Iterator` or `interior::ScanIterator`  use `cell::Iterator` to iterate over the cells on a page.
 
 /// module `header` defines types and methods for btree page headers.
 pub mod header;

@@ -1,13 +1,9 @@
-use super::PageType;
-
-// There are 4 types of btree page:
-//     - A table b-tree interior page
-//     - A table b-tree leaf page
-//     - An index b-tree interior page
-//     - An index b-tree leaf page
+//! cell::Iterator ierates over the cells in a btree page.
 
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Cursor, Seek, SeekFrom};
+
+use super::PageType;
 
 /// Iterator over cells within a page, without interpreting the cell contents.
 pub struct Iterator<'a> {

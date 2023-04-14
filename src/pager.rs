@@ -1,28 +1,28 @@
-// Manages pages from a sqlite3 file as defined at https://www.sqlite.org/fileformat.html
-// Supports very simplified subset of file format.
-//
-// Excepts from above docs:
-// - The complete state of an SQLite database is usually contained in a single file on disk called the "main database file".
-// - The main database file consists of one or more pages.
-// - Every page in the main database has a single use which is one of the following:
-//   - The lock-byte page
-//   - A freelist page
-//   - A freelist trunk page
-//   - A freelist leaf page
-//   - A b-tree page
-//     - A table b-tree interior page
-//     - A table b-tree leaf page
-//     - An index b-tree interior page
-//     - An index b-tree leaf page
-//   - A payload overflow page
-//   - A pointer map page
-//
-//  [ I aspire just to implement btree-pages, as the others don't seem to be required for simple databases that haven't been modified. ]
-//
-// The pager owns the data in each page, and allows callers to access it for reading or writing.
-// Goal is to avoid copying pages.
-// Pages are loaded on demand.
-// All pages have the same size.
+//! pager manages pages from a sqlite3 file as defined at https://www.sqlite.org/fileformat.html
+//! Supports very simplified subset of file format.
+//!
+//! Excepts from above docs:
+//! - The complete state of an SQLite database is usually contained in a single file on disk called the "main database file".
+//! - The main database file consists of one or more pages.
+//! - Every page in the main database has a single use which is one of the following:
+//!   - The lock-byte page
+//!   - A freelist page
+//!   - A freelist trunk page
+//!   - A freelist leaf page
+//!   - A b-tree page
+//!     - A table b-tree interior page
+//!     - A table b-tree leaf page
+//!     - An index b-tree interior page
+//!     - An index b-tree leaf page
+//!   - A payload overflow page
+//!   - A pointer map page
+//!
+//!  [ I aspire just to implement btree-pages, as the others don't seem to be required for simple databases that haven't been modified. ]
+//!
+//! The pager owns the data in each page, and allows callers to access it for reading or writing.
+//! Goal is to avoid copying pages.
+//! Pages are loaded on demand.
+//! All pages have the same size.
 
 use std::io::{Read, Seek, SeekFrom};
 

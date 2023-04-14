@@ -1,3 +1,12 @@
+//! header reads the header of a btree page.
+//! A b-tree page is divided into regions in the following order
+//! 1. The 100-byte database file header (found on page 1 only)
+//! 2. The 8 or 12 byte b-tree page header
+//! 3. The cell pointer array
+//! 4. Unallocated space
+//! 5. The cell content area
+//! 6. The reserved region.  (hope to assume always 0)
+
 use super::PageType;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Cursor, Seek, SeekFrom};

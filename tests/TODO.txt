@@ -61,6 +61,11 @@ Little Cleanups:
   which support some of the same use cases as byteorder.  Consider using those.  Esp in dbheader.rs, but other places too.
 - Rewrite most of the methods in dbheader as single-field accessors rather than defining the header as an object.
 
+TODO LATER: 
+- testing for query execution can mostly use fake tables, like joins, range queries, index use, and so on.  A real table 
+  and a btreemap can both implement the same traits, and the scanners and selectors and so on should only care about these
+  traits.
+  
 TODO LATER:
 - decide how to handle spilled payloads.
     - Make a copy eagerly ... how to make the accessor take that memory ... lifetimes.
