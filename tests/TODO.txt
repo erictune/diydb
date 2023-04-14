@@ -1,12 +1,4 @@
 TODO next:
-- Fork TableInteriorCellIterator to InteriorPointerIterator and InteriorValueIterator
-    - fn InteriorValueIterator() -> (PageNum, value, PageNum) 
-        - used for searching for a specific value.
-        - Okay to leave as TODO.
-    - fn InteriorPointerIterator() -> PageNum
-        - on penultimate iteration, returns left pointer from last cell.
-        - on last iteration, returns righmost.
-        - used for full scans.
 - unstash
 - In pub fn TableIterator::next():
     ```

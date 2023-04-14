@@ -112,7 +112,7 @@ pub fn new_table_leaf_cell_iterator_for_page(
 pub fn new_table_interior_cell_iterator_for_page(
     pgr: &mut pager::Pager,
     pgnum: usize,
-) -> btree::interior::Iterator {
+) -> btree::interior::ScanIterator {
     let pgsz = pgr.get_page_size();
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
@@ -130,8 +130,9 @@ pub fn new_table_interior_cell_iterator_for_page(
         btree::PageType::TableLeaf => {
             panic!("Convenience function called on wrong page type.")
         }
-        btree::PageType::TableInterior => btree::interior::Iterator::new(
+        btree::PageType::TableInterior => btree::interior::ScanIterator::new(
             btree::cell::Iterator::new(page, btree_start_offset, pgsz),
+            hdr.rightmost_pointer.expect("Interior pages should always have rightmost pointer.") as usize
         ),
         btree::PageType::IndexLeaf => {
             unimplemented!("Index pages not supported yet")
