@@ -18,6 +18,10 @@ type RowId = i64;
 /// *  `pub table::Iterator` uses either `leaf::Iterator` or `interior::ScanIterator` on a given page.
 /// *  `leaf::Iterator` or `interior::ScanIterator`  use `cell::Iterator` to iterate over the cells on a page.
 
+pub mod table;
+
+// TODO: make these not public.
+
 /// module `header` defines types and methods for btree page headers.
 pub mod header;
 // module `leaf` provides an interator over the cells of the leaf pages of a table btree.

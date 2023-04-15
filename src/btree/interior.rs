@@ -30,6 +30,7 @@ impl<'a> SearchIterator<'a> {
     /// # Arguments
     ///
     /// * `ci` - A cell iterator for the page. Borrowed for the lifetime of the iterator.  
+    #[allow(dead_code)] // Use to build lookup by rowid as part of using indexes.
     pub fn new(ci: cell::Iterator) -> SearchIterator {
         SearchIterator { ci: ci }
     }
@@ -56,6 +57,7 @@ impl<'a> core::iter::Iterator for SearchIterator<'a> {
     ///   `rc` is the page number of the right child.
     ///   All values in page lc are less than or equal to v.
     ///   All values in page rc are greater than v.
+    #[allow(dead_code)] // Use to build lookup by rowid as part of using indexes.
     fn next(&mut self) -> Option<Self::Item> {
         match self.ci.next() {
             None => {

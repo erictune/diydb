@@ -75,6 +75,13 @@ fn new_reader_for_page(pgr: &pager::Pager, pgnum: usize) -> btree::header::PageR
     btree::header::PageReader::new(page, btree_start_offset)
 }
 
+pub fn new_table_iterator_for_page(
+    pgr: &pager::Pager,
+    pgnum: usize,
+) -> btree::table::Iterator {
+    crate::btree::table::Iterator::new(pgnum, pgr)
+}
+
 pub fn new_table_leaf_cell_iterator_for_page(
     pgr: &pager::Pager,
     pgnum: usize,

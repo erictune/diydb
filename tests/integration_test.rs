@@ -108,3 +108,45 @@ fn test_record_iterator_on_multipage_withvarious_page_sizes() {
         // TODO: test queries on the table once btree table iterator support done.
     }
 }
+
+#[test]
+fn test_record_iterator_on_three_level_db() {
+    // This tests iterating over a btree of three levels (root, non-root interior pages, leaf pages).
+    // The table has these rows:
+    // row 1: 1
+    // row 1000000: 1000000
+    let path = path_to_testdata("threelevel.db");
+    let mut pager = diydb::pager::Pager::open(path.as_str());
+    pager.initialize();
+    let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, "t");
+    let pgnum = x.unwrap().0;
+
+    let ri = diydb::new_table_iterator_for_page(&pager, pgnum);
+    let mut last_rowid = 0;
+    for e in ri.enumerate() {
+        let (expected, (rowid, _)) = e;
+        println!("Visiting rowid {} on iteration {}", rowid, expected);
+        assert_eq!(expected+1, rowid as usize);
+        last_rowid = rowid
+    }
+    assert_eq!(last_rowid, 100000);
+
+    // TODO NOSUBMIT : count number of interior pages in the table?
+    // let num_pages = pager.get_num_pages().unwrap();
+    // let mut n_interior = 0;
+    // println!("Number of pages: {}", num_pages);
+    // for page_num in 1..(num_pages+1) { 
+    //     print!("Page {} - ", page_num);
+    //     let r = diydb::new_reader_for_page(&mut pager, page_num as usize);
+    //     let h = r.check_header();
+    //     match h.btree_page_type {
+    //         diydb::btree::PageType::TableInterior => n_interior += 1,
+    //         _ => (),
+    //     }
+    //     //println!("{:?}", h);    
+    // }
+    // Ensure the test file had a bunch of interior pages.
+    // assert!(n_interior > 3);
+
+    // TODO NOSUBMIT : ensure we can walk all 1000000 or so items in the table in order.
+}

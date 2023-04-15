@@ -1,58 +1,5 @@
-TODO next:
-- unstash
-- In pub fn TableIterator::next():
-    ```
-    if stack.is_empty() { self.seek_leftmost_leaf(self.root_pagenum) }
-    return self.internal_next(); requires that stack be filled.
-    ```
-- In TableIterator::internal_next():
-    ```
-    // Stack must not be is_empty() before loop.
-    assert!(!stack.is_empty(), "Internal logical error");
-    loop {
-        match stack.is_empty() {
-            true => None,
-            false => {
-                match self.stack.top() {
-                    Leaf(l) => match l.next() {
-                        Some(x) => Some(x),
-                        None => { self.stack.pop() }
-                    }
-                    Interior(i) => match i.next() {
-                        Some(x) => match x {
-                            _, _, Some(p) => { self.seek_leftmost_leaf(p) }
-                            _, _, None => {}
-                        }
-                        None => { self.stack.pop() }
-                    }
-                }
-            }
-        }
-    }
-    ```
 
-- In TableIterator::seek_leftmost_leaf(pagenum):
-    ```
-    let next_page = pagenum
-    loop {
-        p = get_pagenum_from_pager();
-        match p.get_page_type {
-            Leaf(l) => {
-                self.stack.push(LeafIterator(l));
-                return;
-            }
-            Interior(i) => {
-                self.stack.push(InteriorPointerIterator(i));
-                next_page = self.stack.top().next().unwrap("Did not expect empty cell list on interior page");
-                }
-            }
-        }
-    }
-    ```
-
-- Write a traverse function that a stack of Table{Leaf,Interior}CellIterator
-- Make an interator using the traverse function as a basis.
-- This iterator is a TableIterator. Other iterators can be hidden as internal details.
+- test code added to btree/table.rs using a multilevel table integration test. Also add the untracked 3 level db resource files.
 - Test that it can walk the whole "multipage" table.
 - Testing with a 3 level table, which we have.
 
@@ -65,7 +12,7 @@ TODO LATER:
 - testing for query execution can mostly use fake tables, like joins, range queries, index use, and so on.  A real table 
   and a btreemap can both implement the same traits, and the scanners and selectors and so on should only care about these
   traits.
-  
+
 TODO LATER:
 - decide how to handle spilled payloads.
     - Make a copy eagerly ... how to make the accessor take that memory ... lifetimes.
@@ -90,3 +37,15 @@ TODO Later:
 - Add filter for Where (Filter(expr) -> Project(cols) <- Scan(T)
 - Apply rules to reorder the tree (e.g. when the where is simple, convert the Scan(T) to Lookup(T) and push that down from Filter)
 - Take inspiration from https://www.querifylabs.com/blog/relational-operators-in-apache-calcite
+
+Things that have been useful to think about:
+  - Reminding myself that the lifetime specifier is not the "places where this reference is used" (scope).
+    Rather it is the lifetime of the variable (referrent).  In one failed attempt, I added more bounds for a type with several
+    references, but actually both references were to the same variable (the pager and its data).
+  - This blog goes over tree traversals: https://sachanganesh.com/programming/graph-tree-traversals-in-rust/
+    They do several things:
+    - They don't store the references to the data in the stack for the inorder traversal. 
+      They just store the references to the page numbers.
+      - Would this help us?  Need to think how transactions would work.  Do we try to lock all the pages we need for read as we go,
+        and then succeed if we get them all?
+    - They use an arena allocator where all the memory has a lifetime longer than the traversal (same with my pager.)
