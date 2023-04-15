@@ -9,13 +9,14 @@ fn path_to_testdata(filename: &str) -> String {
 #[test]
 fn test_open_db() {
     let path = path_to_testdata("minimal.db");
-    let _ = diydb::pager::Pager::open(path.as_str());
+    let _ = diydb::pager::Pager::open(path.as_str()).initialize();
 }
 
 #[test]
 fn test_get_creation_sql_and_root_pagenum_using_minimal_db() {
     let path = path_to_testdata("minimal.db");
     let mut pager = diydb::pager::Pager::open(path.as_str());
+    pager.initialize();
     let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, "a");
     assert!(x.is_some());
     let (pgnum, csql) = x.unwrap();
@@ -30,6 +31,7 @@ fn test_get_creation_sql_and_root_pagenum_using_minimal_db() {
 fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
     let path = path_to_testdata("schema_table.db");
     let mut pager = diydb::pager::Pager::open(path.as_str());
+    pager.initialize();
     let expected_tables = vec![
         ("t1", 2, "create table t1 (a int)"),
         ("t2", 3, "create table t2 (a int, b int)"),
@@ -52,6 +54,7 @@ fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
 fn test_record_iterator_on_minimal_db() {
     let path = path_to_testdata("minimal.db");
     let mut pager = diydb::pager::Pager::open(path.as_str());
+    pager.initialize();
     let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, "a");
     let mut ri = diydb::new_table_leaf_cell_iterator_for_page(&mut pager, x.unwrap().0);
     let first_item = ri.next().clone();
@@ -78,6 +81,7 @@ fn test_record_iterator_on_multipage_db() {
     // Page 6: third leaf page (GJB to JJJ ; 692-1000)
     let path = path_to_testdata("multipage.db");
     let mut pager = diydb::pager::Pager::open(path.as_str());
+    pager.initialize();
     let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, "thousandrows");
     let pgnum = x.unwrap().0;
     assert_eq!(pgnum, 3);
@@ -99,6 +103,7 @@ fn test_record_iterator_on_multipage_withvarious_page_sizes() {
         let path = path_to_testdata(db);
         println!("{}", path);
         let mut pager = diydb::pager::Pager::open(path.as_str());
+        pager.initialize();
         let _ = diydb::get_creation_sql_and_root_pagenum(&mut pager, "thousandrows");
         // TODO: test queries on the table once btree table iterator support done.
     }

@@ -77,17 +77,10 @@ impl Pager {
         // TODO: get the header and check that the number of pages in the DB is less than the maximum number of pages allowed.
     }
 
-    // Reads the header of a file after the file has been opened to
-    // ensure it is a valid file.
-    // Separate from open because I could not figure out how to return a
-    // file from the constructor and use the file in one function.
-    // To be called before using other methods.
-    // TODO: figure out how to do this in the constructor or with
-    // interior mutability so that it doesn't force all other methods
-    // to be mutable.
-    fn ensure_initialized(&self) -> Result<(), Error> {
+    // TODO this should not be needed with demand paging.
+    pub fn initialize(&mut self) {
         if *self.initialized.borrow() {
-            return Ok(());
+            return;
         }
         let h =
             crate::dbheader::get_header_clone(&mut self.f.borrow_mut()).expect("Should have parsed db header");
@@ -100,7 +93,23 @@ impl Pager {
         }
         *self.page_size.borrow_mut() = Some(h.pagesize as u32);
         *self.initialized.borrow_mut() = true;
-        Ok(())
+
+        for pn in 1..h.numpages+1 {
+            self.make_page_present(pn as usize);
+        }
+    }
+    // Reads the header of a file after the file has been opened to
+    // ensure it is a valid file.
+    // Separate from open because I could not figure out how to return a
+    // file from the constructor and use the file in one function.
+    // To be called before using other methods.
+    // TODO: figure out how to do this in the constructor or with
+    // interior mutability so that it doesn't force all other methods
+    // to be mutable.
+    fn check_initialized(&self) {
+        if ! *self.initialized.borrow() {
+            panic!("Use of uninitialized Pager.");
+        }
     }
 
     #[allow(dead_code)]
@@ -123,26 +132,31 @@ impl Pager {
         }
     }
 
-    fn ensure_present(&mut self, pn: PageNum) {
-        // We are increasing the capacity of what pages we cache in memory, not changing the on-disk database file.
-        if pn > self.pages.len() { 
+    // TODO: implement transparent paging in of pages.
+    pub fn make_page_present(&mut self, pn: PageNum) {
+        if pn > self.pages.len() {
             // println!("Extending pager capacity to {}", pn);
             self.pages.resize(pn, None)
         }
-
-        let need_load = match self.pages[pn - 1] {
-            None => true,
-            Some(_) => false,
-        };
-        if !need_load {
-            return;
+        if self.pages[pn-1].is_none() {
+                // println!("Reading page {} on demand.", pn);
+            let v = self
+                .read_page_from_file(pn)
+                .map_err(|_| Error::ReadFailed)
+                .unwrap();
+            self.pages[pn - 1] = Some(v);
         }
-        // println!("Reading page {} on demand.", pn);
-        let v = self
-            .read_page_from_file(pn)
-            .map_err(|_| Error::ReadFailed)
-            .unwrap();
-        self.pages[pn - 1] = Some(v);
+    }
+
+    fn check_present(&self, pn: PageNum) {
+        // We are increasing the capacity of what pages we cache in memory, not changing the on-disk database file.
+        if pn > self.pages.len() { 
+            panic!("Pager capacity does not extend to requested page.");
+        }
+
+        if self.pages[pn-1].is_none() {
+            panic!("Page not loaded!");
+        }
     }
 
     // I think this says that the self object, has lifetime 'b which must be longer than the lifetime of the returned reference
@@ -152,13 +166,13 @@ impl Pager {
     // Page and/or use runtime locking to ensure we don't page out or write to something
     // that is in use.  So, the returned object (say, struct PageRef?) will need to participate in reference
     // counting.
-    pub fn get_page_ro<'a, 'b: 'a>(&'b mut self, pn: PageNum) -> Result<&'a Vec<u8>, Error> {
-        self.ensure_initialized().unwrap();
+    pub fn get_page_ro<'a, 'b: 'a>(&'b self, pn: PageNum) -> Result<&'a Vec<u8>, Error> {
+        self.check_initialized();
         if pn > MAX_PAGE_NUM {
             return Err(Error::PageNumberBeyondLimits);
         }
 
-        self.ensure_present(pn);
+        self.check_present(pn);
         match &self.pages[pn - 1] {
             Some(v) => Ok(v.as_ref()),
             None => Err(Error::InternalError),
@@ -167,13 +181,13 @@ impl Pager {
 
     #[allow(dead_code)]
     pub fn get_page_rw(self, _: PageNum) -> Result<Vec<u8>, Error> {
-        //self.ensure_initialized().unwrap();
+        //self.check_initialized();
         // TODO: support writing pages. This will need reader/writer locks.
         unimplemented!("Writing not implemented")
     }
 
     pub fn get_page_size(&self) -> u32 {
-        self.ensure_initialized().unwrap();
+        self.check_initialized();
         self.page_size.borrow().expect("Should have initialized before calling get_page_size()")
     }
 }

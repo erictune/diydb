@@ -25,7 +25,7 @@ const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 
 /// Get the root page number for, and the SQL CREATE statement used to create `table_name`.
 pub fn get_creation_sql_and_root_pagenum(
-    pgr: &mut pager::Pager,
+    pgr: &pager::Pager,
     table_name: &str,
 ) -> Option<(pager::PageNum, String)> {
     if table_name == SCHEMA_TABLE_NAME {
@@ -63,7 +63,7 @@ pub fn get_creation_sql_and_root_pagenum(
 // the "btree iterator" needs to hold access to the pager.  This in turn requires.
 // improvements to pager design, like:
 // (pager object static lifetime, page interior mutability, concurrency controls)
-fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::header::PageReader {
+fn new_reader_for_page(pgr: &pager::Pager, pgnum: usize) -> btree::header::PageReader {
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
         Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
@@ -76,7 +76,7 @@ fn new_reader_for_page(pgr: &mut pager::Pager, pgnum: usize) -> btree::header::P
 }
 
 pub fn new_table_leaf_cell_iterator_for_page(
-    pgr: &mut pager::Pager,
+    pgr: &pager::Pager,
     pgnum: usize,
 ) -> btree::leaf::Iterator {
     let pgsz = pgr.get_page_size();
@@ -110,7 +110,7 @@ pub fn new_table_leaf_cell_iterator_for_page(
 }
 
 pub fn new_table_interior_cell_iterator_for_page(
-    pgr: &mut pager::Pager,
+    pgr: &pager::Pager,
     pgnum: usize,
 ) -> btree::interior::ScanIterator {
     let pgsz = pgr.get_page_size();
@@ -143,7 +143,7 @@ pub fn new_table_interior_cell_iterator_for_page(
     }
 }
 pub fn get_table_interior_cell_rightmost_pointer_for_page(
-    pgr: &mut pager::Pager,
+    pgr: &pager::Pager,
     pgnum: usize,
 ) -> pager::PageNum {
     let page = match pgr.get_page_ro(pgnum) {
@@ -165,7 +165,7 @@ pub fn get_table_interior_cell_rightmost_pointer_for_page(
 }
 
 fn print_table(
-    pgr: &mut pager::Pager,
+    pgr: &pager::Pager,
     root_pgnum: usize,
     table_name: &str,
     col_names: Vec<&str>,
@@ -184,7 +184,7 @@ fn print_table(
 }
 
 /// Print the Schema table to standard output.
-pub fn print_schema(pager: &mut pager::Pager) {
+pub fn print_schema(pager: &pager::Pager) {
     let table_name = "sqlite_schema";
     let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
         .expect(format!("Should have looked up the schema for {}.", table_name).as_str());
@@ -201,7 +201,7 @@ pub fn print_schema(pager: &mut pager::Pager) {
     );
 }
 
-pub fn run_query(pager: &mut pager::Pager, query: &str) {
+pub fn run_query(pager: &pager::Pager, query: &str) {
     let (input_tables, output_cols) = parser::parse_select_statement(query);
     println!("output_cols: {}", output_cols.join(", "));
     println!("input_tables: {}", input_tables.join(", "));
