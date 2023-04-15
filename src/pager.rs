@@ -25,15 +25,16 @@
 //! All pages have the same size.
 
 use std::io::{Read, Seek, SeekFrom};
+use std::cell::RefCell;
 
 /// A pager manages the file locking and the memory use for one open database file.
 // TODO: When several files are open, coordinate between different pagers to maintain an overall memory limit.
 // TODO: rw locking for concurrent accesses by multiple cursors to one file.
 pub struct Pager {
-    f: std::fs::File,
+    f: RefCell<std::fs::File>,
     pages: Vec<Option<Vec<u8>>>,
-    initialized: bool,
-    page_size: Option<u32>,
+    initialized: RefCell<bool>,
+    page_size: RefCell<Option<u32>>,
 }
 
 #[derive(thiserror::Error, Debug, Clone)]
@@ -60,16 +61,18 @@ impl Pager {
                 // TODO: Lock file when opening so that other processes do not also
                 // open and modify it, and so that is not modified while reading.
                 // See https://docs.rs/file-lock/latest/file_lock/
-                std::fs::OpenOptions::new()
-                    .read(true)
-                    .write(false)
-                    .create(false)
-                    .open(path)
-                    .expect("Should have opened file.")
+                RefCell::new(
+                    std::fs::OpenOptions::new()
+                        .read(true)
+                        .write(false)
+                        .create(false)
+                        .open(path)
+                        .expect("Should have opened file.")
+                )
             },
             pages: vec![],
-            initialized: false,
-            page_size: None,
+            initialized: RefCell::new(false),
+            page_size: RefCell::new(None),
         }
         // TODO: get the header and check that the number of pages in the DB is less than the maximum number of pages allowed.
     }
@@ -82,20 +85,21 @@ impl Pager {
     // TODO: figure out how to do this in the constructor or with
     // interior mutability so that it doesn't force all other methods
     // to be mutable.
-    fn ensure_initialized(&mut self) -> Result<(), Error> {
-        if self.initialized {
+    fn ensure_initialized(&self) -> Result<(), Error> {
+        if *self.initialized.borrow() {
             return Ok(());
         }
         let h =
-            crate::dbheader::get_header_clone(&mut self.f).expect("Should have parsed db header");
+            crate::dbheader::get_header_clone(&mut self.f.borrow_mut()).expect("Should have parsed db header");
         self.f
+            .borrow_mut()
             .seek(SeekFrom::Start(0))
             .expect("Should have returned file cursor to start");
         if h.numpages > MAX_PAGE_NUM as u32 {
             panic!("Too many pages");
         }
-        self.page_size = Some(h.pagesize as u32);
-        self.initialized = true;
+        *self.page_size.borrow_mut() = Some(h.pagesize as u32);
+        *self.initialized.borrow_mut() = true;
         Ok(())
     }
 
@@ -105,14 +109,15 @@ impl Pager {
         unimplemented!()
     }
 
-    fn read_page_from_file(&mut self, pn: PageNum) -> Result<Vec<u8>, Error> {
-        let mut v = vec![0_u8; self.page_size.unwrap() as usize];
+    fn read_page_from_file(&self, pn: PageNum) -> Result<Vec<u8>, Error> {
+        let mut v = vec![0_u8; self.page_size.borrow().unwrap() as usize];
         self.f
+            .borrow_mut()
             .seek(SeekFrom::Start(
-                (pn - 1) as u64 * self.page_size.unwrap() as u64,
+                (pn - 1) as u64 * self.page_size.borrow().unwrap() as u64,
             ))
             .unwrap();
-        match self.f.read_exact(&mut v[..]).map_err(|_| Error::ReadFailed) {
+        match self.f.borrow_mut().read_exact(&mut v[..]).map_err(|_| Error::ReadFailed) {
             Ok(()) => Ok(v),
             Err(e) => Err(e),
         }
@@ -120,7 +125,7 @@ impl Pager {
 
     fn ensure_present(&mut self, pn: PageNum) {
         // We are increasing the capacity of what pages we cache in memory, not changing the on-disk database file.
-        if pn > self.pages.len() {
+        if pn > self.pages.len() { 
             // println!("Extending pager capacity to {}", pn);
             self.pages.resize(pn, None)
         }
@@ -166,8 +171,9 @@ impl Pager {
         // TODO: support writing pages. This will need reader/writer locks.
         unimplemented!("Writing not implemented")
     }
-    pub fn get_page_size(&mut self) -> u32 {
+
+    pub fn get_page_size(&self) -> u32 {
         self.ensure_initialized().unwrap();
-        self.page_size.unwrap()
+        self.page_size.borrow().expect("Should have initialized before calling get_page_size()")
     }
 }
