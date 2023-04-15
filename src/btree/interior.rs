@@ -63,11 +63,11 @@ impl<'a> core::iter::Iterator for SearchIterator<'a> {
             }
             Some(cell) => {
                 let mut c = Cursor::new(cell);
-                let left_child_pagenum = c
+                let _ = c
                     .read_u32::<BigEndian>()
                     .expect("Should have read left child page number.")
                     as u32;
-                let (key, _) = sqlite_varint::read_varint(&cell[4..]);
+                let (_, _) = sqlite_varint::read_varint(&cell[4..]);
                 unimplemented!();
             }
         }
