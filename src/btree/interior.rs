@@ -106,3 +106,67 @@ impl<'a> core::iter::Iterator for ScanIterator<'a> {
         }
     }
 }
+
+#[cfg(test)]
+fn path_to_testdata(filename: &str) -> String {
+    std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
+        + "/resources/test/"
+        + filename
+}
+
+#[cfg(test)]
+fn new_table_interior_cell_iterator_for_page(
+    pgr: &crate::pager::Pager,
+    pgnum: usize,
+) -> crate::btree::interior::ScanIterator {
+    use crate::btree;
+    let pgsz = pgr.get_page_size();
+    let page = match pgr.get_page_ro(pgnum) {
+        Ok(p) => p,
+        Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
+    };
+    let btree_start_offset = match pgnum {
+        1 => 100,
+        _ => 0,
+    };
+    let pr = crate::btree::header::PageReader::new(page, btree_start_offset);
+    let hdr = pr.check_header();
+    println!("Examining page {} with header {:?}", pgnum, hdr);
+    match hdr.btree_page_type {
+        btree::PageType::TableInterior => btree::interior::ScanIterator::new(
+            btree::cell::Iterator::new(page, btree_start_offset, pgsz),
+            hdr.rightmost_pointer.expect("Interior pages should always have rightmost pointer.") as usize
+        ),
+        _ => { unreachable!(); }
+    }
+}
+
+#[test]
+fn test_interior_iterator_on_multipage_db() {    
+    // This tests iterating over the root page which is interior type.
+    // The table has these rows:
+    // row 1: "AAA"
+    // row 2: "AAB"
+    // ...
+    // row 1000: "JJJ"
+    //
+    // The file has 4 x 4k pages:
+    // Page 1: schema
+    // Page 2: root of "digits" table.
+    // Page 3: Index type page.
+    // Page 4: first leaf page (AAA to DFA ; rows 1-351)
+    // Page 5: second leaf page (DFB to GJA ; rows 352-691)
+    // Page 6: third leaf page (GJB to JJJ ; 692-1000)
+    let path = path_to_testdata("multipage.db");
+    let mut pager = crate::pager::Pager::open(path.as_str());
+    pager.initialize();
+    let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "thousandrows");
+    let pgnum = x.unwrap().0;
+    assert_eq!(pgnum, 3);
+    let mut ri = new_table_interior_cell_iterator_for_page(&mut pager, pgnum);
+    assert_eq!(ri.next(), Some(4));
+    assert_eq!(ri.next(), Some(5));
+    assert_eq!(ri.next(), Some(6));
+    assert_eq!(ri.next(), None);
+}
+

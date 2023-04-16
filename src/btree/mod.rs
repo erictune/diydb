@@ -25,9 +25,9 @@ pub mod table;
 /// module `header` defines types and methods for btree page headers.
 pub mod header;
 // module `leaf` provides an interator over the cells of the leaf pages of a table btree.
-pub mod leaf;
+mod leaf;
 // module `interior` provides an interator over the cells of the interior pages of a table btree.
-pub mod interior;
+mod interior;
 // module `cell` provides an interator over the cells of a page, without interpreting what byte of cell they are.
 /// It is used by `leaf` and `interior` modules.
-pub mod cell;
+mod cell;

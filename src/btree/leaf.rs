@@ -46,3 +46,51 @@ impl<'a> core::iter::Iterator for Iterator<'a> {
         }
     }
 }
+
+#[cfg(test)]
+fn path_to_testdata(filename: &str) -> String {
+    std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
+        + "/resources/test/"
+        + filename
+}
+
+#[cfg(test)]
+pub fn new_table_leaf_cell_iterator_for_page(
+    pgr: &crate::pager::Pager,
+    pgnum: usize,
+) -> crate::btree::leaf::Iterator {
+    use crate::btree;
+
+    let pgsz = pgr.get_page_size();
+    let page = match pgr.get_page_ro(pgnum) {
+        Ok(p) => p,
+        Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
+    };
+    let btree_start_offset = match pgnum {
+        1 => 100,
+        _ => 0,
+    };
+    let pr = btree::header::PageReader::new(page, btree_start_offset);
+    let hdr = pr.check_header();
+    println!("Examining page {} with header {:?}", pgnum, hdr);
+    match hdr.btree_page_type {
+        btree::PageType::TableLeaf => {
+            // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
+            btree::leaf::Iterator::new(btree::cell::Iterator::new(page, btree_start_offset, pgsz))
+        }
+        _ => { unreachable!() }
+    }
+}
+
+#[test]
+fn test_leaf_iterator_on_minimal_db() {
+    let path = path_to_testdata("minimal.db");
+    let mut pager = crate::pager::Pager::open(path.as_str());
+    pager.initialize();
+    let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "a");
+    let mut ri = new_table_leaf_cell_iterator_for_page(&mut pager, x.unwrap().0);
+    let first_item = ri.next().clone();
+    assert!(first_item.is_some());
+    assert_eq!(first_item.unwrap().0, 1);
+    assert!(ri.next().is_none());
+}
