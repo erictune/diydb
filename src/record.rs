@@ -1,5 +1,5 @@
-/// Btree Cells hold Records, which contain SQL rows.
-/// Each field in a row has a serial type which is not the same as the column SQL type, but varies by the value stored.
+//! Btree Cells hold Records, which contain SQL rows.
+//! Each field in a row has a serial type which is not the same as the column SQL type, but varies by the value stored.
 
 // TODO: consider defining enum types in serial_type.rs, which contains the values (as bytes in a fixed size array per type)?
 

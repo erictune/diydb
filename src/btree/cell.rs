@@ -96,6 +96,8 @@ impl<'a> core::iter::Iterator for Iterator<'a> {
     }
 }
 
+// TODO: unit test a cell using a byte slice page.
+
 // Cell Formats from https://www.sqlite.org/fileformat2.html#b_tree_pages
 //
 // Table B-Tree Leaf Cell (header 0x0d):

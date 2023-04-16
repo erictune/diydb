@@ -1,35 +1,48 @@
-//! pager manages pages from a sqlite3 file as defined at https://www.sqlite.org/fileformat.html
-//! Supports very simplified subset of file format.
-//!
-//! Excepts from above docs:
-//! - The complete state of an SQLite database is usually contained in a single file on disk called the "main database file".
-//! - The main database file consists of one or more pages.
-//! - Every page in the main database has a single use which is one of the following:
-//!   - The lock-byte page
-//!   - A freelist page
-//!   - A freelist trunk page
-//!   - A freelist leaf page
-//!   - A b-tree page
-//!     - A table b-tree interior page
-//!     - A table b-tree leaf page
-//!     - An index b-tree interior page
-//!     - An index b-tree leaf page
-//!   - A payload overflow page
-//!   - A pointer map page
-//!
-//!  [ I aspire just to implement btree-pages, as the others don't seem to be required for simple databases that haven't been modified. ]
-//!
-//! The pager owns the data in each page, and allows callers to access it for reading or writing.
-//! Goal is to avoid copying pages.
-//! Pages are loaded on demand.
-//! All pages have the same size.
+//! `pager` manages pages from a sqlite3 file as defined at https://www.sqlite.org/fileformat.html
+//! 
+//! Currently, it only supports single-threaded read-only access to a single file. It reads all the pages into memory at once.
+//! 
+//! A full implementation of a pager would support concurrent read and write accesses, with demand paging and multiple files,
+//! with the necessary reference counting and locking.
+//! 
+//! A `pager` is responsible for opening and locking a database file at the OS level.  A pager owns the data in each page,
+//! and allows callers to access it for reading without copying.
+//! 
+//! There are a number of page types in a SQLite database: Summarizing the SQLite documentation: 
+//! 
+//! > -   The complete state of an SQLite database is usually contained in a single file on disk called the "main database file".
+//! >    The main database file consists of one or more pages.*
+//! > -   Every page in the main database has a single use which is one of the following:
+//! >    -   The lock-byte page
+//! >    -   A freelist page
+//! >    -   A freelist trunk page
+//! >    -   A freelist leaf page
+//! >    -   A b-tree page
+//! >        -   A table b-tree interior page
+//! >        -   A table b-tree leaf page
+//! >        -   An index b-tree interior page
+//! >        -   An index b-tree leaf page
+//! >    -   A payload overflow page
+//! >    -   A pointer map page
+//! 
+//! However, simple database files only contain table btree pages.
+//! Freelist pages will be managed by the pager once supported.
+//! 
+//! # Future work
+//! 
+//! -   Use OS locking to lock the opened database file.
+//! -   Support accessing pages for modification by locking the entire pager.
+//! -   Support concurrent access for read and write via table or page-level locking.
+//! -   Support adding pages to the database.
+//! -   Support reading pages on demand.
+//! -   Support dropping unused pages when memory is low.
+//! -   Support multiple open files by coordinating between several pager objects to stay under a total memory limit.
+
 
 use std::io::{Read, Seek, SeekFrom};
 use std::cell::RefCell;
 
-/// A pager manages the file locking and the memory use for one open database file.
-// TODO: When several files are open, coordinate between different pagers to maintain an overall memory limit.
-// TODO: rw locking for concurrent accesses by multiple cursors to one file.
+/// A `Pager` manages the file locking and the memory use for one open database file.
 pub struct Pager {
     f: RefCell<std::fs::File>,
     pages: Vec<Option<Vec<u8>>>,
@@ -74,10 +87,11 @@ impl Pager {
             initialized: RefCell::new(false),
             page_size: RefCell::new(None),
         }
-        // TODO: get the header and check that the number of pages in the DB is less than the maximum number of pages allowed.
     }
 
-    // TODO this should not be needed with demand paging.
+    // Separate from open because I could not figure out how to return a file from the constructor
+    // and use the file in one function.  
+    /// Must be called before using other methods.  Checks the database header and reads in its contents.
     pub fn initialize(&mut self) {
         if *self.initialized.borrow() {
             return;
@@ -98,14 +112,7 @@ impl Pager {
             self.make_page_present(pn as usize);
         }
     }
-    // Reads the header of a file after the file has been opened to
-    // ensure it is a valid file.
-    // Separate from open because I could not figure out how to return a
-    // file from the constructor and use the file in one function.
-    // To be called before using other methods.
-    // TODO: figure out how to do this in the constructor or with
-    // interior mutability so that it doesn't force all other methods
-    // to be mutable.
+    // Reads the header of a file after the file has been opened to ensure it is a valid file.
     fn check_initialized(&self) {
         if ! *self.initialized.borrow() {
             panic!("Use of uninitialized Pager.");
