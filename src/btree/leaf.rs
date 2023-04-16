@@ -75,7 +75,6 @@ pub fn new_table_leaf_cell_iterator_for_page(
     println!("Examining page {} with header {:?}", pgnum, hdr);
     match hdr.btree_page_type {
         btree::PageType::TableLeaf => {
-            // TODO: hide btree::CellIterator.  Just have TableCellIterator, which handles both page types for table btrees.
             btree::leaf::Iterator::new(btree::cell::Iterator::new(page, btree_start_offset, pgsz))
         }
         _ => { unreachable!() }

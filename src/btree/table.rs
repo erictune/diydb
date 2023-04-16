@@ -153,10 +153,8 @@ impl<'p> core::iter::Iterator for Iterator<'p>
     ///   `k` is a key, the row number (u64)
     ///   `v` is a value, &[u8].
     fn next(&mut self) -> Option<Self::Item> {
-        {
         if self.stack.is_empty() { self.seek_leftmost_leaf(self.root_page) }
         assert!(!self.stack.is_empty(), "Internal logical error");
-        }
         while !self.stack.is_empty() {
             match self.stack.last_mut().unwrap() {
                 EitherIter::Leaf(l) => match l.next() {

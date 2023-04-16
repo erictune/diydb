@@ -28,7 +28,6 @@ pub enum Error {
 // TODO: consider moving the header reader to use the pager interface so header accesses can use locks.
 // That might mean that it doesn't use the Reader/BufReader interface, (uses Page) and so it won't have to return ReadFailed?
 
-// TODO: move db file header code to vfs.rs
 // The database file header.
 #[derive(Debug, Clone)]
 pub struct DbfileHeader {
