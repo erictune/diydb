@@ -41,14 +41,14 @@ pub fn print_table(
                 for t in rhi {
                     print!(" {:15} |", typecode_to_string(t));
                 }
-                println!("");
+                println!();
             }
             print!("{:2} |", rowid);
-            let hi = ValueIterator::new(&payload[..]);
+            let hi = ValueIterator::new(payload);
             for (t, v) in hi {
                 print!(" {:15} |", value_to_string(&t, v));
             }
-            println!("");
+            println!();
         }
     }
 }

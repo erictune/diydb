@@ -195,8 +195,8 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
 
     f.seek(SeekFrom::Start(0)).unwrap();
     Ok(DbfileHeader {
-        pagesize: pagesize,
-        changecnt: changecnt,
-        numpages: numpages,
+        pagesize,
+        changecnt,
+        numpages,
     })
 }

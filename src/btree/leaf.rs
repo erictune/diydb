@@ -15,7 +15,7 @@ impl<'a> Iterator<'a> {
     /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
     ///         slives ends with the last byte of the record body.
     pub fn new(ci: cell::Iterator) -> Iterator {
-        Iterator { ci: ci }
+        Iterator { ci }
     }
 }
 

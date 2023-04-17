@@ -103,7 +103,6 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> String {
             c.read_exact(&mut buf[..]).unwrap();
             String::from_utf8(buf)
                 .expect("Should have converted string to utf8")
-                .to_string()
         }
         _ => panic!("Unknown column type: {}", serial_type),
     }

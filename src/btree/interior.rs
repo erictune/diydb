@@ -32,7 +32,7 @@ impl<'a> SearchIterator<'a> {
     /// * `ci` - A cell iterator for the page. Borrowed for the lifetime of the iterator.  
     #[allow(dead_code)] // Use to build lookup by rowid as part of using indexes.
     pub fn new(ci: cell::Iterator) -> SearchIterator {
-        SearchIterator { ci: ci }
+        SearchIterator { ci }
     }
 }
 
@@ -44,7 +44,7 @@ impl<'a> ScanIterator<'a> {
     /// * `ci` - A cell iterator for the page. Borrowed for the lifetime of the iterator. 
     /// * `rmp` - The rightmost pointer for this page. 
     pub fn new(ci: cell::Iterator, rmp: PageNum) -> ScanIterator {
-        ScanIterator { ci: ci, returned_rightmost: false, rightmost_pointer: rmp }
+        ScanIterator { ci, returned_rightmost: false, rightmost_pointer: rmp }
     }
 }
 

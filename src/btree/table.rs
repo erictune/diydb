@@ -76,8 +76,8 @@ impl<'p> Iterator<'p>
 
         let pgsz = pager.get_page_size();
         Iterator {
-            root_page: root_page,
-            pager: pager,
+            root_page,
+            pager,
             stack: vec![],
             page_size: pgsz,
          }

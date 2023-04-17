@@ -181,7 +181,7 @@ impl Pager {
 
         self.check_present(pn);
         match &self.pages[pn - 1] {
-            Some(v) => Ok(v.as_ref()),
+            Some(v) => Ok(v),
             None => Err(Error::InternalError),
         }
     }

@@ -64,7 +64,7 @@ fn test_parse_create_statement() {
 
 // TODO: expand star into list of all column names of all tables in the input table list.
 pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
-    let select_stmt = SQLParser::parse(Rule::select_stmt, &query)
+    let select_stmt = SQLParser::parse(Rule::select_stmt, query)
         .expect("unsuccessful parse") // unwrap the parse result
         .next()
         .unwrap();

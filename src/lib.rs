@@ -30,7 +30,7 @@ pub fn get_creation_sql_and_root_pagenum(
     } else {
         let record_iterator = new_table_iterator(pgr, SCHEMA_BTREE_ROOT_PAGENUM);
         for (_, payload) in record_iterator {
-            let vi = record::ValueIterator::new(&payload[..]);
+            let vi = record::ValueIterator::new(payload);
             let row = vi.collect::<Vec<(i64, &[u8])>>();
             let this_table_name = serial_type::value_to_string(
                 &row[SCHEMA_TABLE_TBL_NAME_COLIDX].0,
@@ -95,7 +95,7 @@ fn print_table(
 pub fn print_schema(pager: &pager::Pager) {
     let table_name = "sqlite_schema";
     let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
-        .expect(format!("Should have looked up the schema for {}.", table_name).as_str());
+        .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
     let (_table_name2, column_names, column_types) =
         parser::parse_create_statement(&create_statement);
 
@@ -118,7 +118,7 @@ pub fn run_query(pager: &pager::Pager, query: &str) {
     if input_tables.len() > 1 {
         panic!("We don't support multiple table queries.")
     };
-    if input_tables.len() < 1 {
+    if input_tables.is_empty() {
         panic!("We don't support selects without FROM.")
     };
     let table_name = input_tables[0];
@@ -126,7 +126,7 @@ pub fn run_query(pager: &pager::Pager, query: &str) {
         panic!("We don't support selecting specific columns.")
     }
     let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
-        .expect(format!("Should have looked up the schema for {}.", table_name).as_str());
+        .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
     let (_table_name2, column_names, column_types) =
         parser::parse_create_statement(&create_statement);
     print_table(

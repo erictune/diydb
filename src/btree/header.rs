@@ -27,10 +27,10 @@ pub struct PageReader<'a> {
 }
 
 impl<'a> PageReader<'a> {
-    pub fn new(p: &Vec<u8>, non_btree_header_bytes: usize) -> PageReader {
+    pub fn new(page: &Vec<u8>, non_btree_header_bytes: usize) -> PageReader {
         PageReader {
-            page: p,
-            non_btree_header_bytes: non_btree_header_bytes,
+            page,
+            non_btree_header_bytes,
         }
     }
 
@@ -82,11 +82,11 @@ impl<'a> PageReader<'a> {
         };
 
         Header {
-            btree_page_type: btree_page_type,
-            freeblock_start: freeblock_start,
-            num_cells: num_cells,
-            cell_content_start: cell_content_start,
-            rightmost_pointer: rightmost_pointer,
+            btree_page_type,
+            freeblock_start,
+            num_cells,
+            cell_content_start,
+            rightmost_pointer,
         }
     }
 }
