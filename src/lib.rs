@@ -1,6 +1,6 @@
 mod btree;
-mod formatting;
 mod dbheader;
+mod formatting;
 pub mod pager;
 pub mod parser;
 mod record;

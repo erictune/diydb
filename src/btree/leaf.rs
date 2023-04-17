@@ -77,7 +77,9 @@ pub fn new_table_leaf_cell_iterator_for_page(
         btree::PageType::TableLeaf => {
             btree::leaf::Iterator::new(btree::cell::Iterator::new(page, btree_start_offset, pgsz))
         }
-        _ => { unreachable!() }
+        _ => {
+            unreachable!()
+        }
     }
 }
 

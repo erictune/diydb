@@ -13,6 +13,8 @@ pub enum PageType {
 // SQLite row ids are 64b integers.
 type RowId = i64;
 
+/// module `header` defines types and methods for btree page headers.
+pub mod header;
 /// Organization of btree submodules and types:
 /// *  `pub table::Iterator` iterates over all the pages of one btree.
 /// *  `pub table::Iterator` uses either `leaf::Iterator` or `interior::ScanIterator` on a given page.
@@ -20,8 +22,6 @@ type RowId = i64;
 
 /// module `table` defines iterators over btrees.
 pub mod table;
-/// module `header` defines types and methods for btree page headers.
-pub mod header;
 // module `leaf` provides an interator over the cells of the leaf pages of a table btree.
 mod leaf;
 // module `interior` provides an interator over the cells of the interior pages of a table btree.

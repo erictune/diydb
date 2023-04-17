@@ -101,8 +101,7 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> String {
             // TODO: avoid the copy somehow?
             let mut buf = vec![0_u8; (*x as usize - 13) / 2];
             c.read_exact(&mut buf[..]).unwrap();
-            String::from_utf8(buf)
-                .expect("Should have converted string to utf8")
+            String::from_utf8(buf).expect("Should have converted string to utf8")
         }
         _ => panic!("Unknown column type: {}", serial_type),
     }

@@ -1,8 +1,8 @@
 //! table provides iterators over Table type btrees.  
 //! It hides the fact that btrees span several pages.
- 
-use super::{leaf, interior, cell, RowId, PageType};
-use crate::pager::{PageNum};
+
+use super::{cell, interior, leaf, PageType, RowId};
+use crate::pager::PageNum;
 
 // TODO: add table object: represents a Table (as opposed to Index) btree stored in SQLite format.
 // pub struct Table<'a> {
@@ -49,12 +49,11 @@ impl<'z> EitherIter<'z> {
 pub struct Iterator<'p> {
     root_page: crate::pager::PageNum,
     pager: &'p crate::pager::Pager,
-    stack: Vec<EitherIter<'p>>,  // The lifetime of the references in the inner iterators is good as long as the pager is, since the pager holds the pages.
+    stack: Vec<EitherIter<'p>>, // The lifetime of the references in the inner iterators is good as long as the pager is, since the pager holds the pages.
     page_size: u32,
 }
 
-impl<'p> Iterator<'p> 
-{
+impl<'p> Iterator<'p> {
     /// Creates an iterator over the records of a Table-typed btree.
     ///
     /// Iterator produces cells which are slices of bytes, which contain a record.  
@@ -62,7 +61,7 @@ impl<'p> Iterator<'p>
     ///
     /// When you call new, the iterator does an in-order traversal of the table and records
     /// all the page numbers it needs during its scan.  
-    /// 
+    ///
     /// # Arguments
     ///
     /// TODO: Actually this is going to be a root page number.
@@ -72,7 +71,7 @@ impl<'p> Iterator<'p>
         // We will traverse the tree during the constructor to get a list of pages we need access to
         // during the iteration (excluding overflow pages).  This approach avoids having a stack of
         // iterators which are multiple borrows against  approach avoids having page references
-    //  during the iteration phase, which allows the next() c
+        //  during the iteration phase, which allows the next() c
 
         let pgsz = pager.get_page_size();
         Iterator {
@@ -80,7 +79,7 @@ impl<'p> Iterator<'p>
             pager,
             stack: vec![],
             page_size: pgsz,
-         }
+        }
     }
 
     fn btree_start_offset(pgnum: usize) -> usize {
@@ -89,48 +88,43 @@ impl<'p> Iterator<'p>
             _ => 0,
         }
     }
-    
-    fn seek_leftmost_leaf(& mut self, starting_page: PageNum) {
+
+    fn seek_leftmost_leaf(&mut self, starting_page: PageNum) {
         let mut next_page = starting_page;
         println!("Seeking leftmost starting at {}", starting_page);
         loop {
             let page = self.pager.get_page_ro(next_page).unwrap();
             // TODO: make it less complicated to just get the type of the new page you are about to work with.
-            let pr = super::header::PageReader::new(
-                page, Self::btree_start_offset(starting_page));
+            let pr = super::header::PageReader::new(page, Self::btree_start_offset(starting_page));
             let hdr = pr.check_header();
             let rmp = hdr.rightmost_pointer;
             let page_type = hdr.btree_page_type;
             match page_type {
                 PageType::TableLeaf => {
-                    self.stack.push(
-                        EitherIter::Leaf(
-                            leaf::Iterator::new(
-                                cell::Iterator::new(
-                                    page, 
-                                    Self::btree_start_offset(starting_page), 
-                                    self.pager.get_page_size()
-                                )
-                            )
-                        )
-                    );
+                    self.stack
+                        .push(EitherIter::Leaf(leaf::Iterator::new(cell::Iterator::new(
+                            page,
+                            Self::btree_start_offset(starting_page),
+                            self.pager.get_page_size(),
+                        ))));
                     return;
                 }
                 PageType::TableInterior => {
-                    self.stack.push(
-                        EitherIter::Interior(
-                            interior::ScanIterator::new(
-                                cell::Iterator::new(
-                                    page,
-                                    Self::btree_start_offset(starting_page), 
-                                    self.page_size
-                                ),
-                                rmp.expect("Interior pages should always have rightmost pointer.") as usize
-                            )
-                        )
-                    );
+                    self.stack
+                        .push(EitherIter::Interior(interior::ScanIterator::new(
+                            cell::Iterator::new(
+                                page,
+                                Self::btree_start_offset(starting_page),
+                                self.page_size,
+                            ),
+                            rmp.expect("Interior pages should always have rightmost pointer.")
+                                as usize,
+                        )));
                     let top_of_stack_iter = self.stack.last_mut().unwrap();
-                    next_page = top_of_stack_iter.unwrap_interior().next().expect("Interior page should have at least 1 child always");
+                    next_page = top_of_stack_iter
+                        .unwrap_interior()
+                        .next()
+                        .expect("Interior page should have at least 1 child always");
                 }
                 PageType::IndexInterior | PageType::IndexLeaf => {
                     unreachable!("Should not have index pages in table btree.");
@@ -138,13 +132,11 @@ impl<'p> Iterator<'p>
             }
         }
     }
-
 }
 
 // TODO: if this is hard to make work, then test a simpler version that passes in a slice of ints and then iterates over them with references.
 
-impl<'p> core::iter::Iterator for Iterator<'p>
-{
+impl<'p> core::iter::Iterator for Iterator<'p> {
     // The iterator returns a tuple of (rowid, cell_payload).
     // Overflowing payloads are not supported.
     type Item = (RowId, &'p [u8]);
@@ -153,7 +145,9 @@ impl<'p> core::iter::Iterator for Iterator<'p>
     ///   `k` is a key, the row number (u64)
     ///   `v` is a value, &[u8].
     fn next(&mut self) -> Option<Self::Item> {
-        if self.stack.is_empty() { self.seek_leftmost_leaf(self.root_page) }
+        if self.stack.is_empty() {
+            self.seek_leftmost_leaf(self.root_page)
+        }
         assert!(!self.stack.is_empty(), "Internal logical error");
         while !self.stack.is_empty() {
             match self.stack.last_mut().unwrap() {
@@ -162,8 +156,11 @@ impl<'p> core::iter::Iterator for Iterator<'p>
                     Some(x) => return Some(x),
                     // When we are iterating over a leaf and finish done, go up to the previous interior page, if any.
                     // We will process that on the next iteration of the loop.
-                    None => { self.stack.pop().unwrap(); continue; }
-                }
+                    None => {
+                        self.stack.pop().unwrap();
+                        continue;
+                    }
+                },
                 EitherIter::Interior(i) => match i.next() {
                     // When we are still iterating on in an interior page, explore down the next child pointer to a leaf.
                     Some(x) => {
@@ -171,15 +168,13 @@ impl<'p> core::iter::Iterator for Iterator<'p>
                         continue;
                     }
                     // If we ran out of items on an interior page, go up to its parent.
-                    None => { 
-                        self.stack.pop(); 
+                    None => {
+                        self.stack.pop();
                         continue;
-                    }    
-                }
+                    }
+                },
             }
         }
         None
     }
 }
-
-

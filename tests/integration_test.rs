@@ -63,7 +63,6 @@ fn test_table_iterator_on_minimal_db() {
     assert!(ri.next().is_none());
 }
 
-
 #[test]
 fn test_table_iterator_on_multipage_with_various_page_sizes() {
     let dbs = vec![
@@ -98,7 +97,7 @@ fn test_table_iterator_on_three_level_db() {
     for e in ri.enumerate() {
         let (expected, (rowid, _)) = e;
         println!("Visiting rowid {} on iteration {}", rowid, expected);
-        assert_eq!(expected+1, rowid as usize);
+        assert_eq!(expected + 1, rowid as usize);
         last_rowid = rowid
     }
     assert_eq!(last_rowid, 100000);

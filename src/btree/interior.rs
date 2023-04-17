@@ -11,7 +11,7 @@ use crate::pager::PageNum;
 pub struct SearchIterator<'a> {
     ci: cell::Iterator<'a>,
     // TODO: implement this.
-    // note it is rarely possible for there to not be two child pointers on page 1.  but IIUC, there is always a rightmost, so there is always 
+    // note it is rarely possible for there to not be two child pointers on page 1.  but IIUC, there is always a rightmost, so there is always
     // a right and a left to return.
 }
 
@@ -41,10 +41,14 @@ impl<'a> ScanIterator<'a> {
     ///
     /// # Arguments
     ///
-    /// * `ci` - A cell iterator for the page. Borrowed for the lifetime of the iterator. 
-    /// * `rmp` - The rightmost pointer for this page. 
+    /// * `ci` - A cell iterator for the page. Borrowed for the lifetime of the iterator.
+    /// * `rmp` - The rightmost pointer for this page.
     pub fn new(ci: cell::Iterator, rmp: PageNum) -> ScanIterator {
-        ScanIterator { ci, returned_rightmost: false, rightmost_pointer: rmp }
+        ScanIterator {
+            ci,
+            returned_rightmost: false,
+            rightmost_pointer: rmp,
+        }
     }
 }
 
@@ -86,10 +90,12 @@ impl<'a> core::iter::Iterator for ScanIterator<'a> {
     ///   `v` is a left child page number.
     ///   All values in page v are less than or equal to k.
     fn next(&mut self) -> Option<Self::Item> {
-        if self.returned_rightmost { return None }
+        if self.returned_rightmost {
+            return None;
+        }
         match self.ci.next() {
             None => {
-                self.returned_rightmost = true; 
+                self.returned_rightmost = true;
                 Some(self.rightmost_pointer)
             }
             Some(cell) => {
@@ -135,14 +141,18 @@ fn new_table_interior_cell_iterator_for_page(
     match hdr.btree_page_type {
         btree::PageType::TableInterior => btree::interior::ScanIterator::new(
             btree::cell::Iterator::new(page, btree_start_offset, pgsz),
-            hdr.rightmost_pointer.expect("Interior pages should always have rightmost pointer.") as usize
+            hdr.rightmost_pointer
+                .expect("Interior pages should always have rightmost pointer.")
+                as usize,
         ),
-        _ => { unreachable!(); }
+        _ => {
+            unreachable!();
+        }
     }
 }
 
 #[test]
-fn test_interior_iterator_on_multipage_db() {    
+fn test_interior_iterator_on_multipage_db() {
     // This tests iterating over the root page which is interior type.
     // The table has these rows:
     // row 1: "AAA"
@@ -169,4 +179,3 @@ fn test_interior_iterator_on_multipage_db() {
     assert_eq!(ri.next(), Some(6));
     assert_eq!(ri.next(), None);
 }
-

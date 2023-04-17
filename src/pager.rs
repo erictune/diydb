@@ -1,15 +1,15 @@
 //! `pager` manages pages from a sqlite3 file as defined at https://www.sqlite.org/fileformat.html
-//! 
+//!
 //! Currently, it only supports single-threaded read-only access to a single file. It reads all the pages into memory at once.
-//! 
+//!
 //! A full implementation of a pager would support concurrent read and write accesses, with demand paging and multiple files,
 //! with the necessary reference counting and locking.
-//! 
+//!
 //! A `pager` is responsible for opening and locking a database file at the OS level.  A pager owns the data in each page,
 //! and allows callers to access it for reading without copying.
-//! 
-//! There are a number of page types in a SQLite database: Summarizing the SQLite documentation: 
-//! 
+//!
+//! There are a number of page types in a SQLite database: Summarizing the SQLite documentation:
+//!
 //! > -   The complete state of an SQLite database is usually contained in a single file on disk called the "main database file".
 //! >    The main database file consists of one or more pages.*
 //! > -   Every page in the main database has a single use which is one of the following:
@@ -24,12 +24,12 @@
 //! >        -   An index b-tree leaf page
 //! >    -   A payload overflow page
 //! >    -   A pointer map page
-//! 
+//!
 //! However, simple database files only contain table btree pages.
 //! Freelist pages will be managed by the pager once supported.
-//! 
+//!
 //! # Future work
-//! 
+//!
 //! -   Use OS locking to lock the opened database file.
 //! -   Support accessing pages for modification by locking the entire pager.
 //! -   Support concurrent access for read and write via table or page-level locking.
@@ -38,9 +38,8 @@
 //! -   Support dropping unused pages when memory is low.
 //! -   Support multiple open files by coordinating between several pager objects to stay under a total memory limit.
 
-
-use std::io::{Read, Seek, SeekFrom};
 use std::cell::RefCell;
+use std::io::{Read, Seek, SeekFrom};
 
 /// A `Pager` manages the file locking and the memory use for one open database file.
 pub struct Pager {
@@ -80,7 +79,7 @@ impl Pager {
                         .write(false)
                         .create(false)
                         .open(path)
-                        .expect("Should have opened file.")
+                        .expect("Should have opened file."),
                 )
             },
             pages: vec![],
@@ -90,14 +89,14 @@ impl Pager {
     }
 
     // Separate from open because I could not figure out how to return a file from the constructor
-    // and use the file in one function.  
+    // and use the file in one function.
     /// Must be called before using other methods.  Checks the database header and reads in its contents.
     pub fn initialize(&mut self) {
         if *self.initialized.borrow() {
             return;
         }
-        let h =
-            crate::dbheader::get_header_clone(&mut self.f.borrow_mut()).expect("Should have parsed db header");
+        let h = crate::dbheader::get_header_clone(&mut self.f.borrow_mut())
+            .expect("Should have parsed db header");
         self.f
             .borrow_mut()
             .seek(SeekFrom::Start(0))
@@ -108,13 +107,13 @@ impl Pager {
         *self.page_size.borrow_mut() = Some(h.pagesize as u32);
         *self.initialized.borrow_mut() = true;
 
-        for pn in 1..h.numpages+1 {
+        for pn in 1..h.numpages + 1 {
             self.make_page_present(pn as usize);
         }
     }
     // Reads the header of a file after the file has been opened to ensure it is a valid file.
     fn check_initialized(&self) {
-        if ! *self.initialized.borrow() {
+        if !*self.initialized.borrow() {
             panic!("Use of uninitialized Pager.");
         }
     }
@@ -133,7 +132,12 @@ impl Pager {
                 (pn - 1) as u64 * self.page_size.borrow().unwrap() as u64,
             ))
             .unwrap();
-        match self.f.borrow_mut().read_exact(&mut v[..]).map_err(|_| Error::ReadFailed) {
+        match self
+            .f
+            .borrow_mut()
+            .read_exact(&mut v[..])
+            .map_err(|_| Error::ReadFailed)
+        {
             Ok(()) => Ok(v),
             Err(e) => Err(e),
         }
@@ -145,8 +149,8 @@ impl Pager {
             // println!("Extending pager capacity to {}", pn);
             self.pages.resize(pn, None)
         }
-        if self.pages[pn-1].is_none() {
-                // println!("Reading page {} on demand.", pn);
+        if self.pages[pn - 1].is_none() {
+            // println!("Reading page {} on demand.", pn);
             let v = self
                 .read_page_from_file(pn)
                 .map_err(|_| Error::ReadFailed)
@@ -157,11 +161,11 @@ impl Pager {
 
     fn check_present(&self, pn: PageNum) {
         // We are increasing the capacity of what pages we cache in memory, not changing the on-disk database file.
-        if pn > self.pages.len() { 
+        if pn > self.pages.len() {
             panic!("Pager capacity does not extend to requested page.");
         }
 
-        if self.pages[pn-1].is_none() {
+        if self.pages[pn - 1].is_none() {
             panic!("Page not loaded!");
         }
     }
@@ -195,6 +199,8 @@ impl Pager {
 
     pub fn get_page_size(&self) -> u32 {
         self.check_initialized();
-        self.page_size.borrow().expect("Should have initialized before calling get_page_size()")
+        self.page_size
+            .borrow()
+            .expect("Should have initialized before calling get_page_size()")
     }
 }
