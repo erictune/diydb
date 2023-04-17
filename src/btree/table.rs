@@ -91,7 +91,6 @@ impl<'p> Iterator<'p> {
 
     fn seek_leftmost_leaf(&mut self, starting_page: PageNum) {
         let mut next_page = starting_page;
-        println!("Seeking leftmost starting at {}", starting_page);
         loop {
             let page = self.pager.get_page_ro(next_page).unwrap();
             // TODO: make it less complicated to just get the type of the new page you are about to work with.
