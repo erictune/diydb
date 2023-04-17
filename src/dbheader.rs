@@ -43,9 +43,6 @@ const SQLITE3_MAGIC_STRING: &[u8] = &[
 const TWENTY_ZEROS: &[u8] = &[0; 20];
 const SQLITE_VERSION_NUMBER: u32 = 3037000; // This is the one I'm using for generating test files.
 
-// Sqlite supports different page sizes, but we are just going to support the default.
-const PAGESIZE: u32 = 4096;
-
 fn bytes_identical<T: Ord>(a: &[T], b: &[T]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -88,12 +85,16 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // Offset	Size	Description
     // 16	    2	    The database page size in bytes. Must be a power of two between 512 and 32768 inclusive, or the value 1 representing a page size of 65536.
     let pagesize: u32 = match f.read_u16::<BigEndian>().unwrap() {
-        1 => 1,
-        x => x as u32,
+        512 => 512,
+        1024 => 1024,
+        2048 => 2048,
+        4096 => 4096,
+        8192 => 8192,
+        16384 => 16384,
+        32768 => 32768,
+        1 => 65536,
+        _ => {return Err(Error::UnsupportedPagesize)}
     };
-    if pagesize != PAGESIZE {
-        return Err(Error::UnsupportedPagesize);
-    }
     // Offset	Size	Description
     // 18	    1	    File format write version. 1 for legacy; 2 for WAL.
     // 19	    1	    File format read version. 1 for legacy; 2 for WAL.

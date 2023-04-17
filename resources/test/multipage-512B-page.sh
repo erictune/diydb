@@ -17,8 +17,8 @@ sqlite3 --version
 (
 cat << EOF
 .open $prefix.db
-create table letters (l text);
 PRAGMA page_size=512;
+create table letters (l text);
 insert into letters values ("A"), ("B"), ("C"), ("D"), ("E"), ("F"), ("G"), ("H"), ("I"), ("J");
 create table thousandrows (x text, y text, z text);
 insert into thousandrows (x,y,z) select * from letters a cross join letters b cross join letters c;
