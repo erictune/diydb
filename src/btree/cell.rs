@@ -96,7 +96,62 @@ impl<'a> core::iter::Iterator for Iterator<'a> {
     }
 }
 
-// TODO: unit test a cell using a byte slice page.
+// From command: xxd resources/test/multipage-512B-page.db
+#[cfg(test)]
+const TEST_PAGE: &str = "0d00 0000 0a01 ce00 01fb 01f6 01f1 01ec
+01e7 01e2 01dd 01d8 01d3 01ce 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 0000
+0000 0000 0000 0000 0000 0000 0000 030a
+020f 4a03 0902 0f49 0308 020f 4803 0702
+0f47 0306 020f 4603 0502 0f45 0304 020f
+4403 0302 0f43 0302 020f 4203 0102 0f41";
+
+#[test]
+fn test_cell_iterator() {
+    use hex::FromHex;
+    let p: Vec<u8> = Vec::from_hex(
+        TEST_PAGE.replace(&[' ', '\n'][..], "")).expect("Invalid Hex String");
+    println!("{:?}", p);
+    assert_eq!(p.len(), 512);
+    let mut ci = Iterator::new(&p, 0, 512);
+    assert_eq!(ci.next().unwrap(), Vec::from_hex("0301020f41").unwrap());
+    assert_eq!(ci.next().unwrap(), Vec::from_hex("0302020f42").unwrap());
+    assert_eq!(ci.next().unwrap(), Vec::from_hex("0303020f43").unwrap());
+    assert_eq!(ci.next().unwrap(), Vec::from_hex("0304020f44").unwrap());
+    assert_eq!(ci.next().unwrap(), Vec::from_hex("0305020f45").unwrap());
+    assert_eq!(ci.next().unwrap(), Vec::from_hex("0306020f46").unwrap());
+    assert_eq!(ci.next().unwrap(), Vec::from_hex("0307020f47").unwrap());
+    assert_eq!(ci.next().unwrap(), Vec::from_hex("0308020f48").unwrap());
+    assert_eq!(ci.next().unwrap(), Vec::from_hex("0309020f49").unwrap());
+    assert_eq!(ci.next().unwrap(), Vec::from_hex("030a020f4a").unwrap());
+    assert_eq!(ci.next(), None);
+
+}
 
 // Cell Formats from https://www.sqlite.org/fileformat2.html#b_tree_pages
 //

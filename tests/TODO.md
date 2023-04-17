@@ -14,12 +14,11 @@ Next big effort: parsing, optimization and execution.
     - Later: identify when index can be used.
 
 Quick Cleanups for when you don't have a lot of time:
-- Unit test btree::cell::Iterator
 - Lock db file when opening it.
-- run clippy
 - look for stale TODOs
 - run rustfmt
 - Implement SearchIterator (SeekIterator?) for Table, and support "WHERE rowid = #" queries using that.
+- Get full coverage of lib.rs in integration test.
 
 A medium effort - REPL
 - Add a REPL that supports some SQLite-style commands.
