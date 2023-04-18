@@ -69,10 +69,12 @@ const MAX_PAGE_NUM: PageNum = 10_000; // 10_000 * 4k page ~= 40MB
 impl Pager {
     pub fn open(path: &str) -> Self {
         Pager {
+
             f: {
                 // TODO: Lock file when opening so that other processes do not also
                 // open and modify it, and so that is not modified while reading.
-                // See https://docs.rs/file-lock/latest/file_lock/
+                // I tried  https://docs.rs/file-lock/latest/file_lock/ but it doesn't support opening readonly and locking at the same time.
+                //  Instead, try https://crates.io/crates/fd-lock to see if it is any better.
                 RefCell::new(
                     std::fs::OpenOptions::new()
                         .read(true)
