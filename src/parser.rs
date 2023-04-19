@@ -78,6 +78,69 @@ fn test_parse_create_statement() {
     }    
 }
 
+pub fn parse_literal(lit: &str) -> &str {
+    let literal = SQLParser::parse(Rule::literal, lit)
+    .expect("unsuccessful parse") // unwrap the parse result
+    .next()
+    .unwrap();
+    parse_literal_from_rule(literal)
+}
+
+fn parse_literal_from_rule<'i>(pair: pest::iterators::Pair<'i, Rule>) -> &'i str {
+    return  match pair.as_rule() {
+                Rule::null_literal => {
+                    "NULL"
+                }
+                Rule::true_literal => {
+                    "TRUE"
+                }
+                Rule::false_literal => {
+                    "FALSE"
+                }
+                Rule::integer_literal => {
+                    pair.as_str()
+                }
+                Rule::decimal_literal => {
+                    pair.as_str()
+                }
+                Rule::single_quoted_string => {
+                    pair.as_str()
+                }
+                Rule::double_quoted_string => {
+                    panic!("Double quoted strings are not valid string literals in SQL.")
+                }
+                _ => {
+                    panic!("parse_literal_from_rule does not handle {:?}", pair.as_rule());
+                }
+            }
+}
+
+#[test]
+fn test_parsing_literals() {
+    let cases = vec![
+        ("1",       "1"),
+        ("1.01",    "1.01"),
+        ("'hi'",    "'hi'"),
+        ("true",    "TRUE"),
+        ("tRuE",    "TRUE"),
+        ("TRUE",    "TRUE"),
+        ("false",    "FALSE"),
+        ("fAlSe",    "FALSE"),
+        ("FALSE",    "FALSE"),
+        ("null",    "NULL"),
+        ("nUlL",    "NULL"),
+        ("NULL",    "NULL"),
+    ];
+    for case in cases {
+        let input = case.0;
+        println!("Input: {}", input);
+        let actual = parse_literal(input);
+        let expected = case.1;
+        assert_eq!(actual, expected);
+    }    
+
+}
+
 // TODO: expand star into list of all column names of all tables in the input table list.
 pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
     let select_stmt = SQLParser::parse(Rule::select_stmt, query)
@@ -94,12 +157,34 @@ pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
                 input_tables.push(s.as_str());
             }
             Rule::select_items => {
+                println!("s: {}", s);
+                println!("s.as_span(): {:?}", s.as_span());
+                println!("s.as_rule(): {:?}", s.as_rule());
+                println!("s.as_str(): {}", s.as_str());
+
+                // For each select item.
                 for t in s.into_inner() {
-                    output_cols.push(t.as_str());
+                    let u = t.into_inner().next().unwrap();
+                    println!("handling {:?}", u.as_rule());
+                    output_cols.push(
+                        match u.as_rule() {
+                            Rule::column_name => u.as_str(),
+                            Rule::star => "*",
+                            Rule::null_literal|
+                            Rule::true_literal|
+                            Rule::false_literal |
+                            Rule::integer_literal |
+                            Rule::decimal_literal |
+                            Rule::single_quoted_string => {
+                                parse_literal_from_rule(u)
+                            }        
+                            _ => panic!("Parse error in select item")
+                        }
+                    );
                 }
             }
             Rule::EOI => (),
-            x => panic!("Unable to parse expr:  {} ", s.as_str()),
+            _ => panic!("Unable to parse expr:  {} ", s.as_str()),
         }
     }
     (input_tables, output_cols)
@@ -117,6 +202,39 @@ fn test_parse_select_statement() {
             "select a,b,c fRoM tbl",
             (vec!["tbl"], vec!["a", "b", "c"])
         ),
+        (
+            "select x, 1 from tbl",
+            (vec!["tbl"], vec!["x", "1"])
+        ),
+        (
+            "select x, 1",   // This is invalid SQL, but this check happens after parsing.
+            (vec![], vec!["x", "1"])
+        ),
+        (
+            "select 1",
+            (vec![], vec!["1"])
+        ),
+        (
+            "select 1.01",
+            (vec![], vec!["1.01"])
+        ),
+        (
+            "select 'hi'",
+            (vec![], vec!["'hi'"])  // TODO: this needs to return an expression in the select_items.
+        ),
+        (
+            "select tRuE",
+            (vec![], vec!["TRUE"])
+        ),
+        (
+            "select FALSe",
+            (vec![], vec!["FALSE"])
+        ),
+        (
+            "select 123.456, 'seven', 8, 9, NULL",
+            (vec![], vec!["123.456", "'seven'", "8", "9", "NULL"])
+        ),
+
     ];
     
     for case in cases {

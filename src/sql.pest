@@ -1,6 +1,27 @@
+// Losely based on https://www.sqlite.org/lang_expr.html
+// Not trying to be compatible.
+
 WHITESPACE = _{ " " | "\n" }
 
+// Literals.
+// https://www.sqlite.org/syntax/numeric-literal.html
+integer_literal = @{ "-"? ~ ASCII_DIGIT+ }
+decimal_literal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+numeric_literal = _{ decimal_literal | integer_literal}
+null_literal = @{ ^"NULL" }
+true_literal = @{ ^"true" }
+false_literal = @{ ^"false" }
+bool_literal = _{ true_literal | false_literal }
+// SQL uses single quotes for text and double quotes for fancy identifiers.
+// SQLite supports non-standard use of double quotes for fancy column names, but regrets the decision.
+// See: https://www.sqlite.org/quirks.html#double_quoted_string_literals_are_accepted
+// We will keep to the SQL standard here.
+single_quoted_string = @{ "'" ~ ( "''" | (!"'" ~ ANY) )* ~ "'" }
+double_quoted_string = @{ "\"" ~ ( "\"\"" | (!"'\"" ~ ANY) )* ~ "'\"" }
+literal = _{ numeric_literal | null_literal | bool_literal | single_quoted_string  }
 table_identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+// TODO: allow qualification with table name or alias.
+// TODO: allow double quoted strings as column names.
 column_name = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 
 column_def = {column_name ~ type_name}
@@ -16,11 +37,12 @@ type_name = {int | text | real}
 create_stmt = {SOI ~ create ~ table ~ table_identifier ~ "(" ~ column_defs ~ ")" ~ EOI}
 
 
+// Select Statement.
 // https://www.sqlite.org/syntax/select-stmt.html
 select = _{ ^"select" }
-star = _{ "*" }
+star = { "*" }
 from = _{ ^"from" }
-select_item = {column_name | star}   // TODO: support expressions on columns in select
+select_item = {literal | column_name | star  }   // TODO: support expressions on columns in select
 select_items = { select_item ~ ("," ~ select_item)* }
 from_items = {from ~ table_identifier}
-select_stmt = {SOI ~ select ~ select_items ~ from ~ table_identifier ~ EOI}
+select_stmt = {SOI ~ select ~ select_items ~ (from ~ table_identifier)? ~ EOI}
