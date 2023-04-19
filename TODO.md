@@ -1,10 +1,18 @@
-Next big effort: parsing, optimization and execution.
+Next small tasks:  Do all the things below end to end but with a current simple grammar.
+- Add ast.rs from stash.  (Use vscode stash tool).  Just select, create, and constants.
+- Instead of parsing to vectors of strings in parser.rs, parse to AST types.
+- Generate very basic IR from that (Scan, ComputeCol, Project)
+- Change Query to use the IR.  (IR is for queries only, which I guess includes inserts and deletes some day.)
+- Merge in remamining stashed support for plus/minus in AST, and add basic expressions.  Add constant folding pass.
+- Need AST printing out too.
 
+Next big effort: parsing, optimization and execution.
 1.  Build AST from parse tree: See AST.md.
     - e.g. `select 1 + 1;` -[parse]-> `Pairs<Rule>` -[build_ast]-> `Select(Add(Constant(1), Constant(1)))`
 1.  Build IR from AST: See IR.md
     - e.g. `select a + b from t;` -[parse&build_ast]-> `Select(Add(Col("a"), Col("b")))` -> `Project("_1", AddCol(Expr(...), Scan("t")))
     - e.g. `select * from T` -> ... -> `Scan(T)`.
+    - e.g. `select a from T` -> ... -> `Project([Col(a)], Scan(T))`.
 1.  Interpret IR to execute.
     - testing for query execution can mostly use fake tables, which implement certain traits shared by real btree iterators.
     - testing things could get tedious otherwise.
@@ -14,6 +22,8 @@ Next big effort: parsing, optimization and execution.
     - Later: identify when index can be used.
 
 Quick Cleanups for when you don't have a lot of time:
+- Improve the CLI - e.g. allow opening other files.
+- replace panics that are likely to happen during interactive with Results<>.
 - Try to Box the File in pager.rs in a temporary box, and then use it, then move it to the Box in the constructed struct,
   so that we can run the header check in open().
 - Lock db file when opening it.
@@ -58,10 +68,10 @@ A large effort for later - demand paging and concurrent readers..
     - single page locking (when modifying a value in a row) - several rows can be modified concurrently.
 - Are Indexes children of the Table, since they need to be updated in sync with the table?
 
-Things that have been useful to read or remember:
-  - Reminding myself that the lifetime specifier is not the "places where this reference is used" (scope).
-    Rather it is the lifetime of the variable (referrent).  In one failed attempt, I added more bounds for a type with several
-    references, but actually both references were to the same variable (the pager and its data).
+Making the pager and btree work for harder use cases:
+  - SQLite does not use lock free data structures, AFAICT, where as some newer (in memory) systems do because of the high
+    rates you can get when you don't do I/O.
+  - I'll probably have o write my own unsafe code to use SQLite's data structures.
   - This blog goes over tree traversals: https://sachanganesh.com/programming/graph-tree-traversals-in-rust/
     They do several things:
     - They don't store the references to the data in the stack for the inorder traversal. 
@@ -70,3 +80,4 @@ Things that have been useful to read or remember:
         and then succeed if we get them all?
     - They use an arena allocator where all the memory has a lifetime longer than the traversal (same with my pager.) 
   - how to module: https://www.sheshbabu.com/posts/rust-module-system/
+

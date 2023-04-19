@@ -84,3 +84,26 @@ In no particular order.
   - chose which indexes to use when multiple available
   - chose loop order for joins.
   - simplify code using relational-algebra-like rules
+
+# Notable Things I Learned
+
+## When to use Traits vs Enums
+
+# Enums vs Traits
+
+-   Reference: https://www.possiblerust.com/guide/enum-or-trait-object
+-   You use an enum when you want to be forced to handle every alternative at every usage site.
+-   You use Traits when you want to have an open-ended set of types you can use.  
+    -   Others can extend your code by implementing a trait.  Enums are a closed set of types.
+    -   If you don't need extensibility for users, you can skip using traits.  But, for testing, one may want to define mock types
+        for internal use that use traits.
+-   Traits are a bit slower as they use vtables Enums are a bit faster as they use branchs.
+    -   We prefer faster if possible.
+    -   In some cases the compiler can eliminate the need for this, I think.
+
+## Lifetime Specifiers
+It has been useful to reminding myself that the lifetime specifier is not the "places where this reference is used" (scope).
+Rather it is the lifetime of the variable (referrent).  In one failed attempt at using lifetimes, I added more bounds for a
+type with several references, but actually both references were to the same variable (the pager and its data).  Sometimes
+adding the compilers suggestions it the right things, but other times it is not.
+

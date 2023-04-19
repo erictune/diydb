@@ -1,12 +1,61 @@
-// TODO: main should just be a REPL like the sqlite3 cli.
+// TODO: consider if REPL libraries can be used.  Most of those don't seem to support free-form input like select commands, though.
+use std::io::{self, BufRead, Write};
+use std::borrow::BorrowMut;
+
 fn main() {
-    let mut pager = diydb::pager::Pager::open("./record.db");
-    pager.initialize();
-    println!("-----");
+    let stdin = io::stdin();
+    let mut c = Context{ pager: None };
+    println!("DIYDB - simple SQL database");
+    print!("> ");
+    io::stdout().flush().unwrap();
+    for line in stdin.lock().lines() {
+        match line {
+            Ok(line) => do_command( c.borrow_mut(), line.as_str()),
+            Err(e) => println!("Error: {:}", e),
+        }
+        print!("> ");
+        io::stdout().flush().unwrap();
+    }
+}
+
+fn do_command(c: &mut Context, line: &str) {
+    match line {
+        l if l.to_uppercase().starts_with("SELECT") => do_select(c, l),
+        l if l == ".schema" => do_schema(c),
+        l if l.starts_with(".open") => {
+            let file_to_open = "./record.db";
+            // TODO: parse one argument.
+            do_open(c, file_to_open)
+        }
+        _ => println!("Unknown command.")
+    }
+}
+
+struct Context {
+    pager: Option<diydb::pager::Pager>,
+}
+
+fn do_open(c: &mut Context, path: &str) {
+    // TODO: return errors from open
+    c.pager = Some(diydb::pager::Pager::open(path));
+    match c.pager.as_mut() {
+        Some(p) => p.initialize(),
+        None => (),
+    }
+}
+
+fn do_schema(c: &mut Context) {
     println!("Printing schema table...");
-    diydb::print_schema(&pager);
-    println!("-----");
-    let q = "SELECT * FROM record_test";
-    println!("Doing query: {}", q);
-    diydb::run_query(&pager, q);
+    match c.pager.as_mut() {
+        Some(p) => diydb::print_schema(p.borrow_mut()),
+        None => println!("Error, no database loaded"),
+    }
+}
+
+fn do_select(c: &mut Context, l: &str) {
+    println!("Doing query: {}", l);
+    match c.pager.as_mut() {
+        Some(pager) => diydb::run_query(&pager, l),
+        None => println!("Error, no database loaded"),
+    }
 }

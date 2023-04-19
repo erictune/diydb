@@ -21,45 +21,22 @@ Index `t_a` as shown below:
 create index t_a on t (a)
 ```
 
-# Enums vs Traits
-
--   Reference: https://www.possiblerust.com/guide/enum-or-trait-object
--   Traits are an open set of types.  Others can extend your code by implementing a trait.  Enums are a closed set of types.
-    -   We don't need extensibility for our users.  For testing, we may want to define mock types.
--   Traits are a bit slower as they use vtables Enums are a bit faster as they use branchs.
-    -   We prefer faster if possible.
--   You use an enum when you want to be forced to handle every alternative at every usage site.
-    -   We don't want this.
-
-# IR Traits
-
-Trait names to be determined.  Whether to use common rust traits or new ones is TBD also.
-TBD if traits are needed.
-
-| tenative trait name |      trait description              | example IR types meeting it   |
-| ------------------- | ----------------------------------- | ------------------------------ | 
-| `LogicalOp`         | evaluation returns boolean          | `Eq`, `Gt`, `Ne`               |
-| `RowIterable`       | evaluation returns sequence of rows | `ScanConstantRows`, `Scan`, `SeekRowid` |
-| `NumericOp`         | evaluation returns numeric scalar   | `Negate`, `Add`                |
-| `NullaryOp`         | evaluation takes a no arguments     | `ScanConstantRows`, `Scan`, `SeekRowid` |
-| `UnaryOp`           | evaluation takes one scalar args    | `Negate`, `Sqrt`               |
-| `BinaryOp`          | evaluation takes two scalar args    | `Add`, `Mul`                   |
-
 # IR Types
-These types hold some data (creation arguments), and can be evaluated
+These types hold some data (creation arguments), and can be evaluated.  By using traits, they
+can be strung together using different 
 
-|       type         | creation arguments | eval input trail | eval output trait       | 
-| ------------------ | ------------------ | ---------------- | ----------------------- |
-| `ScanConstantRows` | immediate table    | `NullaryOp`      |  `RowIterable`          |
-| `Scan`             | table name         | `NullaryOp`      |  `RowIterable`          |
-| `SeekRowid`        | table name, rowid  | `NullaryOp`      |  `RowIterable`          |
-| `IndexedSeekEq`    | ?                  | ?                |  `RowIterable`          |
-| `Filter`           | reference to `LogicalOp`, reference to `RowIterable` | Row      |  `RowIterable`  (may not return every row)  -  |
-| `Project`          | reference to `RowIterable` | Row      |  `RowIterable`          |
-| `NewColFromExpr`   | ?                  | ?                |  `RowIterable`          |
-| `Eq`, `Gt`, etc    | constants or exprs | ?                |  `LogicalOp`            |
-| `Negate`           | reference to numeric const or numeric expr  |  ?  | ? |
-| `Add`, `Mul`, etc  | ?  |  ?  | ? |
+|       type         | creation arguments | eval() step input | eval() step output  | 
+| ------------------ | ------------------ | ---------------- | ------------- |
+| `ScanConstantRows` | literal     values | no eval args     | `Row`        |
+| `Scan`             | table name         | no eval args     | `Row`        |
+| `SeekRowid`        | table name, rowid  | no eval args     | `Row`        |
+| `IndexedSeekEq`    | table, index, key  | no eval args     | `Row`        |
+| `Filter`           | `&LogicalOp`, `&RowIterable` | `Row` | `Option<Row>` |
+| `Project`          | `&RowIterable`     | `Row`            | `Row`        |
+| `AddColFromExpr`   | `&ColExpr`, list of named cols used  | `Row` | `Row` |
+| `Eq`, `Gt`, etc    | `&Expr`            | ?                | `LogicalOp`  |
+| `Negate`           | `&Expr`            |  ?               | ?            |
+| `Add`, `Mul`, etc  | `&Expr`            |  `&Cell`         | `&Cell`      |
 
 # Examples of SQL converted to IR
 
@@ -81,6 +58,22 @@ These types hold some data (creation arguments), and can be evaluated
 | Table `t` and Index `t_a` | `select * from t` | `Scan("t")` | No change. |
 | Table `t` and Index `t_a` | `select * from t where rowid = 1` | `RowidSeek("t", rowid)` | No change | 
 | Table `t` and Index `t_a` | `select * from t where a = 1` | `IndexSeekEq("t", "t_a", 1)` | `IndexSeekEq` returns the range of values in _arg1_ equal to _arg3_ using index table _arg2_. | 
+
+# IR Traits
+
+TBD: if there should be stronger typing of Exprs? SQLite does not use strong types.
+
+Trait names to be determined.  Whether to use common rust traits or new ones is TBD also.
+TBD if traits are needed.
+
+| tenative trait name |      trait description              | example IR types meeting it   |
+| ------------------- | ----------------------------------- | ------------------------------ | 
+| `LogicalOp`         | evaluation returns boolean          | `Eq`, `Gt`, `Ne`               |
+| `RowIterable`       | evaluation returns sequence of rows | `ScanConstantRows`, `Scan`, `SeekRowid` |
+| `NumericOp`         | evaluation returns numeric scalar   | `Negate`, `Add`                |
+| `NullaryOp`         | evaluation takes a no arguments     | `ScanConstantRows`, `Scan`, `SeekRowid` |
+| `UnaryOp`           | evaluation takes one scalar args    | `Negate`, `Sqrt`               |
+| `BinaryOp`          | evaluation takes two scalar args    | `Add`, `Mul`                   |
 
 # Questions and Observations
 -   To stepwise evaluate a `Filter`, you have to check if it has a row ready right now, which is different from it being done.
