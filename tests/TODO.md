@@ -14,6 +14,8 @@ Next big effort: parsing, optimization and execution.
     - Later: identify when index can be used.
 
 Quick Cleanups for when you don't have a lot of time:
+- Try to Box the File in pager.rs in a temporary box, and then use it, then move it to the Box in the constructed struct,
+  so that we can run the header check in open().
 - Lock db file when opening it.
 - look for stale TODOs
 - run rustfmt

@@ -10,8 +10,8 @@ use crate::serial_type::{typecode_to_string, value_to_string};
 pub fn print_table(
     record_iterator: &mut crate::btree::table::Iterator,
     table_name: &str,
-    col_names: Vec<&str>,
-    col_types: Vec<&str>,
+    col_names: Vec<String>,
+    col_types: Vec<String>,
     detailed: bool,
 ) {
     println!("Full Dump of Table {}", table_name);

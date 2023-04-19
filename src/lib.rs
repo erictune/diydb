@@ -76,8 +76,8 @@ fn print_table(
     pgr: &pager::Pager,
     root_pgnum: usize,
     table_name: &str,
-    col_names: Vec<&str>,
-    col_types: Vec<&str>,
+    col_names: Vec<String>,
+    col_types: Vec<String>,
     detailed: bool,
 ) {
     {

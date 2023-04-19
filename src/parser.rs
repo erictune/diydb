@@ -5,7 +5,7 @@ use pest::Parser;
 #[grammar = "sql.pest"]
 pub struct SQLParser;
 
-pub fn parse_create_statement(c: &str) -> (String, Vec<&str>, Vec<&str>) {
+pub fn parse_create_statement(c: &str) -> (String, Vec<String>, Vec<String>) {
     use itertools::Itertools;
     let create_stmt = SQLParser::parse(Rule::create_stmt, c)
         .expect("unsuccessful parse") // unwrap the parse result
@@ -15,12 +15,12 @@ pub fn parse_create_statement(c: &str) -> (String, Vec<&str>, Vec<&str>) {
     let mut colnames = vec![];
     let mut coltypes = vec![];
 
-    let mut table_name = String::from("");
-    // Confirm it is a select statement.
+    let mut tablename = String::from("");
+    // Confirm it is a create statement.
     for c in create_stmt.into_inner() {
         match c.as_rule() {
             Rule::table_identifier => {
-                table_name = String::from(c.as_str());
+                tablename = String::from(c.as_str());
             }
             Rule::column_defs => {
                 for column_def in c.into_inner() {
@@ -29,7 +29,7 @@ pub fn parse_create_statement(c: &str) -> (String, Vec<&str>, Vec<&str>) {
                             let (col_name, col_type) = column_def
                                 .into_inner()
                                 .take(2)
-                                .map(|e| e.as_str())
+                                .map(|e| String::from(e.as_str()))
                                 .collect_tuple()
                                 .unwrap();
                             colnames.push(col_name);
@@ -43,23 +43,39 @@ pub fn parse_create_statement(c: &str) -> (String, Vec<&str>, Vec<&str>) {
             _ => unreachable!(),
         }
     }
-    (table_name, colnames, coltypes)
+    (tablename, colnames, coltypes)
 }
 
 #[test]
 fn test_parse_create_statement() {
-    assert_eq!(
-        parse_create_statement("CREATE TABLE t (a int, b integer, c text, d string, e real)"),
+    let cases = vec![
         (
-            String::from("t"),
-            vec!["a", "b", "c", "d", "e"],
-            vec!["int", "integer", "text", "string", "real"]
-        )
-    );
-    assert_eq!(
-        parse_create_statement("CREATE TABLE Tbl_Two(a int,b int)"),
-        (String::from("Tbl_Two"), vec!["a", "b"], vec!["int", "int"])
-    );
+            "CREATE TABLE t (a int, b integer, c text, d string, e real)",
+            (
+                "t",
+                vec!["a", "b", "c", "d", "e"],
+                vec!["int", "integer", "text", "string", "real"]
+            )
+         ),
+         (
+            "CREATE TABLE Tbl_Two(a int,b int)",
+            (
+                "Tbl_Two", vec!["a", "b"], vec!["int", "int"]
+            )
+         ),
+
+    ];
+    for case in cases {
+        let input = case.0;
+        println!("Input: {}", input);
+        let actual = parse_create_statement(input);
+        let expected = (
+                String::from(case.1.0), 
+                case.1.1.iter().map(|x| String::from(*x)).collect(), 
+                case.1.2.iter().map(|x| String::from(*x)).collect()
+        );
+        assert_eq!(actual, expected);
+    }    
 }
 
 // TODO: expand star into list of all column names of all tables in the input table list.
@@ -83,7 +99,7 @@ pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
                 }
             }
             Rule::EOI => (),
-            _ => unreachable!(),
+            x => panic!("Unable to parse expr:  {} ", s.as_str()),
         }
     }
     (input_tables, output_cols)
@@ -91,12 +107,23 @@ pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
 
 #[test]
 fn test_parse_select_statement() {
-    assert_eq!(
-        parse_select_statement("SELECT * FROM tbl"),
-        (vec!["tbl"], vec!["*"])
-    );
-    assert_eq!(
-        parse_select_statement("select a,b,c fRoM tbl"),
-        (vec!["tbl"], vec!["a", "b", "c"])
-    );
+    let cases = vec![
+        (
+            "SELECT * FROM tbl",
+            (vec!["tbl"], vec!["*"])
+    
+        ),
+        (
+            "select a,b,c fRoM tbl",
+            (vec!["tbl"], vec!["a", "b", "c"])
+        ),
+    ];
+    
+    for case in cases {
+        let input = case.0;
+        println!("Input: {}", input);
+        let actual = parse_select_statement(input);
+        let expected = case.1;
+        assert_eq!(actual, expected);
+    }    
 }
