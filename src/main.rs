@@ -1,4 +1,3 @@
-// TODO: consider if REPL libraries can be used.  Most of those don't seem to support free-form input like select commands, though.
 use std::io::{self, BufRead, Write};
 use std::borrow::BorrowMut;
 
@@ -6,6 +5,7 @@ fn main() {
     let stdin = io::stdin();
     let mut c = Context{ pager: None };
     println!("DIYDB - simple SQL database");
+    println!("Enter .help for list of commands");
     print!("> ");
     io::stdout().flush().unwrap();
     for line in stdin.lock().lines() {
@@ -22,6 +22,7 @@ fn do_command(c: &mut Context, line: &str) {
     match line {
         l if l.to_uppercase().starts_with("SELECT") => do_select(c, l),
         l if l == ".schema" => do_schema(c),
+        ".help" => do_help(c),
         l if l.starts_with(".open") => {
             let file_to_open = "./record.db";
             // TODO: parse one argument.
@@ -33,6 +34,14 @@ fn do_command(c: &mut Context, line: &str) {
 
 struct Context {
     pager: Option<diydb::pager::Pager>,
+}
+
+fn do_help(_: &mut Context) {
+    println!("
+.open               to open a persistent database.
+.schema             to list the tables and their definitions.
+SELECT ...          to do a query.
+");
 }
 
 fn do_open(c: &mut Context, path: &str) {

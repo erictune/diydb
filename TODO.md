@@ -1,4 +1,4 @@
-Next small tasks:  Do all the things below end to end but with a current simple grammar.
+Next small tasks:  Do all the things below end to end but with current simple grammar.
 - Add ast.rs from stash.  (Use vscode stash tool).  Just select, create, and constants.
 - Instead of parsing to vectors of strings in parser.rs, parse to AST types.
 - Generate very basic IR from that (Scan, ComputeCol, Project)
