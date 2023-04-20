@@ -32,9 +32,7 @@ Quick Cleanups for when you don't have a lot of time:
 - Implement SearchIterator (SeekIterator?) for Table, and support "WHERE rowid = #" queries using that.
 - Get full coverage of lib.rs in integration test.
 
-A medium effort - REPL
-- Add a REPL that supports some SQLite-style commands.
-- Not sure how to apply some popular REPLs that support only fixed-structure commands, if the goal is to enter arbitrary SQL as well.
+Unknown size effort - Think about ACID and what that means for implementing the database.
 
 A large effort for later - Use of Indexes
 - Generate test data.

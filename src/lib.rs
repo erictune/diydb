@@ -88,9 +88,15 @@ fn print_table(
         }
     }
     let mut tci = new_table_iterator(pgr, root_pgnum);
+    // TODO: want "connection" in between these lines.
+    // While we don't want copying or buffering inside the execution, it is okay to buffer lines going over the connection.
+    // The execution engine can't be blocked by the printing, which might stall due to pagination, etc.  Therefore,
+    // an iterator might not be right, and at the least some kind of buffer is needed.
+    // There might need to be a limit to the buffer size though.
     formatting::print_table(&mut tci, table_name, col_names, col_types, detailed);
 }
 
+// TODO: replace this with executing a query?
 /// Print the Schema table to standard output.
 pub fn print_schema(pager: &pager::Pager) {
     let table_name = "sqlite_schema";
@@ -110,7 +116,11 @@ pub fn print_schema(pager: &pager::Pager) {
 }
 
 pub fn run_query(pager: &pager::Pager, query: &str) {
+    // TODO: First convert parse tree to AST.
     let (input_tables, output_cols) = parser::parse_select_statement(query);
+    // TODO: Then convert the AST to IR.
+    // TODO: Then execute the IR.
+
     println!("output_cols: {}", output_cols.join(", "));
     println!("input_tables: {}", input_tables.join(", "));
 
@@ -125,10 +135,21 @@ pub fn run_query(pager: &pager::Pager, query: &str) {
     if output_cols.len() != 1 || output_cols[0] != "*" {
         panic!("We don't support selecting specific columns.")
     }
+    // This would need to either:
+    // (1) happen at execution time, as part of interpreting the IR.
+    // or
+    // (2) happen once at IR building time (allowing the table's schema to be used in the IR building and optimizing process)
+    //     but also requiring us to check that it has not changed when we begin execution.
+    // Basically, we need to take a "read lock" or do a "version check" on all the pages we are reading, and that needs to happen
+    // before the first bit of information is read from the database, including the schema table.
+    // Has to be ACID be part of building the IR:  execution: looking up the table
     let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
         .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
     let (_table_name2, column_names, column_types) =
         parser::parse_create_statement(&create_statement);
+
+    // TODO: these results should come over a "connection" and then be formatted and emitted to a file or stdout outside of the execution
+    // of the code.  That means splitting print_table into the execution part (goes in IR interpreter) and the formatter.
     print_table(
         pager,
         root_pagenum,

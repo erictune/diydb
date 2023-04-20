@@ -10,6 +10,7 @@ For the author to:
 # Non-goals
 - Careful compatibility with SQLite
 - Making a database that is useful to others, beyond learning.
+- Distributed system.
 
 # Current State
 
@@ -22,12 +23,12 @@ For the author to:
 
 Initially the goal was to have layers which roughly model Sqlite's architecture (https://www.sqlite.org/arch.html), which looks like this:
 
-* Interface   
-* Parser      
-* Bytecode VM 
-* Btree       
-* Pager       
-* VFS         
+* Interface
+* Parser
+* Bytecode VM
+* Btree
+* Pager
+* VFS
 
 At present, there is a Parser, Btree code, and a basic Pager.  VFS does not seem necessary since cross-platform support is not interesting to the author. Queries are sort of interpreted right now so there is no Bytecode VM.  The author may explore JIT as
 instead of a bytecode VM (less control over fairness, but better speed?).  Some kind of command line interface seems likely.
@@ -39,7 +40,7 @@ Files are organized similarly:
 * `serial_types.rs` - handles SQLite *serial types* (which can differ from row to row within a column, and are different from SQL types).
 * `record.rs` - iterates over and parses row records that are stored in btree cells.
 * `btree/*.rs` - provides iterators to walk over btree elements.  Uses a Pager to get at pages.
-* `pager.rs` - `Pager` provides interface to get a page of the DB for reading.  In the future, it may or may not be present in memory  when requested.  It holds the handle to the open database file.  
+* `pager.rs` - `Pager` provides interface to get a page of the DB for reading.  In the future, it may or may not be present in memory  when requested.  It holds the handle to the open database file.
 * `formatting.rs` - prints out tables nicely.
 * `record.rs` - interprets row records as a sequence of column values.
 * `serial_type.rs` - interprets column values from bytes to specific types.
@@ -52,11 +53,12 @@ In no particular order.
   - Support for scanning multi-page btrees.
   - Support searching within multi-page btrees, rather than just scanning.
   - Support indexes.
-  - Support blobs 
+  - Support blobs
   - Support overflow
 - Concurrency
-  - Locking Database file when accessing.
-  - Pager layer to support multiple accessors with overlapping lifetimes.
+  - Support basic concurrency with at least Table-level locking. No plan for MVCC.
+  - Pager layer to support multiple writers of different tables, which will require some unsafe rust to
+    hide the locking done underneath.
 - Write support
   - inserts
     - insert (limited to single page btree per table.)
@@ -65,15 +67,14 @@ In no particular order.
   - deletes/modifys with size change
     - delete table (would need freelist, vacuum/compaction)
     - delete or modify row
-      - needs btree rebalance 
+      - needs btree rebalance
       - needs page defrag and freeblock support.
   - persistence
     - write state to disk at exit
     - write state after single-page update completed.
-    - write multi-page in crash-safe way (e.g. with journal or WAL) 
-  - concurrency
-    - transactions
-    - locking pages
+    - write multi-page in crash-safe way (e.g. with journal or WAL)
+  - Consistency
+    - Write rollback journal, write the transaction, and then delete the rollback journal.
 - Parsing
   - Selection of specific columns from tables.
   - `WHERE` clauses in SQL statements.
@@ -85,15 +86,17 @@ In no particular order.
   - chose loop order for joins.
   - simplify code using relational-algebra-like rules
 
+# Similar Projects
+
+- https://github.com/erikgrinaker/toydb
+
 # Notable Things I Learned
 
 ## When to use Traits vs Enums
 
-# Enums vs Traits
-
 -   Reference: https://www.possiblerust.com/guide/enum-or-trait-object
 -   You use an enum when you want to be forced to handle every alternative at every usage site.
--   You use Traits when you want to have an open-ended set of types you can use.  
+-   You use Traits when you want to have an open-ended set of types you can use.
     -   Others can extend your code by implementing a trait.  Enums are a closed set of types.
     -   If you don't need extensibility for users, you can skip using traits.  But, for testing, one may want to define mock types
         for internal use that use traits.
