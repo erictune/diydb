@@ -1,19 +1,20 @@
-//! `parser` holds routines for parsing SQL statements.
+//! `parser` routines for parsing SQL statements.
 
 use pest::Parser;
 #[derive(Parser)]
 #[grammar = "sql.pest"]
 pub struct SQLParser;
 
-pub fn parse_create_statement(c: &str) -> (String, Vec<String>, Vec<String>) {
+use crate::ast;
+
+pub fn pest_create_statement_to_ast(c: &str) -> ast::CreateStatement {
     use itertools::Itertools;
     let create_stmt = SQLParser::parse(Rule::create_stmt, c)
         .expect("unsuccessful parse") // unwrap the parse result
         .next()
         .unwrap();
 
-    let mut colnames = vec![];
-    let mut coltypes = vec![];
+    let mut coldefs: Vec<ast::ColDef> = vec![];
 
     let mut tablename = String::from("");
     // Confirm it is a create statement.
@@ -32,8 +33,10 @@ pub fn parse_create_statement(c: &str) -> (String, Vec<String>, Vec<String>) {
                                 .map(|e| String::from(e.as_str()))
                                 .collect_tuple()
                                 .unwrap();
-                            colnames.push(col_name);
-                            coltypes.push(col_type);
+                            coldefs.push(ast::ColDef {
+                                colname: ast::ColName { name: col_name },
+                                coltype: col_type,
+                            });
                         }
                         _ => unreachable!(),
                     }
@@ -43,7 +46,23 @@ pub fn parse_create_statement(c: &str) -> (String, Vec<String>, Vec<String>) {
             _ => unreachable!(),
         }
     }
-    (tablename, colnames, coltypes)
+    ast::CreateStatement { tablename, coldefs }
+}
+
+pub fn create_statement_ast_to_tuple(
+    c: ast::CreateStatement,
+) -> (String, Vec<String>, Vec<String>) {
+    (
+        c.tablename,
+        c.coldefs.iter().map(|x| x.colname.name.clone()).collect(),
+        c.coldefs.iter().map(|x| x.coltype.clone()).collect(),
+    )
+}
+
+pub fn parse_create_statement(c: &str) -> (String, Vec<String>, Vec<String>) {
+    let ast: ast::CreateStatement = pest_create_statement_to_ast(c);
+    // TODO: would there ever be any optimizations or type checks to do on a create statement?
+    create_statement_ast_to_tuple(ast)
 }
 
 #[test]
@@ -65,7 +84,8 @@ fn test_parse_create_statement() {
     for case in cases {
         let input = case.0;
         println!("Input: {}", input);
-        let actual = parse_create_statement(input);
+        let ast: ast::CreateStatement = pest_create_statement_to_ast(input);
+        let actual = create_statement_ast_to_tuple(ast);
         let expected = (
             String::from(case.1 .0),
             case.1 .1.iter().map(|x| String::from(*x)).collect(),
@@ -75,22 +95,26 @@ fn test_parse_create_statement() {
     }
 }
 
-pub fn parse_literal(lit: &str) -> &str {
+pub fn parse_literal(lit: &str) -> String {
     let literal = SQLParser::parse(Rule::literal, lit)
         .expect("unsuccessful parse") // unwrap the parse result
         .next()
         .unwrap();
-    parse_literal_from_rule(literal)
+    let ast = parse_literal_from_rule(literal);
+    format!("{}", ast)
 }
 
-fn parse_literal_from_rule<'i>(pair: pest::iterators::Pair<'i, Rule>) -> &'i str {
-    return match pair.as_rule() {
-        Rule::null_literal => "NULL",
-        Rule::true_literal => "TRUE",
-        Rule::false_literal => "FALSE",
-        Rule::integer_literal => pair.as_str(),
-        Rule::decimal_literal => pair.as_str(),
-        Rule::single_quoted_string => pair.as_str(),
+fn parse_literal_from_rule<'i>(pair: pest::iterators::Pair<'i, Rule>) -> ast::Constant {
+    match pair.as_rule() {
+        Rule::null_literal => ast::Constant::Null(),
+        Rule::true_literal => ast::Constant::Bool(true),
+        Rule::false_literal => ast::Constant::Bool(false),
+        Rule::integer_literal => ast::Constant::Int(str::parse::<i64>(pair.as_str()).unwrap()),
+        Rule::decimal_literal => {
+            // Danger: floating point conversion.
+            ast::Constant::Real(str::parse::<f64>(pair.as_str()).unwrap())
+        }
+        Rule::single_quoted_string => ast::Constant::String(String::from(pair.as_str())),
         Rule::double_quoted_string => {
             panic!("Double quoted strings are not valid string literals in SQL.")
         }
@@ -98,9 +122,9 @@ fn parse_literal_from_rule<'i>(pair: pest::iterators::Pair<'i, Rule>) -> &'i str
             panic!(
                 "parse_literal_from_rule does not handle {:?}",
                 pair.as_rule()
-            );
+            )
         }
-    };
+    }
 }
 
 #[test]
@@ -121,47 +145,63 @@ fn test_parsing_literals() {
     ];
     for case in cases {
         let input = case.0;
-        println!("Input: {}", input);
-        let actual = parse_literal(input);
+        let ast = parse_literal(input);
+        let actual = format!("{}", ast);
         let expected = case.1;
         assert_eq!(actual, expected);
     }
 }
 
+pub fn parse_select_statement(query: &str) -> (Vec<String>, Vec<String>) {
+    let ss: ast::SelectStatement = pest_select_statement_to_ast(query);
+    select_statement_ast_to_tuple(&ss)
+}
+
 // TODO: expand star into list of all column names of all tables in the input table list.
-pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
+pub fn pest_select_statement_to_ast(query: &str) -> ast::SelectStatement {
     let select_stmt = SQLParser::parse(Rule::select_stmt, query)
         .expect("unsuccessful parse") // unwrap the parse result
         .next()
         .unwrap();
 
-    let mut output_cols = vec![];
-    let mut input_tables = vec![];
+    let mut ast = ast::SelectStatement {
+        select: ast::SelectClause { items: vec![] },
+        from: None,
+    };
+
     // Confirm it is a select statement.
     for s in select_stmt.into_inner() {
         match s.as_rule() {
             Rule::table_identifier => {
-                input_tables.push(s.as_str());
+                if ast.from.is_none() {
+                    ast.from = Some(ast::FromClause {
+                        tablename: String::from(s.as_str()),
+                    });
+                } else {
+                    panic!("Too many tables in from.")
+                }
             }
             Rule::select_items => {
-                println!("s: {}", s);
-                println!("s.as_span(): {:?}", s.as_span());
-                println!("s.as_rule(): {:?}", s.as_rule());
-                println!("s.as_str(): {}", s.as_str());
+                // println!("s: {}", s);
+                // println!("s.as_span(): {:?}", s.as_span());
+                // println!("s.as_rule(): {:?}", s.as_rule());
+                // println!("s.as_str(): {}", s.as_str());
 
                 // For each select item.
                 for t in s.into_inner() {
+                    use ast::{ColName, SelItem};
                     let u = t.into_inner().next().unwrap();
-                    println!("handling {:?}", u.as_rule());
-                    output_cols.push(match u.as_rule() {
-                        Rule::column_name => u.as_str(),
-                        Rule::star => "*",
+                    ast.select.items.push(match u.as_rule() {
+                        Rule::column_name => SelItem::ColName(ColName {
+                            name: String::from(u.as_str()),
+                        }),
+                        Rule::star => SelItem::Star,
                         Rule::null_literal
                         | Rule::true_literal
                         | Rule::false_literal
                         | Rule::integer_literal
                         | Rule::decimal_literal
-                        | Rule::single_quoted_string => parse_literal_from_rule(u),
+                        | Rule::single_quoted_string => SelItem::Const(parse_literal_from_rule(u)),
                         _ => panic!("Parse error in select item"),
                     });
                 }
@@ -170,7 +210,19 @@ pub fn parse_select_statement(query: &str) -> (Vec<&str>, Vec<&str>) {
             _ => panic!("Unable to parse expr:  {} ", s.as_str()),
         }
     }
-    (input_tables, output_cols)
+    ast
+}
+
+fn select_statement_ast_to_tuple(ss: &ast::SelectStatement) -> (Vec<String>, Vec<String>) {
+    (
+        match &ss.from {
+            Some(fromclause) => {
+                vec![fromclause.tablename.clone()]
+            }
+            None => vec![],
+        },
+        ss.select.items.iter().map(|i| format!("{}", i)).collect(),
+    )
 }
 
 #[test]
@@ -200,8 +252,11 @@ fn test_parse_select_statement() {
     for case in cases {
         let input = case.0;
         println!("Input: {}", input);
-        let actual = parse_select_statement(input);
-        let expected = case.1;
+        let actual: (Vec<String>, Vec<String>) = parse_select_statement(input);
+        let expected: (Vec<String>, Vec<String>) = (
+            case.1 .0.iter().map(|x| String::from(*x)).collect(),
+            case.1 .1.iter().map(|x| String::from(*x)).collect(),
+        );
         assert_eq!(actual, expected);
     }
 }

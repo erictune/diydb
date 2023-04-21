@@ -1,3 +1,4 @@
+mod ast;
 mod btree;
 mod dbheader;
 mod formatting;
@@ -9,6 +10,8 @@ mod serial_type;
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
+
+use std::borrow::Borrow;
 
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
@@ -131,7 +134,7 @@ pub fn run_query(pager: &pager::Pager, query: &str) {
     if input_tables.is_empty() {
         panic!("We don't support selects without FROM.")
     };
-    let table_name = input_tables[0];
+    let table_name: &str = input_tables[0].borrow();
     if output_cols.len() != 1 || output_cols[0] != "*" {
         panic!("We don't support selecting specific columns.")
     }
