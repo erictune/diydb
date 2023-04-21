@@ -93,7 +93,7 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
         16384 => 16384,
         32768 => 32768,
         1 => 65536,
-        _ => {return Err(Error::UnsupportedPagesize)}
+        _ => return Err(Error::UnsupportedPagesize),
     };
     // Offset	Size	Description
     // 18	    1	    File format write version. 1 for legacy; 2 for WAL.

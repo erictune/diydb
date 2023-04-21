@@ -69,7 +69,6 @@ const MAX_PAGE_NUM: PageNum = 10_000; // 10_000 * 4k page ~= 40MB
 impl Pager {
     pub fn open(path: &str) -> Self {
         Pager {
-
             f: {
                 // TODO: Lock file when opening so that other processes do not also
                 // open and modify it, and so that is not modified while reading.

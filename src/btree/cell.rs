@@ -134,8 +134,8 @@ const TEST_PAGE: &str = "0d00 0000 0a01 ce00 01fb 01f6 01f1 01ec
 #[test]
 fn test_cell_iterator() {
     use hex::FromHex;
-    let p: Vec<u8> = Vec::from_hex(
-        TEST_PAGE.replace(&[' ', '\n'][..], "")).expect("Invalid Hex String");
+    let p: Vec<u8> =
+        Vec::from_hex(TEST_PAGE.replace(&[' ', '\n'][..], "")).expect("Invalid Hex String");
     println!("{:?}", p);
     assert_eq!(p.len(), 512);
     let mut ci = Iterator::new(&p, 0, 512);
@@ -150,7 +150,6 @@ fn test_cell_iterator() {
     assert_eq!(ci.next().unwrap(), Vec::from_hex("0309020f49").unwrap());
     assert_eq!(ci.next().unwrap(), Vec::from_hex("030a020f4a").unwrap());
     assert_eq!(ci.next(), None);
-
 }
 
 // Cell Formats from https://www.sqlite.org/fileformat2.html#b_tree_pages

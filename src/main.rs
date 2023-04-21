@@ -1,16 +1,16 @@
-use std::io::{self, BufRead, Write};
 use std::borrow::BorrowMut;
+use std::io::{self, BufRead, Write};
 
 fn main() {
     let stdin = io::stdin();
-    let mut c = Context{ pager: None };
+    let mut c = Context { pager: None };
     println!("DIYDB - simple SQL database");
     println!("Enter .help for list of commands");
     print!("> ");
     io::stdout().flush().unwrap();
     for line in stdin.lock().lines() {
         match line {
-            Ok(line) => do_command( c.borrow_mut(), line.as_str()),
+            Ok(line) => do_command(c.borrow_mut(), line.as_str()),
             Err(e) => println!("Error: {:}", e),
         }
         print!("> ");
@@ -28,7 +28,7 @@ fn do_command(c: &mut Context, line: &str) {
             // TODO: parse one argument.
             do_open(c, file_to_open)
         }
-        _ => println!("Unknown command.")
+        _ => println!("Unknown command."),
     }
 }
 
@@ -37,11 +37,13 @@ struct Context {
 }
 
 fn do_help(_: &mut Context) {
-    println!("
+    println!(
+        "
 .open               to open a persistent database.
 .schema             to list the tables and their definitions.
 SELECT ...          to do a query.
-");
+"
+    );
 }
 
 fn do_open(c: &mut Context, path: &str) {
