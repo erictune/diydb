@@ -1,9 +1,12 @@
 mod ast;
+mod ast_to_ir;
 mod btree;
 mod dbheader;
 mod formatting;
+mod ir;
 pub mod pager;
 pub mod parser;
+mod pt_to_ast;
 mod record;
 mod serial_type;
 
@@ -106,7 +109,7 @@ pub fn print_schema(pager: &pager::Pager) {
     let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
         .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
     let (_table_name2, column_names, column_types) =
-        parser::parse_create_statement(&create_statement);
+        pt_to_ast::parse_create_statement(&create_statement);
 
     print_table(
         pager,
@@ -120,7 +123,7 @@ pub fn print_schema(pager: &pager::Pager) {
 
 pub fn run_query(pager: &pager::Pager, query: &str) {
     // TODO: First convert parse tree to AST.
-    let (input_tables, output_cols) = parser::parse_select_statement(query);
+    let (input_tables, output_cols) = pt_to_ast::parse_select_statement(query);
     // TODO: Then convert the AST to IR.
     // TODO: Then execute the IR.
 
@@ -149,7 +152,7 @@ pub fn run_query(pager: &pager::Pager, query: &str) {
     let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
         .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
     let (_table_name2, column_names, column_types) =
-        parser::parse_create_statement(&create_statement);
+        pt_to_ast::parse_create_statement(&create_statement);
 
     // TODO: these results should come over a "connection" and then be formatted and emitted to a file or stdout outside of the execution
     // of the code.  That means splitting print_table into the execution part (goes in IR interpreter) and the formatter.

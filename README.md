@@ -21,29 +21,52 @@ For the author to:
 
 # Code Structure
 
-Initially the goal was to have layers which roughly model Sqlite's architecture (https://www.sqlite.org/arch.html), which looks like this:
+When starting out, I tried to emulate Sqlite's architecture (https://www.sqlite.org/arch.html), which looks like this:
 
-* Interface
-* Parser
-* Bytecode VM
-* Btree
+- Interface
+- SQL Command Processor
+  - Tokenizer
+  - Parser
+  - Code Generator
+- Virtual Machine
+- Btree
+- Pager
+- OS Interface
+
+Thee current state looks like this:
+
+- Interface - *REPL with just a few commands.*
+- SQL Command Processor
+  - Tokenizer and Parser - *Lexing and parsing are combined in Parsing Expression Grammars, which pest.rs uses. Produces a Parse Tree (PT).*
+  - Abstract Symbol Table (AST) - *A PT has one enum for all terminals.  The AST has separate enums for subsets of terminals.*
+  - AST Optimization - *Planned.  For example, constant folding and propagation.*
+  - Intermediate Representation (IR) - *Planned.  The IR graph has types for different elements for different runtime operations like Table Scan, Seek with Index, Seek with Row ID.*
+  - IR Optimization - *Planned.*
+- Execution
+  - Interpreter
+  - Virtual Machine - *Not planning to implementa bytecode VM*
+  - JIT - *Aspire to implement JIT of queries.*
+- B-Tree - *Covers key-value storage, without interpreting values as rows.*
+- Pager - *Minimal*
+  - Lock-based Concurrency Control - *Intend to implement*
+  - Multiversion (MVCC) - *Not planned*
+- OS Interface - *No, not interested in multiple OS support*
+
+Files are organized as follows:
+* Interface layer
+    * `main.rs` - Basic REPL
+    * `formatting.rs` - prints out tables nicely.
+* SQL Command Processor
+    * `sql.pest` - Defines grammar for parser.
+    * `parser.rs` - Module holds generated parser [https://pest.rs/] and tests for grammar.
+    * `pt_to_ast.rs` - Functions to convert parse tree to abstract syntax tree.
+* Execution
+  * `serial_types.rs` - handles SQLite *serial types* (which can differ from row to row within a column, and are different from SQL types).
+  * `record.rs` - iterates over and parses row records that are stored in btree cells.
+* B-Tree
+  * `btree/*.rs` - provides iterators to walk over btree elements.  Uses a Pager to get at pages.
 * Pager
-* VFS
-
-At present, there is a Parser, Btree code, and a basic Pager.  VFS does not seem necessary since cross-platform support is not interesting to the author. Queries are sort of interpreted right now so there is no Bytecode VM.  The author may explore JIT as
-instead of a bytecode VM (less control over fairness, but better speed?).  Some kind of command line interface seems likely.
-
-Files are organized similarly:
-* `main.rs` - loads a file, parses some SQL, and prints out tables.
-* `parser.rs` - Parses SQL statements into a parse tree, e.g. using https://pest.rs/book/examples/ini.html
-  * `sql.pest` - Defines grammar for generated parser.
-* `serial_types.rs` - handles SQLite *serial types* (which can differ from row to row within a column, and are different from SQL types).
-* `record.rs` - iterates over and parses row records that are stored in btree cells.
-* `btree/*.rs` - provides iterators to walk over btree elements.  Uses a Pager to get at pages.
-* `pager.rs` - `Pager` provides interface to get a page of the DB for reading.  In the future, it may or may not be present in memory  when requested.  It holds the handle to the open database file.
-* `formatting.rs` - prints out tables nicely.
-* `record.rs` - interprets row records as a sequence of column values.
-* `serial_type.rs` - interprets column values from bytes to specific types.
+  * `pager.rs` - provides interface to get a page of the DB for reading.  In the future, it may or may not be present in memory  when requested.  It holds the handle to the open database file.
 
 # Future Work
 See also [TODO.md](./TODO.md).

@@ -1,11 +1,6 @@
 Intermediate Representation
 ====================
 
-Design for IR for `diydb`.
-
-See also [./ast.md] for the Abstract Syntax Tree.
-
-See this discussion of having separate AST vs IR: https://www.querifylabs.com/blog/relational-operators-in-apache-calcite
 
 # Tables used in examples
 
@@ -25,7 +20,9 @@ create index t_a on t (a)
 These types hold some data (creation arguments), and can be evaluated.  By using traits, they
 can be strung together using different 
 
-|       type         | creation arguments | eval() step input | eval() step output  | 
+**TODO: combine AddColFromExpr into Project for consistency with how relational algebra is defined on e.g. wikipedia.**
+
+|       type         | creation arguments | eval() step input | eval() step output  |
 | ------------------ | ------------------ | ---------------- | ------------- |
 | `ScanConstantRows` | literal     values | no eval args     | `Row`        |
 | `Scan`             | table name         | no eval args     | `Row`        |
@@ -40,13 +37,15 @@ can be strung together using different
 
 # Examples of SQL converted to IR
 
+**TODO: combine AddColFromExpr into Project for consistency with how relational algebra is defined on e.g. wikipedia.**
+
 
 |  Preconditions | SQL Statement           |    IR    |   Notes |
 | - | --------------- | ----------- | --------- |
 | None | `select 1` | `ScanConstantRows` |  |
 | Table `t` | `select * from t` | `Scan("t")` |  A star says we don't need a `Project`. |
 | Table `t` | `select * from t where rowid = 1` | `SeekRowid("t", rowid)` |  | 
-| Table `t` | `select * from t where a = 1` | `Filter(LogicalColExpr(Eq(Col("a"), Const(1, int)), Scan(a)` | `Filter` only returns rows from _arg2_ which match expression _arg1_. | 
+| Table `t` | `select * from t where a = 1` | `Filter(LogicalColExpr(Eq(Col("a"), Const(1, int)), Scan(t)` | `Filter` only returns rows from _arg2_ which match expression _arg1_. |
 | Table `t` | `select a from t` | `Project(["a"], Scan("t"))` | `Project` drops columns not mentioned in the column list (arg1) from table (arg2) |
 | Table `t` | `select b from t where rowid = 1` | `Project(["b"], RowidSeek("t", 1))` | |
 | Table `t` | `select b from t where a = 1` | `Project(["b"], Filter(Eq(Col("a"), Const(1, int)), Scan(a)))` | `Filter` only returns rows from _arg2_ which match expression _arg1_. | 

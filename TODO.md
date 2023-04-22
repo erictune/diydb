@@ -1,25 +1,37 @@
-Next small tasks:  Do all the things below end to end but with current simple grammar.
-- Add ast.rs from stash.  (Use vscode stash tool).  Just select, create, and constants.
-- Instead of parsing to vectors of strings in parser.rs, parse to AST types.
-- Generate very basic IR from that (Scan, ComputeCol, Project)
-- Change Query to use the IR.  (IR is for queries only, which I guess includes inserts and deletes some day.)
-- Merge in remamining stashed support for plus/minus in AST, and add basic expressions.  Add constant folding pass.
-- Need AST printing out too.
+Current: Steel thread of parsing and execution.
+- [x] Parse to Parse tree using pest.rs.
+  - e.g. Start with `select 1, x from t;` and generate `Pairs<Rule>`
+  - [x] test that the right things are parsed and the wrong things are not.
+-  Build AST from parse tree: See AST.md.
+    from above PT , build this AST: `Select(SelectItems(Constant(1), ColName(x)), From(TableName("t")))`
+-  Build IR from AST: See IR.md
+    - e.g. from AST, build this IR: `Project(["_1", "x"], AddColumn(Constant(1), Scan("t")))`
+-  Interpret IR to execute.
+    - walk the graph: execute `Scan("t")` one step, take the output, send to `AddColumn(...)`, and so on, emitting the resulting rows.
+    - Test IR components using unit testing, with fake inputs.
+Scope for "steel thread" is just constants (literals) and expressions.
 
-Next big effort: parsing, optimization and execution.
-1.  Build AST from parse tree: See AST.md.
-    - e.g. `select 1 + 1;` -[parse]-> `Pairs<Rule>` -[build_ast]-> `Select(Add(Constant(1), Constant(1)))`
-1.  Build IR from AST: See IR.md
-    - e.g. `select a + b from t;` -[parse&build_ast]-> `Select(Add(Col("a"), Col("b")))` -> `Project("_1", AddCol(Expr(...), Scan("t")))
-    - e.g. `select * from T` -> ... -> `Scan(T)`.
-    - e.g. `select a from T` -> ... -> `Project([Col(a)], Scan(T))`.
-1.  Interpret IR to execute.
-    - testing for query execution can mostly use fake tables, which implement certain traits shared by real btree iterators.
-    - testing things could get tedious otherwise.
-1. Optimize IR, e.g.
-    - collapse constant expressions.
-    - identify when rowid can be used.
-    - Later: identify when index can be used.
+    `Select(Add(Constant(1), Constant(1)))`
+
+Subsequent Task: AST Optimization
+- [ ] Add binary expressions on literals and column names to pest grammar.
+  - e.g.  `select 1 + 1, x + (2 + 2) from t;`
+  - [ ] addition and subtraction is sufficient - avoid precedence problem for now.
+  - See code in stash.
+- [ ] Add operators and basic expressions in `SelectClause` to `pt_to_ast.rs` and `ast.rs`.
+- [ ] Add `ast_optimize.rs` to do constant folding.
+  - [ ] e.g.  `Project(["_1", "_2"], AddColumn(Constant(2 /* 1+1 */), AddColumn(ColExpr(Add(ColName(x), Constant(4))), Scan("t")))`
+- [ ] test execution of such queries.
+
+Subsequent task: Add Where
+
+Subsequent Task: IR Optimization
+- [ ] Parse a query which can be optimized by changing a scan to a rowid or index seek.
+  - e.g. `select * from t where rowid = 3`
+- [ ] Post IR generation, detect that `Scan` can be replaced with  `SeekRowid`
+- [ ] Execute it, and check that it was more efficient (steps executed?)
+
+-----
 
 Quick Cleanups for when you don't have a lot of time:
 - Improve the CLI - e.g. allow opening other files.
@@ -31,6 +43,11 @@ Quick Cleanups for when you don't have a lot of time:
 - run rustfmt
 - Implement SearchIterator (SeekIterator?) for Table, and support "WHERE rowid = #" queries using that.
 - Get full coverage of lib.rs in integration test.
+
+
+----
+
+Beyond:
 
 Unknown size effort - Think about ACID and what that means for implementing the database.
 
