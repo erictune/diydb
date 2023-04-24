@@ -46,7 +46,6 @@ use std::boxed::Box;
 pub struct Pager {
     f: Box<RefCell<std::fs::File>>,
     pages: Vec<Option<Vec<u8>>>,
-    initialized: RefCell<bool>,
     page_size: u32,
 }
 
@@ -95,18 +94,12 @@ impl Pager {
         Pager {
             f: Box::new(file),
             pages: vec![],
-            initialized: RefCell::new(false),
             page_size: h.pagesize as u32,
         }
     }
 
-    // Separate from open because I could not figure out how to return a file from the constructor
-    // and use the file in one function.
-    /// Must be called before using other methods.  Checks the database header and reads in its contents.
+    // Reads in all the pages of the file. TODO: do this on demand.
     pub fn initialize(&mut self) {
-        if *self.initialized.borrow() {
-            return;
-        }
         let h = crate::dbheader::get_header_clone(&mut self.f.borrow_mut())
             .expect("Should have parsed db header");
         self.f
@@ -116,16 +109,8 @@ impl Pager {
         if h.numpages > MAX_PAGE_NUM as u32 {
             panic!("Too many pages");
         }
-        *self.initialized.borrow_mut() = true;
-
         for pn in 1..h.numpages + 1 {
             self.make_page_present(pn as usize);
-        }
-    }
-    // Reads the header of a file after the file has been opened to ensure it is a valid file.
-    fn check_initialized(&self) {
-        if !*self.initialized.borrow() {
-            panic!("Use of uninitialized Pager.");
         }
     }
 
@@ -189,11 +174,9 @@ impl Pager {
     // that is in use.  So, the returned object (say, struct PageRef?) will need to participate in reference
     // counting.
     pub fn get_page_ro<'a, 'b: 'a>(&'b self, pn: PageNum) -> Result<&'a Vec<u8>, Error> {
-        self.check_initialized();
         if pn > MAX_PAGE_NUM {
             return Err(Error::PageNumberBeyondLimits);
         }
-
         self.check_present(pn);
         match &self.pages[pn - 1] {
             Some(v) => Ok(v),
