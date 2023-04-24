@@ -45,6 +45,21 @@ use std::boxed::Box;
 /// A `Pager` manages the file locking and the memory use for one open database file.
 pub struct Pager {
     f: Box<RefCell<std::fs::File>>,
+    // TODO: pages could return a RefCell so that pages can be paged in on demand.
+    // Then get rid of `initialize()` and have `check_present()` call `make_present()` where needed.
+    // When implementing that, some things to consider are:
+    // - The memory overhead: I think it should be low, given that pages (512B-4kB) are much larger than the overhead (16B-24B?).
+    // - The cpu overhead: Is it paid by every function in the stack of iterators and , or once per at allocation and de-allocation, or on every access?  Perhaps benchmark it.
+    //   - Scan Preloaded pages without RefCell vs scan preloaded pages acessed via RefCell.
+    // Does the need to deal with a type other than byte slice hurt the readability of all the downstream code?
+    // - Does RefCell allow locally converting to a readonly byte slice, within a scope?  Does that help?
+    // Should `get_page_ro()` return a PageHandle?
+    //   - Or should downstream code just be generic enough (require Traits it needs) that it can deal with
+    //     a RefCell<...> or whatever locking wrapper is needed next?
+    //   - Will I end up with RefCell<...<RefCell<...>>...>  since both the list needs locking to expand, and the
+    //     pages need locking for presence?
+    // Do I need a way to deal with failure other than panicing (which is what RefCell does?)  Like waiting, or logging
+    // specific information?
     pages: Vec<Option<Vec<u8>>>,
     page_size: u32,
 }
