@@ -47,7 +47,7 @@ pub struct Pager {
     f: Box<RefCell<std::fs::File>>,
     pages: Vec<Option<Vec<u8>>>,
     initialized: RefCell<bool>,
-    page_size: RefCell<Option<u32>>,
+    page_size: u32,
 }
 
 #[derive(thiserror::Error, Debug, Clone)]
@@ -96,7 +96,7 @@ impl Pager {
             f: Box::new(file),
             pages: vec![],
             initialized: RefCell::new(false),
-            page_size: RefCell::new(Some(h.pagesize as u32)),
+            page_size: h.pagesize as u32,
         }
     }
 
@@ -116,7 +116,6 @@ impl Pager {
         if h.numpages > MAX_PAGE_NUM as u32 {
             panic!("Too many pages");
         }
-        *self.page_size.borrow_mut() = Some(h.pagesize as u32);
         *self.initialized.borrow_mut() = true;
 
         for pn in 1..h.numpages + 1 {
@@ -137,11 +136,11 @@ impl Pager {
     }
 
     fn read_page_from_file(&self, pn: PageNum) -> Result<Vec<u8>, Error> {
-        let mut v = vec![0_u8; self.page_size.borrow().unwrap() as usize];
+        let mut v = vec![0_u8; self.page_size as usize];
         self.f
             .borrow_mut()
             .seek(SeekFrom::Start(
-                (pn - 1) as u64 * self.page_size.borrow().unwrap() as u64,
+                (pn - 1) as u64 * self.page_size as u64,
             ))
             .unwrap();
         match self
@@ -210,9 +209,6 @@ impl Pager {
     }
 
     pub fn get_page_size(&self) -> u32 {
-        self.check_initialized();
         self.page_size
-            .borrow()
-            .expect("Should have initialized before calling get_page_size()")
     }
 }
