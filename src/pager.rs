@@ -40,10 +40,11 @@
 
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom};
+use std::boxed::Box;
 
 /// A `Pager` manages the file locking and the memory use for one open database file.
 pub struct Pager {
-    f: RefCell<std::fs::File>,
+    f: Box<RefCell<std::fs::File>>,
     pages: Vec<Option<Vec<u8>>>,
     initialized: RefCell<bool>,
     page_size: RefCell<Option<u32>>,
@@ -68,8 +69,7 @@ const MAX_PAGE_NUM: PageNum = 10_000; // 10_000 * 4k page ~= 40MB
 
 impl Pager {
     pub fn open(path: &str) -> Self {
-        Pager {
-            f: {
+        let file =
                 // TODO: Lock file when opening so that other processes do not also
                 // open and modify it, and so that is not modified while reading.
                 // I tried  https://docs.rs/file-lock/latest/file_lock/ but it doesn't support opening readonly and locking at the same time.
@@ -80,12 +80,23 @@ impl Pager {
                         .write(false)
                         .create(false)
                         .open(path)
-                        .expect("Should have opened file."),
-                )
-            },
+                        .expect("Should have opened file."
+                    )
+                );
+        let h = crate::dbheader::get_header_clone(&mut file.borrow_mut())
+            .expect("Should have parsed db header");
+       file
+            .borrow_mut()
+            .seek(SeekFrom::Start(0))
+            .expect("Should have returned file cursor to start");
+        if h.numpages > MAX_PAGE_NUM as u32 {
+            panic!("Too many pages");
+        }
+        Pager {
+            f: Box::new(file),
             pages: vec![],
             initialized: RefCell::new(false),
-            page_size: RefCell::new(None),
+            page_size: RefCell::new(Some(h.pagesize as u32)),
         }
     }
 
