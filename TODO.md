@@ -2,16 +2,22 @@ Current: Steel thread of parsing and execution.
 - [x] Parse to Parse tree using pest.rs.
   - e.g. Start with `select 1, x from t;` and generate `Pairs<Rule>`
   - [x] test that the right things are parsed and the wrong things are not.
--  Build AST from parse tree: See AST.md.
-    from above PT , build this AST: `Select(SelectItems(Constant(1), ColName(x)), From(TableName("t")))`
--  Build IR from AST: See IR.md
-    - e.g. from AST, build this IR: `Project(["_1", "x"], AddColumn(Constant(1), Scan("t")))`
--  Interpret IR to execute.
-    - walk the graph: execute `Scan("t")` one step, take the output, send to `AddColumn(...)`, and so on, emitting the resulting rows.
-    - Test IR components using unit testing, with fake inputs.
+- [x]  Build AST from parse tree: See AST.md.
+  - [x] from above PT , test we can build this AST: `Select(SelectItems(Constant(1), ColName(x)), From(TableName("t")))`
+-  [x] Build IR from AST: See IR.md
+    - e.g. from AST, build this IR: `Project([Constant(1), ColName("x")], Scan("t")))`
+    - [x] test the above case
+-  [ ] Interpret IR to execute.
+    - [ ] each Block to have `prepare(...)` this could be different by type.
+    - [ ] each Block to have `next()` that returns a row or end iteration.  Internally it calls next until it has a row.
+    - [ ] connect root block to printer.
+    - [ ] minimize copying, using refs.  Caller decides if clone needed.
+      - [ ] How long is ref valid if page needs to go out?  Page waits until query done.
+    - [ ] Test IR evaluation using unit testing, with fake tables.
+-  [ ] end to end test of query PT/AST/IR/Execute.
 Scope for "steel thread" is just constants (literals) and expressions.
 
-    `Select(Add(Constant(1), Constant(1)))`
+Then make this work: `Select(Add(Constant(1), Constant(1)))`
 
 Subsequent Task: AST Optimization
 - [ ] Add binary expressions on literals and column names to pest grammar.
@@ -89,10 +95,10 @@ Making the pager and btree work for harder use cases:
   - I'll probably have o write my own unsafe code to use SQLite's data structures.
   - This blog goes over tree traversals: https://sachanganesh.com/programming/graph-tree-traversals-in-rust/
     They do several things:
-    - They don't store the references to the data in the stack for the inorder traversal. 
+    - They don't store the references to the data in the stack for the inorder traversal.
       They just store the references to the page numbers.
       - Would this help us?  Need to think how transactions would work.  Do we try to lock all the pages we need for read as we go,
         and then succeed if we get them all?
-    - They use an arena allocator where all the memory has a lifetime longer than the traversal (same with my pager.) 
+    - They use an arena allocator where all the memory has a lifetime longer than the traversal (same with my pager.)
   - how to module: https://www.sheshbabu.com/posts/rust-module-system/
 

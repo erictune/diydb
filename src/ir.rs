@@ -46,23 +46,28 @@ use std::boxed::Box;
 
 /// `Block` represents any of the IR blocks that can be chained together.
 /// A Block takes rows in from 0, one or more sources, and emits rows to a parent block.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Block {
     Scan(Scan),
     Project(Project),
     ConstantRow(ConstantRow),
 }
 
+
 /// `ConstantRow` represents a table that has one row.
+#[derive(Debug, Clone, PartialEq)]
 pub struct ConstantRow {
     pub row: Vec<ast::Constant>,
 }
 
 /// `Scan` represents a one-pass scan over all the rows of a table.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Scan {
     pub tablename: String,
 }
 
 /// `Project` represents the projection operation: taking a subset of columns, and computing new columns.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Project {
     pub outcols: Vec<ast::SelItem>,
     pub input: Box<Block>,
