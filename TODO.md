@@ -10,11 +10,14 @@ Build steel thread of parsing and execution.
     - e.g. from AST, build this IR: `Project([Constant(1), ColName("x")], Scan("t")))`
     - [x] test the above case
 -  [ ] Interpret IR to execute.
-    - [ ] each Block to have `prepare(...)` this could be different by type.
-    - [ ] each Block to have `next()` that returns a row or end iteration.  Internally it calls next until it has a row.
+    - [x] interpret `Scan`
+    - [ ] return a row iterator or cursor from `run_ir`.  move formatting to main.
+    - [ ] handle `ConstantRow`
+    - [ ] handle `Project`.
     - [ ] connect root block to printer.
-    - [ ] minimize copying, using refs.  Caller decides if clone needed.
-      - [ ] How long is ref valid if page needs to go out?  Page waits until query done.
+    - [ ] Goal is to minimize copying, using refs.  Esp. in deeper parts of IR tree.
+      - Parent in IR tree to decides if clone needed.  Child to offer a ref.
+      - How long is ref valid if page needs to go out?  Page waits until query done.  Refs last for lifetime of the IR execution (of the IR?)
     - [ ] Test IR evaluation using unit testing, with fake tables.
 -  [ ] end to end test of query PT/AST/IR/Execute.
 Scope for "steel thread" is just constants (literals) and expressions.
@@ -61,6 +64,7 @@ Quick Cleanups for when you don't have a lot of time:
 - run rustfmt
 - Implement SearchIterator (SeekIterator?) for Table, and support "WHERE rowid = #" queries using that.
 - Get full coverage of lib.rs in integration test.
+- `.explain` by printing IR out.
 
 
 # B-tree Layer Projects

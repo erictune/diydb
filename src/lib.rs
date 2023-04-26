@@ -4,6 +4,7 @@ mod btree;
 mod dbheader;
 mod formatting;
 mod ir;
+mod ir_interpreter;
 pub mod pager;
 pub mod parser;
 mod pt_to_ast;
@@ -13,8 +14,6 @@ mod serial_type;
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
-
-use std::borrow::Borrow;
 
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
@@ -122,75 +121,10 @@ pub fn print_schema(pager: &pager::Pager) {
 }
 
 pub fn run_query(pager: &pager::Pager, query: &str) {
-    // TODO: First convert parse tree to AST.
-    let (input_tables, output_cols) = pt_to_ast::parse_select_statement(query);
-    // TODO: Then convert the AST to IR.
-    // TODO: Then execute the IR.
-
-    println!("output_cols: {}", output_cols.join(", "));
-    println!("input_tables: {}", input_tables.join(", "));
-
-    // Execute the query (TODO: use code generation.)
-    if input_tables.len() > 1 {
-        panic!("We don't support multiple table queries.")
-    };
-    if input_tables.is_empty() {
-        panic!("We don't support selects without FROM.")
-    };
-    let table_name: &str = input_tables[0].borrow();
-    if output_cols.len() != 1 || output_cols[0] != "*" {
-        panic!("We don't support selecting specific columns.")
-    }
-    // This would need to either:
-    // (1) happen at execution time, as part of interpreting the IR.
-    // or
-    // (2) happen once at IR building time (allowing the table's schema to be used in the IR building and optimizing process)
-    //     but also requiring us to check that it has not changed when we begin execution.
-    // Basically, we need to take a "read lock" or do a "version check" on all the pages we are reading, and that needs to happen
-    // before the first bit of information is read from the database, including the schema table.
-    // Has to be ACID be part of building the IR:  execution: looking up the table
-    let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
-        .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
-    let (_table_name2, column_names, column_types) =
-        pt_to_ast::parse_create_statement(&create_statement);
-
-    // TODO: these results should come over a "connection" and then be formatted and emitted to a file or stdout outside of the execution
-    // of the code.  That means splitting print_table into the execution part (goes in IR interpreter) and the formatter.
-    print_table(
-        pager,
-        root_pagenum,
-        table_name,
-        column_names,
-        column_types,
-        false,
-    );
-
-    // TODO: Generate a sequence of instruction for the above statement, like:
-    //
-    // let prog = vec![
-    //      OpOpenTable("a", Cursor1),  // addr 0
-    //      OpBreakIfDone(Cursor1),
-    //      // Maybe one op for each column to be selected?
-    //      OpReadFromCursor(Cursor1, RowReg1),
-    //      OpSelect(RowReg1, SelExpr),
-    //      OpWriteToOutputStream(RowReg1),
-    //      OpJumpToAddr(0),
-    // ];
-
-    // Explain the program to the user.
-    // println!("{}", program.explain());
-
-    // Define a VM to run the program:
-    // let cursor = get_read_cursor(prog.input_table_name());
-    // vm.reset();
-    // vm.load_program(prog);
-    // while true {
-    //     match prog.step() {
-    //         StepResult::Halt => break,
-    //         StepResult::Result(row) => println!(row),
-    //         StepResult::Processed => _,
-    //     }
-    // }
-
-    // Define interface convenience functions to run a query while formatting the output to a text table, etc.
+    // Convert parse tree to AST.
+    let ss: ast::SelectStatement = pt_to_ast::pt_select_statement_to_ast(query);
+    // Convert the AST to IR.
+    let ir: ir::Block = ast_to_ir::ast_select_statement_to_ir(&ss);
+    // Execute the IR.
+    ir_interpreter::run_ir(pager, &ir);
 }

@@ -216,7 +216,8 @@ pub fn pt_select_statement_to_ast(query: &str) -> ast::SelectStatement {
     ast
 }
 
-// TODO: get rid of this when IR is done.
+// TODO: remove this and the following function and directly test that the correct AST is produced.
+#[cfg(test)]
 fn ast_select_statement_to_tuple(ss: &ast::SelectStatement) -> (Vec<String>, Vec<String>) {
     (
         match &ss.from {
@@ -229,6 +230,7 @@ fn ast_select_statement_to_tuple(ss: &ast::SelectStatement) -> (Vec<String>, Vec
     )
 }
 
+#[cfg(test)]
 pub fn parse_select_statement(query: &str) -> (Vec<String>, Vec<String>) {
     let ss: ast::SelectStatement = pt_select_statement_to_ast(query);
     ast_select_statement_to_tuple(&ss)

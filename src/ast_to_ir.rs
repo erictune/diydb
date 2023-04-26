@@ -12,7 +12,7 @@ use std::boxed::Box;
 // converted, so enums are working fine so far.
 
 // TODO: use this in the main query processing path.
-fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> ir::Block {
+pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> ir::Block {
     // If the select only has a select clause, then we just need to return a constant
     // expression.
     if ss.from.is_none() {
@@ -36,9 +36,13 @@ fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> ir::Block {
     for item in &ss.select.items[..] {
         match item {
             ast::SelItem::Const(_) => outcols.push(item.clone()), // TODO: temporary name for constant valued columns?
-            ast::SelItem::ColName(c) => outcols.push(item.clone()), // TODO: Is this a good time to check if row in table's schema?  Or at execution time?
+            ast::SelItem::ColName(_) => outcols.push(item.clone()), // TODO: Is this a good time to check if row in table's schema?  Or at execution time?
             ast::SelItem::Star => outcols.push(item.clone()),       // TODO: expand star here?
         }
+    }
+    if outcols.len() == 1 && outcols[0] == ast::SelItem::Star {
+        // No project block needed if all columns selected.
+        return ir::Block::Scan(scan);
     }
     ir::Block::Project(ir::Project {
         outcols: outcols, // For star, we need to lookup the table to expand star, or do that on the fly?
@@ -49,14 +53,12 @@ fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> ir::Block {
 #[test]
 fn test_ast_select_statement_to_ir() {
     // These should not panic.
-    // TODO: have then return a Result.
-    let x = ir::Block::Scan;
-
+    // TODO: have them return a Result.
     struct Case {
         desc: String,
         input: ast::SelectStatement,
         expected: ir::Block,
-    };
+    }
     let cases: Vec<Case> = vec![
         Case {
            desc:  "Select 1;".to_string(),
@@ -87,6 +89,22 @@ fn test_ast_select_statement_to_ir() {
                         ir::Block::Scan(ir::Scan{ tablename: String::from("t") })
                     ),
                 }
+            ),
+        },
+        Case {
+            desc: "Select * from t;".to_string(),
+            input: ast::SelectStatement {
+                select: ast::SelectClause {
+                    items: vec![
+                        ast::SelItem::Star,
+                    ],
+                },
+                from: Some(ast::FromClause {
+                    tablename: String::from("t"),
+                }),
+            },
+            expected: ir::Block::Scan(
+                ir::Scan{ tablename: String::from("t") }
             ),
         },
         Case {
