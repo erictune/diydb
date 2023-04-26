@@ -49,7 +49,6 @@ Scope for "steel thread" is just constants (literals) and expressions.
 
 Quick Cleanups for when you don't have a lot of time:
 - Improve the CLI to allow opening named files.
-- Get rid of PageReader and make check_header just be a convenience unction on a single (page, start_offset).
 - Make a Pager::Page object that has is_present(), purpose(), start_offset(), and data() methods.
 - Make a Btree::Page object that has btree_header() and btree_type() attributes.
 - Replace panics that are likely to happen during interactive with Results<>.

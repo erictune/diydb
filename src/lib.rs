@@ -62,7 +62,7 @@ pub fn get_creation_sql_and_root_pagenum(
     None
 }
 
-fn new_reader_for_page(pgr: &pager::Pager, pgnum: usize) -> btree::header::PageReader {
+fn page_and_offset_for_pagenum(pgr: &pager::Pager, pgnum: usize) -> (&Vec<u8>, pager::PageNum) {
     let page = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
         Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
@@ -71,7 +71,7 @@ fn new_reader_for_page(pgr: &pager::Pager, pgnum: usize) -> btree::header::PageR
         1 => 100,
         _ => 0,
     };
-    btree::header::PageReader::new(page, btree_start_offset)
+    (page, btree_start_offset)
 }
 
 pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Iterator {
@@ -87,8 +87,8 @@ fn print_table(
     detailed: bool,
 ) {
     {
-        let pr = new_reader_for_page(pgr, root_pgnum);
-        let hdr = pr.check_header();
+        let (page, offset) = page_and_offset_for_pagenum(pgr, root_pgnum);
+        let hdr = btree::header::check_header(page, offset);
         if detailed {
             println!("{:?}", hdr);
         }

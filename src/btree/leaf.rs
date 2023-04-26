@@ -70,8 +70,7 @@ pub fn new_table_leaf_cell_iterator_for_page(
         1 => 100,
         _ => 0,
     };
-    let pr = btree::header::PageReader::new(page, btree_start_offset);
-    let hdr = pr.check_header();
+    let hdr = btree::header::check_header(page, btree_start_offset);
     println!("Examining page {} with header {:?}", pgnum, hdr);
     match hdr.btree_page_type {
         btree::PageType::TableLeaf => {

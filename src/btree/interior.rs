@@ -135,8 +135,7 @@ fn new_table_interior_cell_iterator_for_page(
         1 => 100,
         _ => 0,
     };
-    let pr = crate::btree::header::PageReader::new(page, btree_start_offset);
-    let hdr = pr.check_header();
+    let hdr = super::header::check_header(page, btree_start_offset);
     println!("Examining page {} with header {:?}", pgnum, hdr);
     match hdr.btree_page_type {
         btree::PageType::TableInterior => btree::interior::ScanIterator::new(

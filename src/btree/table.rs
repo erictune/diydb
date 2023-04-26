@@ -94,8 +94,7 @@ impl<'p> Iterator<'p> {
         loop {
             let page = self.pager.get_page_ro(next_page).unwrap();
             // TODO: make it less complicated to just get the type of the new page you are about to work with.
-            let pr = super::header::PageReader::new(page, Self::btree_start_offset(starting_page));
-            let hdr = pr.check_header();
+            let hdr = super::header::check_header(page, Self::btree_start_offset(starting_page));
             let rmp = hdr.rightmost_pointer;
             let page_type = hdr.btree_page_type;
             match page_type {
