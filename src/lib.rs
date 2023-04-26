@@ -40,7 +40,7 @@ pub fn get_creation_sql_and_root_pagenum(
             let this_table_name = serial_type::value_to_string(
                 &row[SCHEMA_TABLE_TBL_NAME_COLIDX].0,
                 row[SCHEMA_TABLE_TBL_NAME_COLIDX].1,
-            );
+            ).unwrap();
             if this_table_name != table_name {
                 continue;
             }
@@ -54,7 +54,7 @@ pub fn get_creation_sql_and_root_pagenum(
             let creation_sql = serial_type::value_to_string(
                 &row[SCHEMA_TABLE_SQL_COLIDX].0,
                 row[SCHEMA_TABLE_SQL_COLIDX].1,
-            );
+            ).unwrap();
             return Some((root_pagenum, creation_sql));
         }
     }

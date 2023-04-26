@@ -46,7 +46,7 @@ pub fn print_table(
             print!("{:2} |", rowid);
             let hi = ValueIterator::new(payload);
             for (t, v) in hi {
-                print!(" {:15} |", value_to_string(&t, v));
+                print!(" {:15} |", value_to_string(&t, v).unwrap());
             }
             println!();
         }

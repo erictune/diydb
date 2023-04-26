@@ -2,6 +2,23 @@ use byteorder::BigEndian;
 use byteorder::ReadBytesExt;
 use std::io::Read;
 
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Pager: Error accessing database file: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Unable to convert type {from} to {to}.")]
+    TypeError{
+        from: String,
+        to: String,
+    },
+    #[error("Unimplemented type.")]
+    UnimplementedError,
+}
+use Error::{IoError, TypeError};
+const TYPE_NAME_INT: &str = "INT";
+const TYPE_NAME_NULL: &str = "NULL";
+const TYPE_NAME_REAL: &str = "REAL";
+
 /// Convert a serial type number to a string.
 ///
 ///  # Arguments
@@ -57,51 +74,51 @@ pub fn typecode_to_string(serial_type: i64) -> &'static str {
 ///
 /// Panics on errors.
 // TODO: handle errors better, by returning a Result.
-pub fn value_to_string(serial_type: &i64, data: &[u8]) -> String {
+pub fn value_to_string(serial_type: &i64, data: &[u8]) -> Result<String, Error> {
     let mut c = std::io::Cursor::new(data);
     match serial_type {
         // Serial Type	Content Size	Meaning
         // 0	        0	            Value is a NULL.
-        0 => "NULL".to_string(),
+        0 => Ok("NULL".to_string()),
         // 1	        1	            Value is an 8-bit twos-complement integer.
-        1 => format!("{}", c.read_i8().unwrap()),
+        1 => Ok(format!("{}", c.read_i8().map_err(|e| IoError(e))?)),
         // 2	        2	            Value is a big-endian 16-bit twos-complement integer.
-        2 => format!("{}", c.read_i16::<BigEndian>().unwrap()),
+        2 => Ok(format!("{}", c.read_i16::<BigEndian>().map_err(|e| IoError(e))?)),
         // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
         3 => {
             let mut bytes = [0_u8; 4];
-            c.read_exact(&mut bytes[1..]).unwrap();
+            c.read_exact(&mut bytes[1..]).map_err(|e| IoError(e))?;
             bytes[0] = match (bytes[1] & 0b1000_0000) > 0 {
                 false => 0,
                 true => 0xff,
             };
-            i32::from_be_bytes(bytes).to_string()
+            Ok(i32::from_be_bytes(bytes).to_string())
         }
         // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
-        4 => format!("{}", c.read_i32::<BigEndian>().unwrap()),
+        4 => Ok(format!("{}", c.read_i32::<BigEndian>().map_err(|e| IoError(e))?)),
         // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
-        5 => unimplemented!(),
+        5 => Err(Error::UnimplementedError),
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
-        6 => format!("{}", c.read_i64::<BigEndian>().unwrap()),
+        6 => Ok(format!("{}", c.read_i64::<BigEndian>().map_err(|e| IoError(e))?)),
         // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
-        7 => format!("{}", c.read_f64::<BigEndian>().unwrap()),
+        7 => Ok(format!("{}", c.read_f64::<BigEndian>().map_err(|e| IoError(e))?)),
         // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
-        8 => "0".to_string(),
+        8 => Ok("0".to_string()),
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
-        9 => "1".to_string(),
+        9 => Ok("1".to_string()),
         // 10,11	    variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
         // N≥12 & even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
         x if *x >= 12 && (*x % 2 == 0) => {
             let mut buf = vec![0_u8; (*x as usize - 12) / 2];
-            c.read_exact(&mut buf[..]).unwrap();
-            format!("{:?}", buf)
+            c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
+            Ok(format!("{:?}", buf))
         }
         // N≥13 & odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
         x if *x >= 13 && (*x % 2 == 1) => {
             // TODO: avoid the copy somehow?
             let mut buf = vec![0_u8; (*x as usize - 13) / 2];
-            c.read_exact(&mut buf[..]).unwrap();
-            String::from_utf8(buf).expect("Should have converted string to utf8")
+            c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
+            Ok(String::from_utf8(buf).expect("Should have converted string to utf8"))
         }
         _ => panic!("Unknown column type: {}", serial_type),
     }
@@ -110,51 +127,53 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> String {
 #[test]
 fn test_value_to_string() {
     // Null
-    assert_eq!(value_to_string(&0, b""), "NULL".to_string());
+    assert_eq!(value_to_string(&0, b"").unwrap(), "NULL".to_string());
 
     // one byte ints
-    assert_eq!(value_to_string(&1, &[0x7f]), "127".to_string());
-    assert_eq!(value_to_string(&1, &[0xff]), "-1".to_string());
-    assert_eq!(value_to_string(&1, &[0x01]), "1".to_string());
+    assert_eq!(value_to_string(&1, &[0x7f]).unwrap(), "127".to_string());
+    assert_eq!(value_to_string(&1, &[0xff]).unwrap(), "-1".to_string());
+    assert_eq!(value_to_string(&1, &[0x01]).unwrap(), "1".to_string());
 
     // two byte ints
-    assert_eq!(value_to_string(&2, &[0x00, 0x7f]), "127".to_string());
-    assert_eq!(value_to_string(&2, &[0xff, 0xff]), "-1".to_string());
-    assert_eq!(value_to_string(&2, &[0x00, 0x01]), "1".to_string());
-    assert_eq!(value_to_string(&2, &[0x01, 0x00]), "256".to_string());
+    assert_eq!(value_to_string(&2, &[0x00, 0x7f]).unwrap(), "127".to_string());
+    assert_eq!(value_to_string(&2, &[0xff, 0xff]).unwrap(), "-1".to_string());
+    assert_eq!(value_to_string(&2, &[0x00, 0x01]).unwrap(), "1".to_string());
+    assert_eq!(value_to_string(&2, &[0x01, 0x00]).unwrap(), "256".to_string());
 
     // three byte ints
-    assert_eq!(value_to_string(&3, &[0x00, 0x00, 0x7f]), "127".to_string());
-    assert_eq!(value_to_string(&3, &[0xff, 0xff, 0xff]), "-1".to_string());
-    assert_eq!(value_to_string(&3, &[0x00, 0x00, 0x01]), "1".to_string());
-    assert_eq!(value_to_string(&3, &[0x00, 0x01, 0x00]), "256".to_string());
+    assert_eq!(value_to_string(&3, &[0x00, 0x00, 0x7f]).unwrap(), "127".to_string());
+    assert_eq!(value_to_string(&3, &[0xff, 0xff, 0xff]).unwrap(), "-1".to_string());
+    assert_eq!(value_to_string(&3, &[0x00, 0x00, 0x01]).unwrap(), "1".to_string());
+    assert_eq!(value_to_string(&3, &[0x00, 0x01, 0x00]).unwrap(), "256".to_string());
     assert_eq!(
-        value_to_string(&3, &[0x01, 0x00, 0x00]),
+        value_to_string(&3, &[0x01, 0x00, 0x00]).unwrap(),
         "65536".to_string()
     );
 
     // TODO: larger ints and float.
 
     // Literal 0 and 1
-    assert_eq!(value_to_string(&8, b""), "0".to_string());
+    assert_eq!(value_to_string(&8, b"").unwrap(), "0".to_string());
 
-    assert_eq!(value_to_string(&9, b""), "1".to_string());
+    assert_eq!(value_to_string(&9, b"").unwrap(), "1".to_string());
 
     // Text of various lengths
-    assert_eq!(value_to_string(&13, b""), "".to_string());
+    assert_eq!(value_to_string(&13, b"").unwrap(), "".to_string());
 
-    assert_eq!(value_to_string(&19, b"Foo"), "Foo".to_string());
+    assert_eq!(value_to_string(&19, b"Foo").unwrap(), "Foo".to_string());
 
-    assert_eq!(value_to_string(&25, b"FooBar"), "FooBar".to_string());
+    assert_eq!(value_to_string(&25, b"FooBar").unwrap(), "FooBar".to_string());
 
     // Blob
     assert_eq!(
-        value_to_string(&18, &[0x00_u8, 0x01, 0xff]),
+        value_to_string(&18, &[0x00_u8, 0x01, 0xff]).unwrap(),
         "[0, 1, 255]".to_string()
     );
 }
 
-/// Convert a sqlite value in "serial type" format into Some(i64) or None if the type is unsuitable for conversion to i64.
+/// Convert a sqlite value in "serial type" format into Some(i64).
+/// Returns an Error if the type is unsuitable for conversion to i64.
+/// Returns an Error if there is a problem reading from the data.
 ///
 ///  # Arguments
 /// * `serial_type` - A SQLite serial type code.
@@ -166,90 +185,96 @@ fn test_value_to_string() {
 /// BLOB and TEXT always return NONE.
 /// Panics on errors.
 // TODO: handle errors better, by returning a Result instead of Option, with more detail on the error, and not panicing.
-pub fn value_to_i64(serial_type: &i64, data: &[u8], convert_nulls_to_zero: bool) -> Option<i64> {
+pub fn value_to_i64(serial_type: &i64, data: &[u8], convert_nulls_to_zero: bool) -> Result<i64, Error> {
     let mut c = std::io::Cursor::new(data);
     match serial_type {
         // Serial Type	Content Size	Meaning
         // 0	        0	            Value is a NULL.
         0 => {
             if convert_nulls_to_zero {
-                Some(0)
+                Ok(0)
             } else {
-                None
+                let from = String::from(TYPE_NAME_NULL);
+                let to = String::from(TYPE_NAME_INT);
+                Err(Error::TypeError{from, to})
             }
         }
         // 1	        1	            Value is an 8-bit twos-complement integer.
-        1 => Some(c.read_i8().unwrap() as i64),
+        1 => Ok(c.read_i8().map_err(|e| IoError(e))? as i64),
         // 2	        2	            Value is a big-endian 16-bit twos-complement integer.
-        2 => Some(c.read_i16::<BigEndian>().unwrap() as i64),
+        2 => Ok(c.read_i16::<BigEndian>().map_err(|e| IoError(e))? as i64),
         // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
         3 => {
             let mut bytes = [0_u8; 4];
-            c.read_exact(&mut bytes[1..]).unwrap();
+            c.read_exact(&mut bytes[1..]).map_err(|e| IoError(e))?;
             bytes[0] = match (bytes[1] & 0b1000_0000) > 0 {
                 false => 0,
                 true => 0xff,
             };
-            Some(i32::from_be_bytes(bytes) as i64)
+            Ok(i32::from_be_bytes(bytes) as i64)
         }
         // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
-        4 => Some(c.read_i32::<BigEndian>().unwrap() as i64),
+        4 => Ok(c.read_i32::<BigEndian>().map_err(|e| IoError(e))? as i64),
         // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
-        5 => unimplemented!(),
+        5 => Err(Error::UnimplementedError),
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
-        6 => Some(c.read_i64::<BigEndian>().unwrap()),
+        6 => Ok(c.read_i64::<BigEndian>().map_err(|e| IoError(e))?),
         // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
-        7 => None,
+        7 => {
+            let from = String::from(TYPE_NAME_REAL);
+            let to = String::from(TYPE_NAME_INT);
+            Err(TypeError{from, to})
+        },
         // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
-        8 => Some(0_i64),
+        8 => Ok(0_i64),
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
-        9 => Some(1_i64),
+        9 => Ok(1_i64),
         // 10,11	    variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
         // N≥12         variable    BLOB or TEXT
-        _ => None,
+        _ => Err(Error::UnimplementedError),
     }
 }
 
 #[test]
 fn test_value_to_i64() {
     // Null
-    assert_eq!(value_to_i64(&0, b"", false), None);
-    assert_eq!(value_to_i64(&0, b"", true), Some(0_i64));
+    assert!(value_to_i64(&0, b"", false).is_err());
+    assert_eq!(value_to_i64(&0, b"", true).unwrap(), 0_i64);
 
     // one byte ints
-    assert_eq!(value_to_i64(&1, &[0x7f], false), Some(127));
-    assert_eq!(value_to_i64(&1, &[0xff], true), Some(-1));
-    assert_eq!(value_to_i64(&1, &[0x01], false), Some(1));
+    assert_eq!(value_to_i64(&1, &[0x7f], false).unwrap(), 127);
+    assert_eq!(value_to_i64(&1, &[0xff], true).unwrap(), -1);
+    assert_eq!(value_to_i64(&1, &[0x01], false).unwrap(), 1);
 
     // two byte ints
-    assert_eq!(value_to_i64(&2, &[0x00, 0x7f], false), Some(127));
-    assert_eq!(value_to_i64(&2, &[0xff, 0xff], true), Some(-1));
-    assert_eq!(value_to_i64(&2, &[0x00, 0x01], false), Some(1));
-    assert_eq!(value_to_i64(&2, &[0x01, 0x00], true), Some(256));
+    assert_eq!(value_to_i64(&2, &[0x00, 0x7f], false).unwrap(), 127);
+    assert_eq!(value_to_i64(&2, &[0xff, 0xff], true).unwrap(), -1);
+    assert_eq!(value_to_i64(&2, &[0x00, 0x01], false).unwrap(), 1);
+    assert_eq!(value_to_i64(&2, &[0x01, 0x00], true).unwrap(), 256);
 
     // three byte ints
-    assert_eq!(value_to_i64(&3, &[0x00, 0x00, 0x7f], true), Some(127));
-    assert_eq!(value_to_i64(&3, &[0xff, 0xff, 0xff], false), Some(-1));
-    assert_eq!(value_to_i64(&3, &[0x00, 0x00, 0x01], true), Some(1));
-    assert_eq!(value_to_i64(&3, &[0x00, 0x01, 0x00], false), Some(256));
-    assert_eq!(value_to_i64(&3, &[0x01, 0x00, 0x00], true), Some(65536));
+    assert_eq!(value_to_i64(&3, &[0x00, 0x00, 0x7f], true).unwrap(), 127);
+    assert_eq!(value_to_i64(&3, &[0xff, 0xff, 0xff], false).unwrap(), -1);
+    assert_eq!(value_to_i64(&3, &[0x00, 0x00, 0x01], true).unwrap(), 1);
+    assert_eq!(value_to_i64(&3, &[0x00, 0x01, 0x00], false).unwrap(), 256);
+    assert_eq!(value_to_i64(&3, &[0x01, 0x00, 0x00], true).unwrap(), 65536);
 
     // TODO: larger ints and float.
 
     // Literal 0 and 1
-    assert_eq!(value_to_i64(&8, b"", false), Some(0));
-    assert_eq!(value_to_i64(&8, b"", true), Some(0));
+    assert_eq!(value_to_i64(&8, b"", false).unwrap(), 0);
+    assert_eq!(value_to_i64(&8, b"", true).unwrap(), 0);
 
-    assert_eq!(value_to_i64(&9, b"", false), Some(1));
-    assert_eq!(value_to_i64(&9, b"", true), Some(1));
+    assert_eq!(value_to_i64(&9, b"", false).unwrap(), 1);
+    assert_eq!(value_to_i64(&9, b"", true).unwrap(), 1);
 
     // Text of various lengths
-    assert_eq!(value_to_i64(&13, b"", false), None);
-    assert_eq!(value_to_i64(&13, b"", true), None);
+    assert!(value_to_i64(&13, b"", false).is_err());
+    assert!(value_to_i64(&13, b"", true).is_err());
 
-    assert_eq!(value_to_i64(&19, b"Foo", false), None);
-    assert_eq!(value_to_i64(&19, b"Foo", true), None);
+    assert!(value_to_i64(&19, b"Foo", false).is_err());
+    assert!(value_to_i64(&19, b"Foo", true).is_err());
 
     // Blob
-    assert_eq!(value_to_i64(&18, &[0x00_u8, 0x01, 0xff], false), None);
+    assert!(value_to_i64(&18, &[0x00_u8, 0x01, 0xff], false).is_err());
 }
