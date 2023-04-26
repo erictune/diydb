@@ -48,6 +48,8 @@ Scope for "steel thread" is just constants (literals) and expressions.
 # Small Tasks
 
 Quick Cleanups for when you don't have a lot of time:
+- Replacing unwrap and expect with returning errors (using thiserr in modules, and anyhow in main).  See notes in README.md and completed conversions in pager.rs and dbheader.rs.
+- Using clippy.
 - Improve the CLI to allow opening named files.
 - Make a Pager::Page object that has is_present(), purpose(), start_offset(), and data() methods.
 - Make a Btree::Page object that has btree_header() and btree_type() attributes.

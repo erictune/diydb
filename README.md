@@ -133,3 +133,11 @@ Rather it is the lifetime of the variable (referrent).  In one failed attempt at
 type with several references, but actually both references were to the same variable (the pager and its data).  Sometimes
 adding the compilers suggestions it the right things, but other times it is not.
 
+## Errors
+- Use `anyhow` for application code that has to deal with errors from many modules.
+- Use `thiserror` for code in a module that is or might become a reusable library (separate crate).
+- For each library-ish module, define an Error enum use `thiserror` macros.
+- For library-specific errors, use `expect("My Description")` and `unwrap()` with `map_err(|_| Error::MyDescription)?`.
+- For passed-along errors, such as `std::io::Error`:
+  - Use `#[from]` macro of `thiserror` in the Error definition.
+  - Use `map_err(|e| Error::MyWrappedError(e))?` at the error site.

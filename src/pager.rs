@@ -64,14 +64,17 @@ pub struct Pager {
     page_size: u32,
 }
 
-#[derive(thiserror::Error, Debug, Clone)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("The page number is higher than the file contains or the code supports.")]
+    #[error("Pager: Page number greater than maximum supported page number.")]
     PageNumberBeyondLimits,
-    #[error("Error reading file.")]
-    ReadFailed,
-    #[error("Internal error.")]
+    #[error("Pager: Internal error.")]
     InternalError,
+    #[error("Pager: Error accessing database file: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Pager: Error in database header: {0}")]
+    DbHdrError(#[from] crate::dbheader::Error),
+
 }
 
 // Page numbers are 1-based, to match how Sqlite numbers pages.  PageNum ensures people pass something that is meant to be a page number
@@ -82,7 +85,7 @@ pub type PageNum = usize;
 const MAX_PAGE_NUM: PageNum = 10_000; // 10_000 * 4k page ~= 40MB
 
 impl Pager {
-    pub fn open(path: &str) -> Self {
+    pub fn open(path: &str) -> Result<Self, Error> {
         let file =
                 // TODO: Lock file when opening so that other processes do not also
                 // open and modify it, and so that is not modified while reading.
@@ -94,29 +97,30 @@ impl Pager {
                         .write(false)
                         .create(false)
                         .open(path)
-                        .expect("Should have opened file."
-                    )
+                        .map_err(|e| Error::IoError(e))?
                 );
         let h = crate::dbheader::get_header_clone(&mut file.borrow_mut())
-            .expect("Should have parsed db header");
+            .map_err(|e| Error::DbHdrError(e))?;
        file
             .borrow_mut()
             .seek(SeekFrom::Start(0))
-            .expect("Should have returned file cursor to start");
+            .map_err(|e| Error::IoError(e))?;
         if h.numpages > MAX_PAGE_NUM as u32 {
-            panic!("Too many pages");
+            return Err(Error::PageNumberBeyondLimits);
         }
-        Pager {
-            f: Box::new(file),
-            pages: vec![],
-            page_size: h.pagesize as u32,
-        }
+        Ok(
+            Pager {
+                f: Box::new(file),
+                pages: vec![],
+                page_size: h.pagesize as u32,
+            }
+        )
     }
 
     // Reads in all the pages of the file. TODO: do this on demand.
-    pub fn initialize(&mut self) {
+    pub fn initialize(&mut self) -> Result<(), Error> {
         let h = crate::dbheader::get_header_clone(&mut self.f.borrow_mut())
-            .expect("Should have parsed db header");
+            .map_err(|e| Error::DbHdrError(e))?;
         self.f
             .borrow_mut()
             .seek(SeekFrom::Start(0))
@@ -125,8 +129,9 @@ impl Pager {
             panic!("Too many pages");
         }
         for pn in 1..h.numpages + 1 {
-            self.make_page_present(pn as usize);
+            self.make_page_present(pn as usize)?;
         }
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -143,19 +148,16 @@ impl Pager {
                 (pn - 1) as u64 * self.page_size as u64,
             ))
             .unwrap();
-        match self
+        self
             .f
             .borrow_mut()
             .read_exact(&mut v[..])
-            .map_err(|_| Error::ReadFailed)
-        {
-            Ok(()) => Ok(v),
-            Err(e) => Err(e),
-        }
+            .map_err(|e| Error::IoError(e))?;
+        Ok(v)
     }
 
     // TODO: implement transparent paging in of pages.
-    pub fn make_page_present(&mut self, pn: PageNum) {
+    pub fn make_page_present(&mut self, pn: PageNum) -> Result<(), Error> {
         if pn > self.pages.len() {
             // println!("Extending pager capacity to {}", pn);
             self.pages.resize(pn, None)
@@ -163,11 +165,10 @@ impl Pager {
         if self.pages[pn - 1].is_none() {
             // println!("Reading page {} on demand.", pn);
             let v = self
-                .read_page_from_file(pn)
-                .map_err(|_| Error::ReadFailed)
-                .unwrap();
+                .read_page_from_file(pn)?;
             self.pages[pn - 1] = Some(v);
         }
+    Ok(())
     }
 
     fn check_present(&self, pn: PageNum) {

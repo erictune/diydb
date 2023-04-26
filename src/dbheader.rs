@@ -65,14 +65,14 @@ fn bytes_identical<T: Ord>(a: &[T], b: &[T]) -> bool {
 
 pub fn get_header_clone(f: &mut std::fs::File) -> Result<DbfileHeader, Error> {
     let mut v = vec![0_u8; crate::dbheader::SQLITE_DB_HEADER_BYTES];
-    f.seek(SeekFrom::Start(0)).unwrap();
+    f.seek(SeekFrom::Start(0)).map_err(|_| Error::ReadFailed)?;
     f.read_exact(&mut v[..]).map_err(|_| Error::ReadFailed)?;
     let mut c = Cursor::new(v);
     get_header(&mut c)
 }
 
 pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
-    f.seek(SeekFrom::Start(0)).unwrap();
+    f.seek(SeekFrom::Start(0)).map_err(|_| Error::ReadFailed)?;
     // Offset	Size	Description
     // 0        16	    The header string: "SQLite format 3\000"
 
@@ -84,7 +84,7 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     }
     // Offset	Size	Description
     // 16	    2	    The database page size in bytes. Must be a power of two between 512 and 32768 inclusive, or the value 1 representing a page size of 65536.
-    let pagesize: u32 = match f.read_u16::<BigEndian>().unwrap() {
+    let pagesize: u32 = match f.read_u16::<BigEndian>().map_err(|_| Error::ReadFailed)? {
         512 => 512,
         1024 => 1024,
         2048 => 2048,
@@ -180,8 +180,7 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // Offset	Size	Description
     // 72	20	Reserved for expansion. Must be zero.
     let mut reserved_buffer = [0; 20];
-    f.read_exact(&mut reserved_buffer)
-        .expect("Should have read the 20 byte header.");
+    f.read_exact(&mut reserved_buffer).map_err(|_| Error::ReadFailed)?;
     if !bytes_identical(&reserved_buffer, TWENTY_ZEROS) {
         return Err(Error::WrongMagic);
     }
@@ -194,7 +193,7 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
         return Err(Error::Unsupported);
     }
 
-    f.seek(SeekFrom::Start(0)).unwrap();
+    f.seek(SeekFrom::Start(0)).map_err(|_| Error::ReadFailed)?;
     Ok(DbfileHeader {
         pagesize,
         changecnt,

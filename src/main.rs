@@ -11,7 +11,7 @@ fn main() {
     for line in stdin.lock().lines() {
         match line {
             Ok(line) => do_command(c.borrow_mut(), line.as_str()),
-            Err(e) => println!("Error: {:}", e),
+            Err(e) => println!("Input error: {:}", e),
         }
         print!("> ");
         io::stdout().flush().unwrap();
@@ -48,10 +48,28 @@ SELECT ...          to do a query.
 
 fn do_open(c: &mut Context, path: &str) {
     // TODO: return errors from open
-    c.pager = Some(diydb::pager::Pager::open(path));
+    match diydb::pager::Pager::open(path) {
+        Ok(p) => { c.pager = Some(p); }
+        Err(e) => {
+            println!("Error opening database {path} : {}", e);
+            return;
+        }
+    }
     match c.pager.as_mut() {
-        Some(p) => p.initialize(),
-        None => (),
+        Some(p) => {
+            match p.initialize() {
+                Ok(()) =>(),
+                Err(e) => {
+                    println!("Error initializing database {path} : {}", e);
+                    return;
+                }
+            }
+        }
+        None => {
+            println!("Unexpected condition.");
+
+        },
+
     }
 }
 
