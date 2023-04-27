@@ -1,11 +1,12 @@
 use crate::ir;
 use crate::pager;
+use anyhow::Result;
 
 // TODO: instead printing directly from here:
 // - return output headers and a table iterator, and then
 // have the caller call formatting::print_table.
 // TODO: return Result<> to allow for errors to propagate up to main without panicing.
-pub fn run_ir(pager: &pager::Pager, ir: &ir::Block)  {
+pub fn run_ir(pager: &pager::Pager, ir: &ir::Block) -> Result<()> {
     match ir {
         // TODO support root Project blocks.  This requires printing rows that
         // have constant exprs, dropping rows, etc.
@@ -28,7 +29,8 @@ pub fn run_ir(pager: &pager::Pager, ir: &ir::Block)  {
             // For a single-process interaction, the caller should be able to provide a buffer?
             // For an administrative command (e.g. dump table to backup file), then blocking writes is okay, I guess?
             // Therefore, we can for now copy to a buffer at the last step of evaluating the IR.
-            crate::print_table(pager, root_pagenum, table_name, column_names, column_types, false)
+            crate::print_table(pager, root_pagenum, table_name, column_names, column_types, false)?;
         },
     }
+    Ok(())
 }

@@ -15,6 +15,8 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
+use anyhow::Result;
+
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
 const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
@@ -84,7 +86,7 @@ fn print_table(
     col_names: Vec<String>,
     col_types: Vec<String>,
     detailed: bool,
-) {
+) -> Result<()> {
     {
         let (page, offset) = page_and_offset_for_pagenum(pgr, root_pgnum);
         let hdr = btree::header::check_header(page, offset);
@@ -98,12 +100,13 @@ fn print_table(
     // The execution engine can't be blocked by the printing, which might stall due to pagination, etc.  Therefore,
     // an iterator might not be right, and at the least some kind of buffer is needed.
     // There might need to be a limit to the buffer size though.
-    formatting::print_table(&mut tci, table_name, col_names, col_types, detailed);
+    formatting::print_table(&mut tci, table_name, col_names, col_types, detailed)?;
+    Ok(())
 }
 
 // TODO: replace this with executing a query?
 /// Print the Schema table to standard output.
-pub fn print_schema(pager: &pager::Pager) {
+pub fn print_schema(pager: &pager::Pager) -> Result<()> {
     let table_name = "sqlite_schema";
     let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
         .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
@@ -117,14 +120,16 @@ pub fn print_schema(pager: &pager::Pager) {
         column_names,
         column_types,
         false,
-    );
+    )?;
+    Ok(())
 }
 
-pub fn run_query(pager: &pager::Pager, query: &str) {
+pub fn run_query(pager: &pager::Pager, query: &str) -> Result<()> {
     // Convert parse tree to AST.
     let ss: ast::SelectStatement = pt_to_ast::pt_select_statement_to_ast(query);
     // Convert the AST to IR.
     let ir: ir::Block = ast_to_ir::ast_select_statement_to_ir(&ss);
     // Execute the IR.
-    ir_interpreter::run_ir(pager, &ir);
+    ir_interpreter::run_ir(pager, &ir)?;
+    Ok(())
 }

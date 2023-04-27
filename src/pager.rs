@@ -124,7 +124,7 @@ impl Pager {
         self.f
             .borrow_mut()
             .seek(SeekFrom::Start(0))
-            .expect("Should have returned file cursor to start");
+            .map_err(|e| Error::IoError(e))?;
         if h.numpages > MAX_PAGE_NUM as u32 {
             panic!("Too many pages");
         }
@@ -147,7 +147,7 @@ impl Pager {
             .seek(SeekFrom::Start(
                 (pn - 1) as u64 * self.page_size as u64,
             ))
-            .unwrap();
+            .map_err(|e| Error::IoError(e))?;
         self
             .f
             .borrow_mut()

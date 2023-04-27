@@ -67,7 +67,6 @@ fn do_open(c: &mut Context, path: &str) {
         }
         None => {
             println!("Unexpected condition.");
-
         },
 
     }
@@ -76,7 +75,10 @@ fn do_open(c: &mut Context, path: &str) {
 fn do_schema(c: &mut Context) {
     println!("Printing schema table...");
     match c.pager.as_mut() {
-        Some(p) => diydb::print_schema(p.borrow_mut()),
+        Some(p) => match diydb::print_schema(p.borrow_mut()) {
+            Err(e) => println!("Error printing schemas: {}", e),
+            Ok(_) => (),
+        }
         None => println!("Error, no database loaded"),
     }
 }
@@ -84,7 +86,10 @@ fn do_schema(c: &mut Context) {
 fn do_select(c: &mut Context, l: &str) {
     println!("Doing query: {}", l);
     match c.pager.as_mut() {
-        Some(pager) => diydb::run_query(&pager, l),
+        Some(pager) => match diydb::run_query(&pager, l) {
+            Err(e) => println!("Error running query: {}", e),
+            Ok(_) => (),
+        }
         None => println!("Error, no database loaded"),
     }
 }
