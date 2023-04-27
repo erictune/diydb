@@ -63,8 +63,8 @@ pub fn get_creation_sql_and_root_pagenum(
     None
 }
 
-fn page_and_offset_for_pagenum(pgr: &pager::Pager, pgnum: usize) -> (&Vec<u8>, pager::PageNum) {
-    let page = match pgr.get_page_ro(pgnum) {
+pub fn page_and_offset_for_pagenum(pgr: &pager::Pager, pgnum: usize) -> (&Vec<u8>, pager::PageNum) {
+    let page: &Vec<u8> = match pgr.get_page_ro(pgnum) {
         Ok(p) => p,
         Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
     };
@@ -130,6 +130,7 @@ pub fn run_query(pager: &pager::Pager, query: &str) -> Result<()> {
     // Convert the AST to IR.
     let ir: ir::Block = ast_to_ir::ast_select_statement_to_ir(&ss);
     // Execute the IR.
-    ir_interpreter::run_ir(pager, &ir)?;
+    let qot = ir_interpreter::run_ir(pager, &ir)?;
+    crate::formatting::print_table_qot(&qot, false)?;
     Ok(())
 }

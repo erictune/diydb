@@ -6,7 +6,7 @@ use anyhow::Result;
 // - return output headers and a table iterator, and then
 // have the caller call formatting::print_table.
 // TODO: return Result<> to allow for errors to propagate up to main without panicing.
-pub fn run_ir(pager: &pager::Pager, ir: &ir::Block) -> Result<()> {
+pub fn run_ir(pager: &pager::Pager, ir: &ir::Block) -> Result<QueryOutputTable> {
     match ir {
         // TODO support root Project blocks.  This requires printing rows that
         // have constant exprs, dropping rows, etc.
@@ -21,16 +21,30 @@ pub fn run_ir(pager: &pager::Pager, ir: &ir::Block) -> Result<()> {
             let (root_pagenum, create_statement) = crate::get_creation_sql_and_root_pagenum(pager, table_name)
                 .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
             let (_, column_names, column_types) = crate::pt_to_ast::parse_create_statement(&create_statement);
-            // TODO: these results should come over a "connection" and then be formatted and emitted to a file or stdout outside of the execution
-            // of the code.  That means splitting print_table into the execution part (goes in IR interpreter) and the formatter.
-            // Queries should end as soon as possible to allow writers to have a chance.
-            // For interactive queries, this means eagerly reading all the results into a limited sized buffer,
-            // and failing if they don't fit.
-            // For a single-process interaction, the caller should be able to provide a buffer?
-            // For an administrative command (e.g. dump table to backup file), then blocking writes is okay, I guess?
-            // Therefore, we can for now copy to a buffer at the last step of evaluating the IR.
-            crate::print_table(pager, root_pagenum, table_name, column_names, column_types, false)?;
+            // Here we make a copy of the results so that the callers does not have to deal with a limited lifetime.
+            // During the query, which may process many rows, we tried to avoid copies at all costs.
+            // But once it is done. we want the caller to be able to peruse the results at their leisure, while releasing
+            // the page locks as soon as possible.  Also, the caller should not have to think about the lifetimes of the internal
+            // iterator.
+            // The assumption here is that the caller is an interactive user who wants a limited number of rows (thousands).
+            // For non-interactive bulk use, perhaps this needs to be revisted.
+            //crate::print_table(pager, root_pagenum, table_name, column_names, column_types, false)?;
+            let tci = crate::btree::table::Iterator::new(root_pagenum, pager);
+            Ok(
+                QueryOutputTable {
+                    // TODO: take() a limited number of rows when collect()ing them, and return error if they don't fit?
+                    rows: tci.map(|t| (t.0, Vec::from(t.1))).collect(),
+                    column_names: column_names.clone(),
+                    column_types: column_types.clone(),
+                }
+            )
         },
     }
-    Ok(())
+
+}
+
+pub struct QueryOutputTable {
+    pub rows: Vec<(i64, Vec<u8>)>,
+    pub column_names: Vec<String>,
+    pub column_types: Vec<String>,
 }

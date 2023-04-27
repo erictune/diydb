@@ -11,7 +11,7 @@ Build steel thread of parsing and execution.
     - [x] test the above case
 -  [ ] Interpret IR to execute.
     - [x] interpret `Scan`
-    - [ ] return a row iterator or cursor from `run_ir`.  move formatting to main.
+    - [x] return a row iterator from `run_ir`.
     - [ ] handle `ConstantRow`
     - [ ] handle `Project`.
     - [ ] connect root block to printer.
@@ -51,7 +51,9 @@ Scope for "steel thread" is just constants (literals) and expressions.
 # Small Tasks
 
 Quick Cleanups for when you don't have a lot of time:
-- Replacing unwrap and expect with returning errors (using thiserr in modules, and anyhow in main).  See notes in README.md and completed conversions in pager.rs and dbheader.rs.
+- Integration tests should run end-to-end using run_query(), checking the results.
+- Replacing unwrap and expect with returning errors (using thiserr in modules, and anyhow in main).
+  Remaining file: lib.rs, pt_to_ast.rs, and btree/*.rs.
 - Using clippy.
 - Improve the CLI to allow opening named files.
 - Make a Pager::Page object that has is_present(), purpose(), start_offset(), and data() methods.

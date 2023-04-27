@@ -7,7 +7,7 @@ use anyhow::Result;
 /// Printing out tables nicely.
 /// In the future, also csv output, etc.
 
-// TODO: this should take a trait or traits, rather than a specific type of iterator, to allow testing with mock tables.
+// TODO: combine these two nearly-identical versions using some kind of generic/trait thing, or by eliminating call sites of print_table().
 pub fn print_table(
     record_iterator: &mut crate::btree::table::Iterator,
     table_name: &str,
@@ -36,6 +36,46 @@ pub fn print_table(
     }
     {
         for (rowid, payload) in record_iterator {
+            let rhi = HeaderIterator::new(payload);
+            if detailed {
+                print!("{:2} |", rowid);
+                for t in rhi {
+                    print!(" {:15} |", typecode_to_string(t));
+                }
+                println!();
+            }
+            print!("{:2} |", rowid);
+            let hi = ValueIterator::new(payload);
+            for (t, v) in hi {
+                print!(" {:15} |", value_to_string(&t, v)?);
+            }
+            println!();
+        }
+    }
+    Ok(())
+}
+
+pub fn print_table_qot(qot: &crate::ir_interpreter::QueryOutputTable, detailed: bool) -> Result<()> {
+    println!(
+        "   | {} |",
+        qot.column_names
+            .iter()
+            .map(|x| format!("{:15}", x))
+            .collect::<Vec<String>>()
+            .join(" | ")
+    );
+    if detailed {
+        println!(
+            "   | {} |",
+            qot.column_types
+                .iter()
+                .map(|x| format!("{:15}", x))
+                .collect::<Vec<String>>()
+                .join(" | ")
+        );
+    }
+    {
+        for (rowid, payload) in qot.rows.iter() {
             let rhi = HeaderIterator::new(payload);
             if detailed {
                 print!("{:2} |", rowid);
