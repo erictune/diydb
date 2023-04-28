@@ -28,6 +28,22 @@ const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
 const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
 const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 
+/// QueryOutputTable collects results into a temporary in-memory table of limited size
+///
+/// # Design Rationale
+/// In internal code, the database avoids making copies for efficiency, since queries can process many more rows than they
+/// returns (JOINs, WHEREs without indexes, etc).
+/// But when a query is complete, the results are copied.  That way, the callers does not have to deal with a reference lifetimes,
+/// and we can release any the page locks as soon as possible.
+/// The assumption here is that the caller is an interactive user who wants a limited number of rows (thousands).
+/// For non-interactive bulk use, perhaps this needs to be revisted.
+pub struct QueryOutputTable {
+    pub rows: Vec<(i64, Vec<u8>)>,
+    // next: pub rows: Vec<typed_row::TypedRow>,
+    pub column_names: Vec<String>,
+    pub column_types: Vec<String>,
+}
+
 /// Get the root page number for, and the SQL CREATE statement used to create `table_name`.
 pub fn get_creation_sql_and_root_pagenum(
     pgr: &pager::Pager,

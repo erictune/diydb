@@ -1,5 +1,16 @@
-# Current Project
+Current Projects Stack
+----------------------
 
+# Side Project
+
+    - [ ] Return typed values from queries into QoTs. (run_ir in stashed ir_interpreter.rs)
+    - [ ] Print tables using QoTs (staxhed formatting.rs)
+    - [ ] Being clear about where anyhow is used and where not in lib.rs (Stashsed)
+    - [ ] Integration test to use run_query and check the results using the typed values. (stashed)
+    - [ ] Save Constant row comment (ir_interpreter.rs)
+    - [ ] drop the stash as the rest is not needed.
+
+# Main Project On Hold
 Build steel thread of parsing and execution.
 - [x] Parse to Parse tree using pest.rs.
   - e.g. Start with `select 1, x from t;` and generate `Pairs<Rule>`
@@ -22,6 +33,8 @@ Build steel thread of parsing and execution.
 -  [ ] end to end test of query PT/AST/IR/Execute.
 Scope for "steel thread" is just constants (literals) and expressions.
 
+Future Projects
+----------------
 # SQL Layer Projects
 
 ## AST Optimization

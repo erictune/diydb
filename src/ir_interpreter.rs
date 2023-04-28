@@ -6,7 +6,7 @@ use anyhow::Result;
 // - return output headers and a table iterator, and then
 // have the caller call formatting::print_table.
 // TODO: return Result<> to allow for errors to propagate up to main without panicing.
-pub fn run_ir(pager: &pager::Pager, ir: &ir::Block) -> Result<QueryOutputTable> {
+pub fn run_ir(pager: &pager::Pager, ir: &ir::Block) -> Result<crate::QueryOutputTable> {
     match ir {
         // TODO support root Project blocks.  This requires printing rows that
         // have constant exprs, dropping rows, etc.
@@ -33,7 +33,7 @@ pub fn run_ir(pager: &pager::Pager, ir: &ir::Block) -> Result<QueryOutputTable> 
             // For non-interactive bulk use, perhaps this needs to be revisted.
             //crate::print_table(pager, root_pagenum, table_name, column_names, column_types, false)?;
             let tci = crate::btree::table::Iterator::new(root_pagenum, pager);
-            Ok(QueryOutputTable {
+            Ok(crate::QueryOutputTable {
                 // TODO: take() a limited number of rows when collect()ing them, and return error if they don't fit?
                 rows: tci.map(|t| (t.0, Vec::from(t.1))).collect(),
                 column_names: column_names.clone(),
@@ -41,10 +41,4 @@ pub fn run_ir(pager: &pager::Pager, ir: &ir::Block) -> Result<QueryOutputTable> 
             })
         }
     }
-}
-
-pub struct QueryOutputTable {
-    pub rows: Vec<(i64, Vec<u8>)>,
-    pub column_names: Vec<String>,
-    pub column_types: Vec<String>,
 }
