@@ -38,9 +38,9 @@
 //! -   Support dropping unused pages when memory is low.
 //! -   Support multiple open files by coordinating between several pager objects to stay under a total memory limit.
 
+use std::boxed::Box;
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom};
-use std::boxed::Box;
 
 /// A `Pager` manages the file locking and the memory use for one open database file.
 pub struct Pager {
@@ -74,7 +74,6 @@ pub enum Error {
     IoError(#[from] std::io::Error),
     #[error("Pager: Error in database header: {0}")]
     DbHdrError(#[from] crate::dbheader::Error),
-
 }
 
 // Page numbers are 1-based, to match how Sqlite numbers pages.  PageNum ensures people pass something that is meant to be a page number
@@ -101,20 +100,17 @@ impl Pager {
                 );
         let h = crate::dbheader::get_header_clone(&mut file.borrow_mut())
             .map_err(|e| Error::DbHdrError(e))?;
-       file
-            .borrow_mut()
+        file.borrow_mut()
             .seek(SeekFrom::Start(0))
             .map_err(|e| Error::IoError(e))?;
         if h.numpages > MAX_PAGE_NUM as u32 {
             return Err(Error::PageNumberBeyondLimits);
         }
-        Ok(
-            Pager {
-                f: Box::new(file),
-                pages: vec![],
-                page_size: h.pagesize as u32,
-            }
-        )
+        Ok(Pager {
+            f: Box::new(file),
+            pages: vec![],
+            page_size: h.pagesize as u32,
+        })
     }
 
     // Reads in all the pages of the file. TODO: do this on demand.
@@ -144,12 +140,9 @@ impl Pager {
         let mut v = vec![0_u8; self.page_size as usize];
         self.f
             .borrow_mut()
-            .seek(SeekFrom::Start(
-                (pn - 1) as u64 * self.page_size as u64,
-            ))
+            .seek(SeekFrom::Start((pn - 1) as u64 * self.page_size as u64))
             .map_err(|e| Error::IoError(e))?;
-        self
-            .f
+        self.f
             .borrow_mut()
             .read_exact(&mut v[..])
             .map_err(|e| Error::IoError(e))?;
@@ -164,11 +157,10 @@ impl Pager {
         }
         if self.pages[pn - 1].is_none() {
             // println!("Reading page {} on demand.", pn);
-            let v = self
-                .read_page_from_file(pn)?;
+            let v = self.read_page_from_file(pn)?;
             self.pages[pn - 1] = Some(v);
         }
-    Ok(())
+        Ok(())
     }
 
     fn check_present(&self, pn: PageNum) {

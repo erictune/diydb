@@ -55,7 +55,10 @@ pub fn print_table(
     Ok(())
 }
 
-pub fn print_table_qot(qot: &crate::ir_interpreter::QueryOutputTable, detailed: bool) -> Result<()> {
+pub fn print_table_qot(
+    qot: &crate::ir_interpreter::QueryOutputTable,
+    detailed: bool,
+) -> Result<()> {
     println!(
         "   | {} |",
         qot.column_names

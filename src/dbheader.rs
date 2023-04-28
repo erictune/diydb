@@ -180,7 +180,8 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // Offset	Size	Description
     // 72	20	Reserved for expansion. Must be zero.
     let mut reserved_buffer = [0; 20];
-    f.read_exact(&mut reserved_buffer).map_err(|_| Error::ReadFailed)?;
+    f.read_exact(&mut reserved_buffer)
+        .map_err(|_| Error::ReadFailed)?;
     if !bytes_identical(&reserved_buffer, TWENTY_ZEROS) {
         return Err(Error::WrongMagic);
     }

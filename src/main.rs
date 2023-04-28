@@ -49,26 +49,25 @@ SELECT ...          to do a query.
 fn do_open(c: &mut Context, path: &str) {
     // TODO: return errors from open
     match diydb::pager::Pager::open(path) {
-        Ok(p) => { c.pager = Some(p); }
+        Ok(p) => {
+            c.pager = Some(p);
+        }
         Err(e) => {
             println!("Error opening database {path} : {}", e);
             return;
         }
     }
     match c.pager.as_mut() {
-        Some(p) => {
-            match p.initialize() {
-                Ok(()) =>(),
-                Err(e) => {
-                    println!("Error initializing database {path} : {}", e);
-                    return;
-                }
+        Some(p) => match p.initialize() {
+            Ok(()) => (),
+            Err(e) => {
+                println!("Error initializing database {path} : {}", e);
+                return;
             }
-        }
+        },
         None => {
             println!("Unexpected condition.");
-        },
-
+        }
     }
 }
 
@@ -78,7 +77,7 @@ fn do_schema(c: &mut Context) {
         Some(p) => match diydb::print_schema(p.borrow_mut()) {
             Err(e) => println!("Error printing schemas: {}", e),
             Ok(_) => (),
-        }
+        },
         None => println!("Error, no database loaded"),
     }
 }
@@ -89,7 +88,7 @@ fn do_select(c: &mut Context, l: &str) {
         Some(pager) => match diydb::run_query(&pager, l) {
             Err(e) => println!("Error running query: {}", e),
             Ok(_) => (),
-        }
+        },
         None => println!("Error, no database loaded"),
     }
 }

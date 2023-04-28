@@ -61,51 +61,51 @@ fn test_ast_select_statement_to_ir() {
     }
     let cases: Vec<Case> = vec![
         Case {
-           desc:  "Select 1;".to_string(),
-           input: ast::SelectStatement {
+            desc: "Select 1;".to_string(),
+            input: ast::SelectStatement {
                 select: ast::SelectClause {
                     items: vec![ast::SelItem::Const(ast::Constant::Int(1))],
                 },
                 from: None,
             },
-            expected: ir::Block::ConstantRow( ir::ConstantRow{ row: vec![ast::Constant::Int(1)] } ),
+            expected: ir::Block::ConstantRow(ir::ConstantRow {
+                row: vec![ast::Constant::Int(1)],
+            }),
         },
         Case {
             desc: "Select a from t;".to_string(),
             input: ast::SelectStatement {
                 select: ast::SelectClause {
-                    items: vec![
-                        ast::SelItem::ColName(ast::ColName { name: String::from("a") })
-                    ],
+                    items: vec![ast::SelItem::ColName(ast::ColName {
+                        name: String::from("a"),
+                    })],
                 },
                 from: Some(ast::FromClause {
                     tablename: String::from("t"),
                 }),
             },
-            expected: ir::Block::Project(
-                ir::Project {
-                    outcols: vec![ast::SelItem::ColName( ast::ColName{ name: String::from("a")})],
-                    input: std::boxed::Box::new(
-                        ir::Block::Scan(ir::Scan{ tablename: String::from("t") })
-                    ),
-                }
-            ),
+            expected: ir::Block::Project(ir::Project {
+                outcols: vec![ast::SelItem::ColName(ast::ColName {
+                    name: String::from("a"),
+                })],
+                input: std::boxed::Box::new(ir::Block::Scan(ir::Scan {
+                    tablename: String::from("t"),
+                })),
+            }),
         },
         Case {
             desc: "Select * from t;".to_string(),
             input: ast::SelectStatement {
                 select: ast::SelectClause {
-                    items: vec![
-                        ast::SelItem::Star,
-                    ],
+                    items: vec![ast::SelItem::Star],
                 },
                 from: Some(ast::FromClause {
                     tablename: String::from("t"),
                 }),
             },
-            expected: ir::Block::Scan(
-                ir::Scan{ tablename: String::from("t") }
-            ),
+            expected: ir::Block::Scan(ir::Scan {
+                tablename: String::from("t"),
+            }),
         },
         Case {
             desc: "Select 1, a, 3 from t;".to_string(),
@@ -113,7 +113,9 @@ fn test_ast_select_statement_to_ir() {
                 select: ast::SelectClause {
                     items: vec![
                         ast::SelItem::Const(ast::Constant::Int(1)),
-                        ast::SelItem::ColName(ast::ColName { name: String::from("a") }),
+                        ast::SelItem::ColName(ast::ColName {
+                            name: String::from("a"),
+                        }),
                         ast::SelItem::Const(ast::Constant::Int(3)),
                     ],
                 },
@@ -121,21 +123,19 @@ fn test_ast_select_statement_to_ir() {
                     tablename: String::from("t"),
                 }),
             },
-            expected: ir::Block::Project(
-                ir::Project {
-                    outcols: vec![
-                        ast::SelItem::Const(ast::Constant::Int(1)),
-                        ast::SelItem::ColName( ast::ColName{ name: String::from("a")}),
-                        ast::SelItem::Const(ast::Constant::Int(3)),
-                        ],
-                    input: std::boxed::Box::new(
-                        ir::Block::Scan(ir::Scan{ tablename: String::from("t") })
-                    ),
-                }
-            ),
-
+            expected: ir::Block::Project(ir::Project {
+                outcols: vec![
+                    ast::SelItem::Const(ast::Constant::Int(1)),
+                    ast::SelItem::ColName(ast::ColName {
+                        name: String::from("a"),
+                    }),
+                    ast::SelItem::Const(ast::Constant::Int(3)),
+                ],
+                input: std::boxed::Box::new(ir::Block::Scan(ir::Scan {
+                    tablename: String::from("t"),
+                })),
+            }),
             //outcols: vec![ast::Constant::ColName(String::from("a")), ast::Constant::Int(1)],
-
         },
     ];
     for case in cases {

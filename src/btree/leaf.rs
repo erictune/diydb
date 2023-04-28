@@ -85,8 +85,11 @@ pub fn new_table_leaf_cell_iterator_for_page(
 #[test]
 fn test_leaf_iterator_on_minimal_db() {
     let path = path_to_testdata("minimal.db");
-    let mut pager = crate::pager::Pager::open(path.as_str()).expect("Should have opened pager for db {path}.");
-    pager.initialize().expect("Should have initialized pager for db {path}.");
+    let mut pager =
+        crate::pager::Pager::open(path.as_str()).expect("Should have opened pager for db {path}.");
+    pager
+        .initialize()
+        .expect("Should have initialized pager for db {path}.");
     let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "a");
     let mut ri = new_table_leaf_cell_iterator_for_page(&mut pager, x.unwrap().0);
     let first_item = ri.next().clone();

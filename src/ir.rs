@@ -53,7 +53,6 @@ pub enum Block {
     ConstantRow(ConstantRow),
 }
 
-
 /// `ConstantRow` represents a table that has one row.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConstantRow {

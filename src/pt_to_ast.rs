@@ -54,10 +54,14 @@ pub fn pt_create_statement_to_ast(c: &str) -> ast::CreateStatement {
 fn test_pt_create_statement_to_ast() {
     let input = "CREATE TABLE t (a int)";
     let actual = pt_create_statement_to_ast(input);
-    let expected = ast::CreateStatement{
+    let expected = ast::CreateStatement {
         tablename: "t".to_string(),
-        coldefs: vec![ast::ColDef{
-            colname: ast::ColName{ name: "a".to_string()} , coltype: "int".to_string() }],
+        coldefs: vec![ast::ColDef {
+            colname: ast::ColName {
+                name: "a".to_string(),
+            },
+            coltype: "int".to_string(),
+        }],
     };
     assert_eq!(actual, expected);
 }

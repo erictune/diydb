@@ -7,10 +7,7 @@ pub enum Error {
     #[error("Pager: Error accessing database file: {0}")]
     IoError(#[from] std::io::Error),
     #[error("Unable to convert type {from} to {to}.")]
-    TypeError{
-        from: String,
-        to: String,
-    },
+    TypeError { from: String, to: String },
     #[error("Unimplemented type.")]
     UnimplementedError,
 }
@@ -83,7 +80,10 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> Result<String, Error> 
         // 1	        1	            Value is an 8-bit twos-complement integer.
         1 => Ok(format!("{}", c.read_i8().map_err(|e| IoError(e))?)),
         // 2	        2	            Value is a big-endian 16-bit twos-complement integer.
-        2 => Ok(format!("{}", c.read_i16::<BigEndian>().map_err(|e| IoError(e))?)),
+        2 => Ok(format!(
+            "{}",
+            c.read_i16::<BigEndian>().map_err(|e| IoError(e))?
+        )),
         // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
         3 => {
             let mut bytes = [0_u8; 4];
@@ -95,13 +95,22 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> Result<String, Error> 
             Ok(i32::from_be_bytes(bytes).to_string())
         }
         // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
-        4 => Ok(format!("{}", c.read_i32::<BigEndian>().map_err(|e| IoError(e))?)),
+        4 => Ok(format!(
+            "{}",
+            c.read_i32::<BigEndian>().map_err(|e| IoError(e))?
+        )),
         // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
         5 => Err(Error::UnimplementedError),
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
-        6 => Ok(format!("{}", c.read_i64::<BigEndian>().map_err(|e| IoError(e))?)),
+        6 => Ok(format!(
+            "{}",
+            c.read_i64::<BigEndian>().map_err(|e| IoError(e))?
+        )),
         // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
-        7 => Ok(format!("{}", c.read_f64::<BigEndian>().map_err(|e| IoError(e))?)),
+        7 => Ok(format!(
+            "{}",
+            c.read_f64::<BigEndian>().map_err(|e| IoError(e))?
+        )),
         // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
         8 => Ok("0".to_string()),
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
@@ -135,16 +144,37 @@ fn test_value_to_string() {
     assert_eq!(value_to_string(&1, &[0x01]).unwrap(), "1".to_string());
 
     // two byte ints
-    assert_eq!(value_to_string(&2, &[0x00, 0x7f]).unwrap(), "127".to_string());
-    assert_eq!(value_to_string(&2, &[0xff, 0xff]).unwrap(), "-1".to_string());
+    assert_eq!(
+        value_to_string(&2, &[0x00, 0x7f]).unwrap(),
+        "127".to_string()
+    );
+    assert_eq!(
+        value_to_string(&2, &[0xff, 0xff]).unwrap(),
+        "-1".to_string()
+    );
     assert_eq!(value_to_string(&2, &[0x00, 0x01]).unwrap(), "1".to_string());
-    assert_eq!(value_to_string(&2, &[0x01, 0x00]).unwrap(), "256".to_string());
+    assert_eq!(
+        value_to_string(&2, &[0x01, 0x00]).unwrap(),
+        "256".to_string()
+    );
 
     // three byte ints
-    assert_eq!(value_to_string(&3, &[0x00, 0x00, 0x7f]).unwrap(), "127".to_string());
-    assert_eq!(value_to_string(&3, &[0xff, 0xff, 0xff]).unwrap(), "-1".to_string());
-    assert_eq!(value_to_string(&3, &[0x00, 0x00, 0x01]).unwrap(), "1".to_string());
-    assert_eq!(value_to_string(&3, &[0x00, 0x01, 0x00]).unwrap(), "256".to_string());
+    assert_eq!(
+        value_to_string(&3, &[0x00, 0x00, 0x7f]).unwrap(),
+        "127".to_string()
+    );
+    assert_eq!(
+        value_to_string(&3, &[0xff, 0xff, 0xff]).unwrap(),
+        "-1".to_string()
+    );
+    assert_eq!(
+        value_to_string(&3, &[0x00, 0x00, 0x01]).unwrap(),
+        "1".to_string()
+    );
+    assert_eq!(
+        value_to_string(&3, &[0x00, 0x01, 0x00]).unwrap(),
+        "256".to_string()
+    );
     assert_eq!(
         value_to_string(&3, &[0x01, 0x00, 0x00]).unwrap(),
         "65536".to_string()
@@ -162,7 +192,10 @@ fn test_value_to_string() {
 
     assert_eq!(value_to_string(&19, b"Foo").unwrap(), "Foo".to_string());
 
-    assert_eq!(value_to_string(&25, b"FooBar").unwrap(), "FooBar".to_string());
+    assert_eq!(
+        value_to_string(&25, b"FooBar").unwrap(),
+        "FooBar".to_string()
+    );
 
     // Blob
     assert_eq!(
@@ -185,7 +218,11 @@ fn test_value_to_string() {
 /// BLOB and TEXT always return NONE.
 /// Panics on errors.
 // TODO: handle errors better, by returning a Result instead of Option, with more detail on the error, and not panicing.
-pub fn value_to_i64(serial_type: &i64, data: &[u8], convert_nulls_to_zero: bool) -> Result<i64, Error> {
+pub fn value_to_i64(
+    serial_type: &i64,
+    data: &[u8],
+    convert_nulls_to_zero: bool,
+) -> Result<i64, Error> {
     let mut c = std::io::Cursor::new(data);
     match serial_type {
         // Serial Type	Content Size	Meaning
@@ -196,7 +233,7 @@ pub fn value_to_i64(serial_type: &i64, data: &[u8], convert_nulls_to_zero: bool)
             } else {
                 let from = String::from(TYPE_NAME_NULL);
                 let to = String::from(TYPE_NAME_INT);
-                Err(Error::TypeError{from, to})
+                Err(Error::TypeError { from, to })
             }
         }
         // 1	        1	            Value is an 8-bit twos-complement integer.
@@ -223,8 +260,8 @@ pub fn value_to_i64(serial_type: &i64, data: &[u8], convert_nulls_to_zero: bool)
         7 => {
             let from = String::from(TYPE_NAME_REAL);
             let to = String::from(TYPE_NAME_INT);
-            Err(TypeError{from, to})
-        },
+            Err(TypeError { from, to })
+        }
         // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
         8 => Ok(0_i64),
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)

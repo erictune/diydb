@@ -42,8 +42,7 @@ pub fn check_header<'a>(page: &'a Vec<u8>, non_btree_header_bytes: usize) -> Hea
     };
 
     // 1	2	The two-byte integer at offset 1 gives the start of the first freeblock on the page, or is zero if there are no freeblocks.
-    let freeblock_start: u32 =
-        c.read_u16::<BigEndian>().expect("Should have btree header") as u32;
+    let freeblock_start: u32 = c.read_u16::<BigEndian>().expect("Should have btree header") as u32;
     // 3	2	The two-byte integer at offset 3 gives the number of cells on the page.
     let num_cells: u32 = c
         .read_u16::<BigEndian>()
