@@ -10,19 +10,27 @@ pub enum Error {
     TypeError { from: String, to: String },
     #[error("Unimplemented type.")]
     UnimplementedError,
+    #[error("Invalid serial type code.")]
+    InvalidSerialTypeCode,
+    #[error("Byte were not a valid string valid encoding.")]
+    InvalidStringEncodingError(#[from] std::string::FromUtf8Error),
 }
-use Error::{IoError, TypeError};
+use Error::*;
 const TYPE_NAME_INT: &str = "INT";
 const TYPE_NAME_NULL: &str = "NULL";
 const TYPE_NAME_REAL: &str = "REAL";
 
-/// Convert a serial type number to a string.
+/// Convert a serial type number to a string describing the type suitable for debug printing.
 ///
-///  # Arguments
+/// # Arguments
 ///
 /// * `serial_type` - A SQLite serial type code.
 ///
 /// These are not SQL type, but informal names for debugging.
+///
+/// # Panics
+///
+/// Does not panic
 pub fn typecode_to_string(serial_type: i64) -> &'static str {
     match serial_type {
         // From: https://www.sqlite.org/fileformat.html#record_format
@@ -51,10 +59,15 @@ pub fn typecode_to_string(serial_type: i64) -> &'static str {
         10 => "st:internal_10",
         11 => "st:internal_11",
         // N≥12 and even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
-        x if x >= 12 && (x % 2 == 0) => "st:blob",
         // N≥13 and odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
-        x if x >= 13 && (x % 2 == 1) => "st:text",
-        _ => panic!("Unknown column type: {}", serial_type),
+        x @ 12.. => {
+            if x % 2 == 0 {
+                "st:blob"
+            } else {
+                "st:text"
+            }
+        }
+        i64::MIN..=-1 => "st:error_negative",
     }
 }
 
@@ -69,8 +82,9 @@ pub fn typecode_to_string(serial_type: i64) -> &'static str {
 ///
 /// Does not handle overflowing TEXT or BLOB.
 ///
-/// Panics on errors.
-// TODO: handle errors better, by returning a Result.
+/// # Panics
+///
+/// Does not panic.
 pub fn value_to_string(serial_type: &i64, data: &[u8]) -> Result<String, Error> {
     let mut c = std::io::Cursor::new(data);
     match serial_type {
@@ -100,7 +114,7 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> Result<String, Error> 
             c.read_i32::<BigEndian>().map_err(|e| IoError(e))?
         )),
         // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
-        5 => Err(Error::UnimplementedError),
+        5 => Err(UnimplementedError),
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
         6 => Ok(format!(
             "{}",
@@ -116,20 +130,24 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> Result<String, Error> 
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
         9 => Ok("1".to_string()),
         // 10,11	    variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
+        10 | 11 => Err(InvalidSerialTypeCode),
         // N≥12 & even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
-        x if *x >= 12 && (*x % 2 == 0) => {
-            let mut buf = vec![0_u8; (*x as usize - 12) / 2];
-            c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
-            Ok(format!("{:?}", buf))
-        }
         // N≥13 & odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
-        x if *x >= 13 && (*x % 2 == 1) => {
-            // TODO: avoid the copy somehow?
-            let mut buf = vec![0_u8; (*x as usize - 13) / 2];
-            c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
-            Ok(String::from_utf8(buf).expect("Should have converted string to utf8"))
+        x @ 12.. => {
+            match (x % 2) == 0 {
+                true /* odd */ => {
+                    let mut buf = vec![0_u8; (*x as usize - 12) / 2];
+                    c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
+                    Ok(format!("{:?}", buf))
+                }
+                false /* even */ => {
+                let mut buf = vec![0_u8; (*x as usize - 13) / 2];
+                    c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
+                    Ok(String::from_utf8(buf).map_err(|e: std::string::FromUtf8Error| InvalidStringEncodingError(e))?)
+                }
+            }
         }
-        _ => panic!("Unknown column type: {}", serial_type),
+        i64::MIN..=-1 => Err(Error::InvalidSerialTypeCode),
     }
 }
 
@@ -208,6 +226,8 @@ fn test_value_to_string() {
 /// Returns an Error if the type is unsuitable for conversion to i64.
 /// Returns an Error if there is a problem reading from the data.
 ///
+/// Provides simplified code for internal use cases where only an i64 is ever expected.
+///
 ///  # Arguments
 /// * `serial_type` - A SQLite serial type code.
 /// * `data` - A slice of bytes.
@@ -216,8 +236,10 @@ fn test_value_to_string() {
 /// If `convert_nulls_to_zero` is true, NULL results in a Zero value.  If false, NULL results in None.
 /// If the type is f64, None is returned.
 /// BLOB and TEXT always return NONE.
-/// Panics on errors.
-// TODO: handle errors better, by returning a Result instead of Option, with more detail on the error, and not panicing.
+///
+/// # Panics
+///
+/// Does not panic
 pub fn value_to_i64(
     serial_type: &i64,
     data: &[u8],
@@ -233,7 +255,7 @@ pub fn value_to_i64(
             } else {
                 let from = String::from(TYPE_NAME_NULL);
                 let to = String::from(TYPE_NAME_INT);
-                Err(Error::TypeError { from, to })
+                Err(TypeError { from, to })
             }
         }
         // 1	        1	            Value is an 8-bit twos-complement integer.
@@ -253,7 +275,7 @@ pub fn value_to_i64(
         // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
         4 => Ok(c.read_i32::<BigEndian>().map_err(|e| IoError(e))? as i64),
         // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
-        5 => Err(Error::UnimplementedError),
+        5 => Err(UnimplementedError),
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
         6 => Ok(c.read_i64::<BigEndian>().map_err(|e| IoError(e))?),
         // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
@@ -267,8 +289,10 @@ pub fn value_to_i64(
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
         9 => Ok(1_i64),
         // 10,11	    variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
+        10 | 11 => Err(InvalidSerialTypeCode),
         // N≥12         variable    BLOB or TEXT
-        _ => Err(Error::UnimplementedError),
+        12.. => Err(Error::UnimplementedError),
+        i64::MIN..=-1 => Err(Error::InvalidSerialTypeCode),
     }
 }
 
