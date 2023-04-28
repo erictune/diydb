@@ -176,3 +176,24 @@ impl<'p> core::iter::Iterator for Iterator<'p> {
         None
     }
 }
+
+#[cfg(test)]
+fn path_to_testdata(filename: &str) -> String {
+    std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
+        + "/resources/test/"
+        + filename
+}
+
+#[test]
+fn test_table_iterator_on_minimal_db() {
+    let path = path_to_testdata("minimal.db");
+    let mut pager =
+        crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
+    pager.initialize().expect("Should have initialized pager.");
+    let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "a");
+    let mut ri = crate::new_table_iterator(&mut pager, x.unwrap().0);
+    let first_item = ri.next().clone();
+    assert!(first_item.is_some());
+    assert_eq!(first_item.unwrap().0, 1);
+    assert!(ri.next().is_none());
+}

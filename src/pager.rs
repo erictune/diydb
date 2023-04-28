@@ -203,3 +203,31 @@ impl Pager {
         self.page_size
     }
 }
+
+#[cfg(test)]
+fn path_to_testdata(filename: &str) -> String {
+    std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
+        + "/resources/test/"
+        + filename
+}
+
+#[test]
+fn test_open_db() {
+    let path = path_to_testdata("minimal.db");
+    let mut pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
+    pager.initialize().expect("Should have initialized pager.");
+}
+
+#[test]
+fn test_get_page_ro() {
+    let path = path_to_testdata("minimal.db");
+    let mut pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
+    pager.initialize().expect("Should have initialized pager.");
+    assert!(
+        pager
+            .get_page_ro(1)
+            .expect("Should have gotten a page")
+            .len()
+            > 0
+    );
+}
