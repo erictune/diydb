@@ -10,6 +10,7 @@ pub mod parser;
 mod pt_to_ast;
 mod record;
 mod serial_type;
+pub mod typed_row;
 
 extern crate pest;
 #[macro_use]

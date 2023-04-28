@@ -339,3 +339,179 @@ fn test_value_to_i64() {
     // Blob
     assert!(value_to_i64(&18, &[0x00_u8, 0x01, 0xff], false).is_err());
 }
+
+/// Convert a sqlite value in "serial type enum" format into an enum that can hold any value (`SqlTypedValue`).
+/// Returns an Error if there is a problem reading from the data.
+///
+///  # Arguments
+/// * `serial_type` - A SQLite serial type code.
+/// * `data` - A slice of bytes.
+/// * `convert_nulls_to_zero`  - controls result when type is NULL.
+///
+/// If `convert_nulls_to_zero` is true, NULL serial type results in a `SqlTypedValue::Int(0)` value.
+/// If false, NULL results in `SqlTypedValue::None()`.
+///
+/// # Panics
+///
+/// Does not panic.
+pub fn value_to_sql_typed_value(
+    serial_type: &i64,
+    data: &[u8],
+    convert_nulls_to_zero: bool,
+) -> Result<crate::typed_row::SqlTypedValue, Error> {
+    use crate::typed_row::SqlTypedValue::*;
+
+    let mut c = std::io::Cursor::new(data);
+    match serial_type {
+        // Serial Type	Content Size	Meaning
+        // 0	        0	            Value is a NULL.
+        0 => {
+            if convert_nulls_to_zero {
+                Ok(Int(0))
+            } else {
+                Ok(Null())
+            }
+        }
+        // 1	        1	            Value is an 8-bit twos-complement integer.
+        1 => Ok(Int(c.read_i8().map_err(|e| IoError(e))? as i64)),
+        // 2	        2	            Value is a big-endian 16-bit twos-complement integer.
+        2 => Ok(Int(
+            c.read_i16::<BigEndian>().map_err(|e| IoError(e))? as i64
+        )),
+        // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
+        3 => {
+            let mut bytes = [0_u8; 4];
+            c.read_exact(&mut bytes[1..]).map_err(|e| IoError(e))?;
+            bytes[0] = match (bytes[1] & 0b1000_0000) > 0 {
+                false => 0,
+                true => 0xff,
+            };
+            Ok(Int(i32::from_be_bytes(bytes) as i64))
+        }
+        // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
+        4 => Ok(Int(
+            c.read_i32::<BigEndian>().map_err(|e| IoError(e))? as i64
+        )),
+        // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
+        5 => Err(UnimplementedError),
+        // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
+        6 => Ok(Int(c.read_i64::<BigEndian>().map_err(|e| IoError(e))?)),
+        // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
+        7 => Ok(Real(c.read_f64::<BigEndian>().map_err(|e| IoError(e))?)),
+        // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
+        8 => Ok(Int(0_i64)),
+        // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
+        9 => Ok(Int(1_i64)),
+        // 10,11	variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
+        10 | 11 => Err(InvalidSerialTypeCode),
+        // N≥12 & even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
+        // N≥13 & odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
+        x @ 12.. => {
+            match (*x % 2) == 0 {
+                true /* odd */=>  {
+                    let mut buf = vec![0_u8; (*x as usize - 12) / 2];
+                    c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
+                    Ok(Blob(buf.clone()))
+                }
+                false /* even */ => {
+                    let mut buf = vec![0_u8; (*x as usize - 13) / 2];
+                    c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
+                    Ok(Text(String::from_utf8(buf).map_err(|e| InvalidStringEncodingError(e))?))
+                }
+            }
+        }
+        i64::MIN..=-1 => Err(Error::InvalidSerialTypeCode),
+    }
+}
+
+#[test]
+fn test_value_to_sql_typed_value() {
+    use crate::typed_row::SqlTypedValue::*;
+
+    // Null
+    assert_eq!(value_to_sql_typed_value(&0, b"", false).unwrap(), Null());
+    assert_eq!(value_to_sql_typed_value(&0, b"", true).unwrap(), Int(0_i64));
+
+    // one byte ints
+    assert_eq!(
+        value_to_sql_typed_value(&1, &[0x7f], false).unwrap(),
+        Int(127)
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&1, &[0xff], true).unwrap(),
+        Int(-1)
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&1, &[0x01], false).unwrap(),
+        Int(1)
+    );
+
+    // two byte ints
+    assert_eq!(
+        value_to_sql_typed_value(&2, &[0x00, 0x7f], false).unwrap(),
+        Int(127)
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&2, &[0xff, 0xff], true).unwrap(),
+        Int(-1)
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&2, &[0x00, 0x01], false).unwrap(),
+        Int(1)
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&2, &[0x01, 0x00], true).unwrap(),
+        Int(256)
+    );
+
+    // three byte ints
+    assert_eq!(
+        value_to_sql_typed_value(&3, &[0x00, 0x00, 0x7f], true).unwrap(),
+        Int(127)
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&3, &[0xff, 0xff, 0xff], false).unwrap(),
+        Int(-1)
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&3, &[0x00, 0x00, 0x01], true).unwrap(),
+        Int(1)
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&3, &[0x00, 0x01, 0x00], false).unwrap(),
+        Int(256)
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&3, &[0x01, 0x00, 0x00], true).unwrap(),
+        Int(65536)
+    );
+
+    // TODO: larger ints and float.
+
+    // Literal 0 and 1
+    assert_eq!(value_to_sql_typed_value(&8, b"", false).unwrap(), Int(0));
+    assert_eq!(value_to_sql_typed_value(&8, b"", true).unwrap(), Int(0));
+
+    assert_eq!(value_to_sql_typed_value(&9, b"", false).unwrap(), Int(1));
+    assert_eq!(value_to_sql_typed_value(&9, b"", true).unwrap(), Int(1));
+
+    // Text of various lengths
+    assert_eq!(
+        value_to_sql_typed_value(&13, b"", true).unwrap(),
+        Text("".to_string())
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&19, b"Foo", false).unwrap(),
+        Text("Foo".to_string())
+    );
+    assert_eq!(
+        value_to_sql_typed_value(&25, b"FooBar", true).unwrap(),
+        Text("FooBar".to_string())
+    );
+
+    // Blob
+    assert_eq!(
+        value_to_sql_typed_value(&18, &[0x00_u8, 0x01, 0xff], false).unwrap(),
+        Blob(Vec::from([0, 1, 255]))
+    );
+}
