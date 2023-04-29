@@ -11,12 +11,9 @@ mod pt_to_ast;
 mod record;
 mod serial_type;
 pub mod typed_row;
-
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
-
-use anyhow::Result;
 
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
@@ -38,8 +35,7 @@ const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 /// The assumption here is that the caller is an interactive user who wants a limited number of rows (thousands).
 /// For non-interactive bulk use, perhaps this needs to be revisted.
 pub struct QueryOutputTable {
-    pub rows: Vec<(i64, Vec<u8>)>,
-    // next: pub rows: Vec<typed_row::TypedRow>,
+    pub rows: Vec<typed_row::TypedRow>,
     pub column_names: Vec<String>,
     pub column_types: Vec<String>,
 }
@@ -61,6 +57,7 @@ pub fn get_creation_sql_and_root_pagenum(
                 row[SCHEMA_TABLE_TBL_NAME_COLIDX].1,
             )
             .unwrap();
+            println!("Comparing {} to {}", this_table_name, table_name);
             if this_table_name != table_name {
                 continue;
             }
@@ -101,11 +98,10 @@ pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Ite
 fn print_table(
     pgr: &pager::Pager,
     root_pgnum: usize,
-    table_name: &str,
     col_names: Vec<String>,
     col_types: Vec<String>,
     detailed: bool,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     {
         let (page, offset) = page_and_offset_for_pagenum(pgr, root_pgnum);
         let hdr = btree::header::check_header(page, offset);
@@ -114,28 +110,28 @@ fn print_table(
         }
     }
     let mut tci = new_table_iterator(pgr, root_pgnum);
+    let qot = clone_and_cast_table_iterator(&mut tci, &col_names, &col_types)?;
     // TODO: want "connection" in between these lines.
     // While we don't want copying or buffering inside the execution, it is okay to buffer lines going over the connection.
     // The execution engine can't be blocked by the printing, which might stall due to pagination, etc.  Therefore,
     // an iterator might not be right, and at the least some kind of buffer is needed.
     // There might need to be a limit to the buffer size though.
-    formatting::print_table(&mut tci, table_name, col_names, col_types, detailed)?;
+    formatting::print_table_qot(&qot, detailed)?;
     Ok(())
 }
 
 // TODO: replace this with executing a query?
 /// Print the Schema table to standard output.
-pub fn print_schema(pager: &pager::Pager) -> Result<()> {
+pub fn print_schema(pager: &pager::Pager) -> anyhow::Result<()> {
     let table_name = "sqlite_schema";
     let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
         .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
-    let (_table_name2, column_names, column_types) =
+    let (_, column_names, column_types) =
         pt_to_ast::parse_create_statement(&create_statement);
 
     print_table(
         pager,
         root_pagenum,
-        table_name,
         column_names,
         column_types,
         false,
@@ -143,13 +139,33 @@ pub fn print_schema(pager: &pager::Pager) -> Result<()> {
     Ok(())
 }
 
-pub fn run_query(pager: &pager::Pager, query: &str) -> Result<()> {
+pub fn run_query(pager: &pager::Pager, query: &str) -> anyhow::Result<()> {
+    let qot = run_query_no_print(pager, query)?;
+    crate::formatting::print_table_qot(&qot, false)?;
+    Ok(())
+}
+
+pub fn run_query_no_print(
+    pager: &pager::Pager,
+    query: &str,
+) -> anyhow::Result<crate::QueryOutputTable> {
     // Convert parse tree to AST.
     let ss: ast::SelectStatement = pt_to_ast::pt_select_statement_to_ast(query);
     // Convert the AST to IR.
     let ir: ir::Block = ast_to_ir::ast_select_statement_to_ir(&ss);
     // Execute the IR.
-    let qot = ir_interpreter::run_ir(pager, &ir)?;
-    crate::formatting::print_table_qot(&qot, false)?;
-    Ok(())
+    let qot: crate::QueryOutputTable = ir_interpreter::run_ir(pager, &ir)?;
+    Ok(qot)
+}
+
+fn clone_and_cast_table_iterator<'f>(ti: &'f mut crate::btree::table::Iterator<'f>, column_names: &Vec<String>, column_types: &Vec<String>) -> Result<crate::QueryOutputTable, anyhow::Error> {
+    let r: Result<Vec<crate::typed_row::TypedRow>, crate::typed_row::RowCastingError> =
+        crate::typed_row::RawRowCaster::new(ti).collect();
+    let r = r?;
+    Ok(crate::QueryOutputTable {
+        // TODO: take() a limited number of rows when collect()ing them, and return error if they don't fit?
+        rows: r,
+        column_names: column_names.clone(),
+        column_types: column_types.clone(),
+    })
 }

@@ -3,10 +3,10 @@ Current Projects Stack
 
 # Side Project
 
-    - [ ] Return typed values from queries into QoTs. (run_ir in stashed ir_interpreter.rs)
-    - [ ] Print tables using QoTs (staxhed formatting.rs)
-    - [ ] Being clear about where anyhow is used and where not in lib.rs (Stashsed)
-    - [ ] Integration test to use run_query and check the results using the typed values. (stashed)
+    - [x] Return typed values from queries into QoTs.
+    - [x] Print tables using QoTs
+    - [ ] Integration test to use run_query and check the results using the typed values. use table-driven testing.
+        - [ ] maybe a benchmark too?
     - [ ] Save Constant row comment (ir_interpreter.rs)
     - [ ] drop the stash as the rest is not needed.
 

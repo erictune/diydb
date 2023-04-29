@@ -31,6 +31,7 @@ const TYPE_NAME_REAL: &str = "REAL";
 /// # Panics
 ///
 /// Does not panic
+#[cfg(debug)]
 pub fn typecode_to_string(serial_type: i64) -> &'static str {
     match serial_type {
         // From: https://www.sqlite.org/fileformat.html#record_format
