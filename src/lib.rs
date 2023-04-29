@@ -57,7 +57,6 @@ pub fn get_creation_sql_and_root_pagenum(
                 row[SCHEMA_TABLE_TBL_NAME_COLIDX].1,
             )
             .unwrap();
-            println!("Comparing {} to {}", this_table_name, table_name);
             if this_table_name != table_name {
                 continue;
             }

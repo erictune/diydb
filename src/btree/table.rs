@@ -197,3 +197,27 @@ fn test_table_iterator_on_minimal_db() {
     assert_eq!(first_item.unwrap().0, 1);
     assert!(ri.next().is_none());
 }
+
+#[test]
+fn test_table_iterator_on_three_level_db() {
+    // This tests iterating over a btree of three levels (root, non-root interior pages, leaf pages).
+    // The table has these rows:
+    // row 1: 1
+    // row 1000000: 1000000
+    let path = path_to_testdata("threelevel.db");
+    let mut pager =
+        crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
+    pager.initialize().expect("Should have initialized pager.");
+    let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "t");
+    let pgnum = x.unwrap().0;
+
+    let ri = crate::new_table_iterator(&pager, pgnum);
+    let mut last_rowid = 0;
+    for e in ri.enumerate() {
+        let (expected, (rowid, _)) = e;
+        println!("Visiting rowid {} on iteration {}", rowid, expected);
+        assert_eq!(expected + 1, rowid as usize);
+        last_rowid = rowid
+    }
+    assert_eq!(last_rowid, 100000);
+}

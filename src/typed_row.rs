@@ -32,6 +32,7 @@ impl std::fmt::Display for SqlTypedValue {
 }
 
 /// can hold a sequence of values of any of the SQL types (sqlite supported subset), along with a rowid.
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypedRow {
     pub row_id: i64,
     pub items: Vec<SqlTypedValue>,

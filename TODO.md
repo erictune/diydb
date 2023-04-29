@@ -64,6 +64,7 @@ Future Projects
 # Small Tasks
 
 Quick Cleanups for when you don't have a lot of time:
+- semicolon at end of sql queries.
 - Integration tests should run end-to-end using run_query(), checking the results.
 - Replacing unwrap and expect with returning errors (using thiserr in modules, and anyhow in main).
   Remaining file: lib.rs, pt_to_ast.rs, and btree/*.rs.
