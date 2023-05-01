@@ -125,16 +125,9 @@ pub fn print_schema(pager: &pager::Pager) -> anyhow::Result<()> {
     let table_name = "sqlite_schema";
     let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
         .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
-    let (_, column_names, column_types) =
-        pt_to_ast::parse_create_statement(&create_statement);
+    let (_, column_names, column_types) = pt_to_ast::parse_create_statement(&create_statement);
 
-    print_table(
-        pager,
-        root_pagenum,
-        column_names,
-        column_types,
-        false,
-    )?;
+    print_table(pager, root_pagenum, column_names, column_types, false)?;
     Ok(())
 }
 
@@ -157,7 +150,11 @@ pub fn run_query_no_print(
     Ok(qot)
 }
 
-fn clone_and_cast_table_iterator<'f>(ti: &'f mut crate::btree::table::Iterator<'f>, column_names: &Vec<String>, column_types: &Vec<String>) -> Result<crate::QueryOutputTable, anyhow::Error> {
+fn clone_and_cast_table_iterator<'f>(
+    ti: &'f mut crate::btree::table::Iterator<'f>,
+    column_names: &Vec<String>,
+    column_types: &Vec<String>,
+) -> Result<crate::QueryOutputTable, anyhow::Error> {
     let r: Result<Vec<crate::typed_row::TypedRow>, crate::typed_row::RowCastingError> =
         crate::typed_row::RawRowCaster::new(ti).collect();
     let r = r?;
