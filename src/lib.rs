@@ -10,6 +10,8 @@ pub mod parser;
 mod pt_to_ast;
 mod record;
 mod serial_type;
+pub mod sql_type;
+pub mod sql_value;
 pub mod typed_row;
 extern crate pest;
 #[macro_use]

@@ -2,6 +2,9 @@ use byteorder::BigEndian;
 use byteorder::ReadBytesExt;
 use std::io::Read;
 
+use crate::sql_type::SqlType;
+use crate::sql_value::SqlValue;
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Pager: Error accessing database file: {0}")]
@@ -341,7 +344,7 @@ fn test_value_to_i64() {
     assert!(value_to_i64(&18, &[0x00_u8, 0x01, 0xff], false).is_err());
 }
 
-/// Convert a sqlite value in "serial type enum" format into an enum that can hold any value (`SqlTypedValue`).
+/// Convert a sqlite value in "serial type enum" format into an enum that can hold any value (`SqlValue`).
 /// Returns an Error if there is a problem reading from the data.
 ///
 ///  # Arguments
@@ -349,8 +352,8 @@ fn test_value_to_i64() {
 /// * `data` - A slice of bytes.
 /// * `convert_nulls_to_zero`  - controls result when type is NULL.
 ///
-/// If `convert_nulls_to_zero` is true, NULL serial type results in a `SqlTypedValue::Int(0)` value.
-/// If false, NULL results in `SqlTypedValue::None()`.
+/// If `convert_nulls_to_zero` is true, NULL serial type results in a `SqlValue::Int(0)` value.
+/// If false, NULL results in `SqlValue::None()`.
 ///
 /// # Panics
 ///
@@ -359,8 +362,8 @@ pub fn value_to_sql_typed_value(
     serial_type: &i64,
     data: &[u8],
     convert_nulls_to_zero: bool,
-) -> Result<crate::typed_row::SqlTypedValue, Error> {
-    use crate::typed_row::SqlTypedValue::*;
+) -> Result<SqlValue, Error> {
+    use SqlValue::*;
 
     let mut c = std::io::Cursor::new(data);
     match serial_type {
@@ -427,7 +430,7 @@ pub fn value_to_sql_typed_value(
 
 #[test]
 fn test_value_to_sql_typed_value() {
-    use crate::typed_row::SqlTypedValue::*;
+    use SqlValue::*;
 
     // Null
     assert_eq!(value_to_sql_typed_value(&0, b"", false).unwrap(), Null());

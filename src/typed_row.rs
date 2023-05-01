@@ -7,35 +7,13 @@
 //! will manifest as one row having an error, fewer rows being returned.
 // TODO: It might be better to treat casting errors differently from errors in the underlying iterator.
 
-#[derive(Debug, Clone, PartialEq)]
-/// can hold values of any of the SQL types (sqlite supported subset).
-pub enum SqlTypedValue {
-    Int(i64),
-    Text(String),
-    Blob(Vec<u8>),
-    Real(f64),
-    Bool(bool),
-    Null(),
-}
-
-impl std::fmt::Display for SqlTypedValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SqlTypedValue::Int(x) => write!(f, "{}", x),
-            SqlTypedValue::Text(x) => write!(f, "{}", x),
-            SqlTypedValue::Blob(_) => write!(f, "<BLOB>"),
-            SqlTypedValue::Real(x) => write!(f, "{}", x),
-            SqlTypedValue::Bool(x) => write!(f, "{}", x),
-            SqlTypedValue::Null() => write!(f, "NULL"),
-        }
-    }
-}
+use crate::sql_value::SqlValue;
 
 /// can hold a sequence of values of any of the SQL types (sqlite supported subset), along with a rowid.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedRow {
     pub row_id: i64,
-    pub items: Vec<SqlTypedValue>,
+    pub items: Vec<SqlValue>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -46,7 +24,7 @@ pub enum RowCastingError {
 
 fn build_typed_row(row_id: i64, record: &[u8]) -> Result<TypedRow, RowCastingError> {
     use crate::record::ValueIterator;
-    let mut ret: Vec<SqlTypedValue> = vec![];
+    let mut ret: Vec<SqlValue> = vec![];
     for (serty, bytes) in ValueIterator::new(record) {
         match crate::serial_type::value_to_sql_typed_value(&serty, bytes, false) {
             Ok(v) => ret.push(v),
@@ -61,7 +39,7 @@ fn build_typed_row(row_id: i64, record: &[u8]) -> Result<TypedRow, RowCastingErr
 
 #[test]
 fn test_build_typed_row() {
-    use SqlTypedValue::*;
+    use SqlValue::*;
     // literal 0 | literal 1 | float 3.1415 | "Ten" | NULL
     let test_record: &[u8] = &[
         0x06, 0x08, 0x09, 0x07, 0x13, 0x00, 0x40, 0x09, 0x21, 0xca, 0xc0, 0x83, 0x12, 0x6f, 0x54,
@@ -117,7 +95,7 @@ fn path_to_testdata(filename: &str) -> String {
 
 #[test]
 fn test_raw_row_caster() {
-    use SqlTypedValue::*;
+    use SqlValue::*;
     // literal 0 | literal 1 | float 3.1415 | "Ten" | NULL
     let path = path_to_testdata("minimal.db");
     let mut pager =

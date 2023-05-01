@@ -46,7 +46,7 @@ fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
 
 #[test]
 fn test_run_query_on_minimal_db() {
-    use diydb::typed_row::SqlTypedValue::*;
+    use diydb::sql_value::SqlValue::*;
     let path = path_to_testdata("minimal.db");
     let mut pager =
         diydb::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
@@ -59,7 +59,7 @@ fn test_run_query_on_minimal_db() {
 
 #[test]
 fn test_run_query_on_multipage_with_various_page_sizes() {
-    use diydb::typed_row::SqlTypedValue::*;
+    use diydb::sql_value::SqlValue::*;
 
     let dbs = vec![
         "multipage-512B-page.db",
@@ -125,7 +125,7 @@ fn expected_row_for_three_level_db(i: i64) -> diydb::typed_row::TypedRow {
             .replace("8", "I")
             .replace("9", "J")
             .chars()
-            .map(|c| diydb::typed_row::SqlTypedValue::Text(String::from(c)))
+            .map(|c| diydb::sql_value::SqlValue::Text(String::from(c)))
             .collect(),
     }
 }
