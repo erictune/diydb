@@ -44,14 +44,18 @@ fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
     }
 }
 
+fn pagerset_with_open_db_for_run_query_tests(path: &str) -> diydb::pager::PagerSet {
+    let mut ps = diydb::pager::PagerSet::new();
+    ps.opendb(path).expect("Should have opened {path}.");
+    ps.into()
+}
+
 #[test]
 fn test_run_query_on_minimal_db() {
     use diydb::sql_value::SqlValue::*;
     let path = path_to_testdata("minimal.db");
-    let mut pager =
-        diydb::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
-    pager.initialize().expect("Should have initialized pager.");
-    let qot = diydb::run_query_no_print(&pager, "select * from a").unwrap();
+    let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
+    let qot = diydb::run_query_no_print(&ps, "select * from a").unwrap();
     assert_eq!(qot.rows.len(), 1);
     assert_eq!(qot.rows[0].items.len(), 1);
     assert_eq!(qot.rows[0].items[0], Int(1));
@@ -68,10 +72,8 @@ fn test_run_query_on_multipage_with_various_page_sizes() {
     ];
     for db in dbs {
         let path = path_to_testdata(db);
-        let mut pager =
-            diydb::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
-        pager.initialize().expect("Should have initialized pager.");
-        let qot = diydb::run_query_no_print(&pager, "select * from thousandrows").unwrap();
+        let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
+        let qot = diydb::run_query_no_print(&ps, "select * from thousandrows").unwrap();
         assert_eq!(qot.rows.len(), 1000);
 
         assert_eq!(qot.rows[0].row_id, 1);
@@ -138,10 +140,8 @@ fn test_run_query_on_three_level_db() {
     // row 1000000: 1000000
 
     let path = path_to_testdata("threelevel.db");
-    let mut pager =
-        diydb::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
-    pager.initialize().expect("Should have initialized pager.");
-    let qot = diydb::run_query_no_print(&pager, "select * from t").unwrap();
+    let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
+    let qot = diydb::run_query_no_print(&ps, "select * from t").unwrap();
 
     assert_eq!(qot.rows.len(), 100000);
     for i in 0..100000 {

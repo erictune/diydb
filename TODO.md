@@ -6,7 +6,6 @@ Current Projects Stack
     - [x] Return typed values from queries into QoTs.
     - [x] Print tables using QoTs
     - [x] Integration test to use run_query and check the results using the typed values. use table-driven testing.
-        - [ ] maybe a benchmark too?
     - [x] serial_type convertion needs to allow 0 can go to float or int.  Test if our test DBs work without it going to text?
     - [ ] QOT or its rows need to store the schema type of the rows so that the caller knows how to do operations on them.
     - [ ] Rename QOT to TempTable, and rename TypedRow to TempRow (as it is not a row in the storage format.)

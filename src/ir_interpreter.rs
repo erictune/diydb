@@ -10,7 +10,7 @@ use anyhow::Result;
 // - Is converting very expensive?  Probably for Text and Blobs.
 // - Project can project without converting, so we should allow it to Project a Scan without converting?
 
-pub fn run_ir(pager: &pager::Pager, ir: &ir::Block) -> Result<crate::QueryOutputTable> {
+pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::QueryOutputTable> {
     match ir {
         // TODO support root Project blocks.  This requires printing rows that
         // have constant exprs, dropping rows, etc.
@@ -26,6 +26,7 @@ pub fn run_ir(pager: &pager::Pager, ir: &ir::Block) -> Result<crate::QueryOutput
             // and then the schema changed?  How about storing the message digest of the creation_sql in the Scan block and verify
             // it here.
             let table_name = s.tablename.as_str();
+            let pager = ps.default_pager()?;
             let (root_pagenum, create_statement) =
                 crate::get_creation_sql_and_root_pagenum(pager, table_name).unwrap_or_else(|| {
                     panic!("Should have looked up the schema for {}.", table_name)

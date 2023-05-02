@@ -137,14 +137,14 @@ pub fn print_schema(pager: &pager::Pager) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_query(pager: &pager::Pager, query: &str) -> anyhow::Result<()> {
-    let qot = run_query_no_print(pager, query)?;
+pub fn run_query(ps: &pager::PagerSet, query: &str) -> anyhow::Result<()> {
+    let qot = run_query_no_print(ps, query)?;
     crate::formatting::print_table_qot(&qot, false)?;
     Ok(())
 }
 
 pub fn run_query_no_print(
-    pager: &pager::Pager,
+    ps: &pager::PagerSet,
     query: &str,
 ) -> anyhow::Result<crate::QueryOutputTable> {
     // Convert parse tree to AST.
@@ -152,7 +152,7 @@ pub fn run_query_no_print(
     // Convert the AST to IR.
     let ir: ir::Block = ast_to_ir::ast_select_statement_to_ir(&ss);
     // Execute the IR.
-    let qot: crate::QueryOutputTable = ir_interpreter::run_ir(pager, &ir)?;
+    let qot: crate::QueryOutputTable = ir_interpreter::run_ir(ps, &ir)?;
     Ok(qot)
 }
 

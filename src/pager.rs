@@ -1,11 +1,19 @@
-//! `pager` manages pages from a sqlite3 file as defined at https://www.sqlite.org/fileformat.html
+//! manages pages from a sqlite3 file as defined at https://www.sqlite.org/fileformat.html
 //!
-//! Currently, it only supports single-threaded read-only access to a single file. It reads all the pages into memory at once.
+//! `Pager` manages the pages from a single attached database.
+//! `PagerSet` holds the `Pager`s for zero, one, or many databases.
 //!
-//! A full implementation of a pager would support concurrent read and write accesses, with demand paging and multiple files,
+//! When there are zero databases open, SELECTs without FROM are still possible.
+//! Routines that only deal with a single database, such as `crate::btree::*`, are provided with a `Pager`.
+//! The few parts of the code that deal with potentially several databases (e.g. `main`, `do_query`) use a `PagerSet`, and
+//! lend the pagers out to table-specific subroutines that need them.
+//!
+//! Currently, a Pager only supports single-threaded read-only access a database file. It reads all the pages into memory at once.
+//!
+//! A full implementation of a Pager would support concurrent read and write accesses, with demand paging and multiple files,
 //! with the necessary reference counting and locking.
 //!
-//! A `pager` is responsible for opening and locking a database file at the OS level.  A pager owns the data in each page,
+//! A Pager is responsible for opening and locking a database file at the OS level.  A Pager owns the data in each page,
 //! and allows callers to access it for reading without copying.
 //!
 //! There are a number of page types in a SQLite database: Summarizing the SQLite documentation:
@@ -26,21 +34,75 @@
 //! >    -   A pointer map page
 //!
 //! However, simple database files only contain table btree pages.
-//! Freelist pages will be managed by the pager once supported.
+//! Freelist pages will be managed by the Pager once supported.
 //!
 //! # Future work
-//!
+//! -   Clarify how temporary tables are handled:
+//!     - Short-lived temporary tables (For a single Tx or Connection) - don't need to be paged, can use internal
+//!       vector implementation, but have limited memory, so don't need a Pager.
+//!     - Long-lived in-memory non-persisted tables - May use page-based structure, but no backing file.
+//!       May be arbitraryily large.  Should use pagerset.
+//! SELECTS from temporary in-memory table, which do not use a Pager.
 //! -   Use OS locking to lock the opened database file.
-//! -   Support accessing pages for modification by locking the entire pager.
+//! -   Support accessing pages for modification by locking the entire Pager.
 //! -   Support concurrent access for read and write via table or page-level locking.
 //! -   Support adding pages to the database.
 //! -   Support reading pages on demand.
 //! -   Support dropping unused pages when memory is low.
-//! -   Support multiple open files by coordinating between several pager objects to stay under a total memory limit.
+//! -   When there are multiple pagers (multiple open files), coordinating to stay under a total memory limit.
+
 
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom};
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Pager: Page number greater than maximum supported page number.")]
+    PageNumberBeyondLimits,
+    #[error("Pager: Internal error.")]
+    InternalError,
+    #[error("Pager: Error accessing database file: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Pager: Error in database header: {0}")]
+    DbHdrError(#[from] crate::dbheader::Error),
+    #[error("Default database pager requested when no databases loaded.")]
+    NoDefaultDB,
+    #[error("Default database pager requested when multiple databases loaded.")]
+    AmbiguousDefaultDB,
+}
+use Error::*;
+
+// A `PagerSet` manages zero or more Pagers, one per open database.
+pub struct PagerSet {
+    pagers: Vec<Box<Pager>>
+}
+
+// 'a: lifetime of self
+// 'b: lifetime of a returned Pager
+impl<'a, 'b> PagerSet
+where 'a: 'b {
+    pub fn new() -> Self { PagerSet{ pagers: vec![] } }
+    pub fn default_pager(&'a self) -> Result<&'b Pager, Error> {
+        match self.pagers.len() {
+            0 => Err(NoDefaultDB),
+            1 => Ok(&self.pagers[0]),
+            _ => Err(AmbiguousDefaultDB),
+        }
+    }
+    pub fn default_pager_mut(&'a mut self) -> Result<&'b mut Pager, Error> {
+        match self.pagers.len() {
+            0 => Err(NoDefaultDB),
+            1 => Ok(&mut self.pagers[0]),
+            _ => Err(AmbiguousDefaultDB),
+        }
+    }
+    pub fn opendb(&'a mut self, path: &str) -> Result<(), Error> {
+        self.pagers.push(Box::new(Pager::open(path)?));
+        self.pagers.last_mut().unwrap().initialize()?;
+        Ok(())
+    }
+}
 
 /// A `Pager` manages the file locking and the memory use for one open database file.
 pub struct Pager {
@@ -62,18 +124,6 @@ pub struct Pager {
     // specific information?
     pages: Vec<Option<Vec<u8>>>,
     page_size: u32,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("Pager: Page number greater than maximum supported page number.")]
-    PageNumberBeyondLimits,
-    #[error("Pager: Internal error.")]
-    InternalError,
-    #[error("Pager: Error accessing database file: {0}")]
-    IoError(#[from] std::io::Error),
-    #[error("Pager: Error in database header: {0}")]
-    DbHdrError(#[from] crate::dbheader::Error),
 }
 
 // Page numbers are 1-based, to match how Sqlite numbers pages.  PageNum ensures people pass something that is meant to be a page number

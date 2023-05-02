@@ -1,16 +1,15 @@
-use std::borrow::BorrowMut;
 use std::io::{self, BufRead, Write};
 
 fn main() {
+    let mut c: Context = Context { pagerset: diydb::pager::PagerSet::new() };
     let stdin = io::stdin();
-    let mut c = Context { pager: None };
     println!("DIYDB - simple SQL database");
     println!("Enter .help for list of commands");
     print!("> ");
     io::stdout().flush().unwrap();
     for line in stdin.lock().lines() {
         match line {
-            Ok(line) => do_command(c.borrow_mut(), line.as_str()),
+            Ok(line) => do_command(&mut c, line.as_str()),
             Err(e) => println!("Input error: {:}", e),
         }
         print!("> ");
@@ -33,7 +32,7 @@ fn do_command(c: &mut Context, line: &str) {
 }
 
 struct Context {
-    pager: Option<diydb::pager::Pager>,
+    pagerset: diydb::pager::PagerSet,
 }
 
 fn do_help(_: &mut Context) {
@@ -48,47 +47,30 @@ SELECT ...          to do a query.
 
 fn do_open(c: &mut Context, path: &str) {
     // TODO: return errors from open
-    match diydb::pager::Pager::open(path) {
-        Ok(p) => {
-            c.pager = Some(p);
-        }
+    match c.pagerset.opendb(path) {
+        Ok(()) => {  }
         Err(e) => {
             println!("Error opening database {path} : {}", e);
             return;
         }
     }
-    match c.pager.as_mut() {
-        Some(p) => match p.initialize() {
-            Ok(()) => (),
-            Err(e) => {
-                println!("Error initializing database {path} : {}", e);
-                return;
-            }
-        },
-        None => {
-            println!("Unexpected condition.");
-        }
-    }
 }
 
 fn do_schema(c: &mut Context) {
-    println!("Printing schema table...");
-    match c.pager.as_mut() {
-        Some(p) => match diydb::print_schema(p.borrow_mut()) {
+    println!("Printing schema table for default database...");
+    match c.pagerset.default_pager() {
+        Ok(p) => match diydb::print_schema(&p) {
             Err(e) => println!("Error printing schemas: {}", e),
             Ok(_) => (),
         },
-        None => println!("Error, no database loaded"),
+        Err(e) => println!("Error accessing default database (maybe none loaded?) : {e}"),
     }
 }
 
 fn do_select(c: &mut Context, l: &str) {
     println!("Doing query: {}", l);
-    match c.pager.as_mut() {
-        Some(pager) => match diydb::run_query(&pager, l) {
-            Err(e) => println!("Error running query: {}", e),
-            Ok(_) => (),
-        },
-        None => println!("Error, no database loaded"),
+    match diydb::run_query(&c.pagerset, l) {
+        Err(e) => println!("Error running query: {}", e),
+        Ok(_) => (),
     }
 }
