@@ -1,25 +1,55 @@
+//! executes SQL intermediate representation (IR).
+
+use crate::QueryOutputTable;
 use crate::ir;
 use crate::pager;
 use anyhow::Result;
 
-// TODO: instead printing directly from here:
-// - return output headers and a table iterator, and then
-// have the caller call formatting::print_table.
-// TODO: return Result<> to allow for errors to propagate up to main without panicing.
-// TODOX: should we eagerly or lazily convert from payload to typed?
-// - Is converting very expensive?  Probably for Text and Blobs.
-// - Project can project without converting, so we should allow it to Project a Scan without converting?
+use crate::sql_value::SqlValue;
+use crate::sql_type::SqlType;
+
+use crate::ast;
+use crate::typed_row::TypedRow;
+
+fn ast_constant_to_sql_value(c: &ast::Constant) -> SqlValue {
+    match c {
+        ast::Constant::Int(i) => SqlValue::Int(*i),
+        ast::Constant::String(s) => SqlValue::Text(s.clone()),
+        ast::Constant::Real(f) => SqlValue::Real(*f),
+        ast::Constant::Bool(b) => SqlValue::Int(match b { true => 1, false => 0 }),
+        ast::Constant::Null() => SqlValue::Null(),
+    }
+}
+
+fn ast_constant_to_sql_type(c: &ast::Constant) -> SqlType {
+    match c {
+        ast::Constant::Int(_) => SqlType::Int,
+        ast::Constant::String(_) => SqlType::Text,
+        ast::Constant::Real(_) => SqlType::Real,
+        ast::Constant::Bool(_) => SqlType::Int,
+        ast::Constant::Null() => SqlType::Int, // Not clear what to do in this case.  Need Unknown type?
+    }
+}
 
 pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::QueryOutputTable> {
     match ir {
         // TODO support root Project blocks.  This requires printing rows that
         // have constant exprs, dropping rows, etc.
-        // The right way to do is to have formatting::print_table accept different kinds of iterators.
+        // The right way to do is to have formatting::print_table accept different kinds of iterators?
+        // Project can project without converting, so we should allow it to Project a Scan without converting?
+
         ir::Block::Project(_) => panic!("IR that uses Project not supported yet."),
-        ir::Block::ConstantRow(_) => {
-            // TODO: Fill and return a QOT, whether this is a root or not (it is always a leaf).
-            // the types can be used to do a conversion from the payload type to the SQL column type.
-            unimplemented!("IR that uses ConstantRow not supported yet.");
+        ir::Block::ConstantRow(cr) => {
+            Ok(QueryOutputTable {
+                rows: vec![
+                    TypedRow {
+                        row_id: 1,
+                        items: cr.row.iter().map(|e| ast_constant_to_sql_value(e)).collect(),
+                    }
+                ],
+                column_names: (0..cr.row.len()).map(|i| format!("_f{i}")).collect(),
+                column_types: cr.row.iter().map(|e| ast_constant_to_sql_type(e)).collect(),
+            })
         }
         ir::Block::Scan(s) => {
             // Question: what happens if the IR was built based on assumptions about the schema (e.g. number and types of columns),

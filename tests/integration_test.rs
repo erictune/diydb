@@ -150,3 +150,15 @@ fn test_run_query_on_three_level_db() {
         assert_eq!(qot.rows[i], expected_row_for_three_level_db(i as i64));
     }
 }
+
+
+#[test]
+fn test_run_dbless_selects() {
+    let ps = diydb::pager::PagerSet::new();
+    let qot = diydb::run_query_no_print(&ps, "select 1, 2, 3").unwrap();
+    use diydb::sql_value::SqlValue;
+    assert_eq!(qot.rows.len(), 1);
+    assert_eq!(qot.rows[0].row_id as usize, 1);
+    assert_eq!(qot.rows[0].items.len(), 3);
+    assert_eq!(qot.rows[0].items, vec![SqlValue::Int(1), SqlValue::Int(2), SqlValue::Int(3)]);
+}

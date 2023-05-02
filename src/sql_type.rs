@@ -1,5 +1,6 @@
 //! Defines an enum of the 4 basic SQL supported column types and routines for conversion to and from string.
 use std::str::FromStr;
+use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// These are the SQL Column types that we support.
@@ -24,19 +25,22 @@ impl std::fmt::Display for SqlType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct ParseSqlTypeError;
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum Error {
+    #[error("Unable to parse SqlType from creation SQL: {0}.")]
+    ParseSqlTypeError(String),
+}
 
 impl FromStr for SqlType {
-    type Err = ParseSqlTypeError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
-            "INT" => Ok(SqlType::Int),
-            "TEXT" => Ok(SqlType::Text),
+            "INT" | "INTEGER" => Ok(SqlType::Int),
+            "TEXT" | "STRING" => Ok(SqlType::Text),
             "BLOB" => Ok(SqlType::Blob),
             "REAL" => Ok(SqlType::Real),
-            _ => Err(ParseSqlTypeError),
+            x @ _ => Err(Error::ParseSqlTypeError(String::from(x))),
         }
     }
 }
