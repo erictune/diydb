@@ -172,10 +172,10 @@ fn test_interior_iterator_on_multipage_db() {
     pager
         .initialize()
         .expect("Should have initialized pager for db {path}.");
-    let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "thousandrows");
+    let x = crate::get_creation_sql_and_root_pagenum(&pager, "thousandrows");
     let pgnum = x.unwrap().0;
     assert_eq!(pgnum, 3);
-    let mut ri = new_table_interior_cell_iterator_for_page(&mut pager, pgnum);
+    let mut ri = new_table_interior_cell_iterator_for_page(&pager, pgnum);
     assert_eq!(ri.next(), Some(4));
     assert_eq!(ri.next(), Some(5));
     assert_eq!(ri.next(), Some(6));

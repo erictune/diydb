@@ -13,12 +13,11 @@ Build steel thread of parsing and execution.
 -  [ ] Interpret IR to execute.
     - [x] interpret `Scan`
     - [x] return a row iterator from `run_ir`.
-    - [x] handle `ConstantRow` by creating a QOT/TempTable.
-        - [x] Rename QOT to TempTable.
-	- [ ] Rename TypedRow to TempRow (as it is not a row in the storage format.)
+    - [x] handle `ConstantRow` by creating a TempTable.
+        - [ ] Rename TypedRow to TempRow (as it is not a row in the storage format.)
     - [ ] handle `Project` of a `Scan` block.
-            - [ ] QOT or its rows need to store the schema names so that `Project` can select the right columns by name.
-            - [ ] `Project` should handles mixed constant/expression/bare-columns, and QOT/TempTable just used for constant-valued nested selects.
+            - [ ] TempTable or its rows need to store the schema names so that `Project` can select the right columns by name.
+            - [ ] `Project` should handles mixed constant/expression/bare-columns, and TempTable just used for constant-valued nested selects.
     - [x] connect root block to printer.
     - [ ] Goal is to minimize copying, using refs.  Esp. in deeper parts of IR tree.
       - Parent in IR tree to decides if clone needed.  Child to offer a ref.
@@ -32,8 +31,13 @@ Future Projects
 
 # SQL Layer Projects
 
-## AST Optimization
+# Nested Select
+- `SELECT a, b FROM (SELECT 1 as a, "two" as b, 3 as c)` becoming `Project(TempTable)`
 
+# Temp table
+- `CREATE TEMP table t as (SELECT 1 as a, "two" as b, 3 as c); SELECT a, b FROM t`
+
+## AST Optimization
 - [ ] Add binary expressions on literals and column names to pest grammar.
   - e.g.  `select 1 + 1, x + (2 + 2) from t;`
   - [ ] addition and subtraction is sufficient - avoid precedence problem for now.
@@ -54,7 +58,6 @@ Future Projects
   - e.g. `select * from t where rowid = 3`
 - [ ] Post IR generation, detect that `Scan` can be replaced with  `SeekRowid`
 - [ ] Execute it, and check that it was more efficient (steps executed?)
-
 
 # Small Tasks
 

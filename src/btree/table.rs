@@ -191,7 +191,7 @@ fn test_table_iterator_on_minimal_db() {
         crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
     pager.initialize().expect("Should have initialized pager.");
     let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "a");
-    let mut ri = crate::new_table_iterator(&mut pager, x.unwrap().0);
+    let mut ri = crate::new_table_iterator(&pager, x.unwrap().0);
     let first_item = ri.next().clone();
     assert!(first_item.is_some());
     assert_eq!(first_item.unwrap().0, 1);
@@ -208,7 +208,7 @@ fn test_table_iterator_on_three_level_db() {
     let mut pager =
         crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
     pager.initialize().expect("Should have initialized pager.");
-    let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "t");
+    let x = crate::get_creation_sql_and_root_pagenum(&pager, "t");
     let pgnum = x.unwrap().0;
 
     let ri = crate::new_table_iterator(&pager, pgnum);

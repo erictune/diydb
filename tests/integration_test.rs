@@ -10,7 +10,7 @@ fn test_get_creation_sql_and_root_pagenum_using_minimal_db() {
     let mut pager =
         diydb::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
     pager.initialize().expect("Should have initialized pager.");
-    let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, "a");
+    let x = diydb::get_creation_sql_and_root_pagenum(&pager, "a");
     assert!(x.is_some());
     let (pgnum, csql) = x.unwrap();
     assert_eq!(pgnum, 2);
@@ -36,7 +36,7 @@ fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
         ),
     ];
     for expect in expected_tables {
-        let x = diydb::get_creation_sql_and_root_pagenum(&mut pager, expect.0);
+        let x = diydb::get_creation_sql_and_root_pagenum(&pager, expect.0);
         assert!(x.is_some());
         let (pgnum, csql) = x.unwrap();
         assert_eq!(pgnum, expect.1); // first page after schema_table page.

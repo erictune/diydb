@@ -90,8 +90,8 @@ fn test_leaf_iterator_on_minimal_db() {
     pager
         .initialize()
         .expect("Should have initialized pager for db {path}.");
-    let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "a");
-    let mut ri = new_table_leaf_cell_iterator_for_page(&mut pager, x.unwrap().0);
+    let x = crate::get_creation_sql_and_root_pagenum(&pager, "a");
+    let mut ri = new_table_leaf_cell_iterator_for_page(&pager, x.unwrap().0);
     let first_item = ri.next().clone();
     assert!(first_item.is_some());
     assert_eq!(first_item.unwrap().0, 1);

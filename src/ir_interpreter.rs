@@ -38,7 +38,10 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
         // The right way to do is to have formatting::print_table accept different kinds of iterators?
         // Project can project without converting, so we should allow it to Project a Scan without converting?
 
-        ir::Block::Project(_) => panic!("IR that uses Project not supported yet."),
+        ir::Block::Project(_) => {
+            // TODO: Project needs a pointer to a Scan.  For now, we will only support Project of Scan.
+            panic!("IR that uses Project not supported yet.");
+        }
         ir::Block::ConstantRow(cr) => {
             Ok(TempTable {
                 rows: vec![
