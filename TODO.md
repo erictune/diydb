@@ -1,16 +1,6 @@
 Current Projects Stack
 ----------------------
-
-# Side Project
-
-    - [x] Return typed values from queries into QoTs.
-    - [x] Print tables using QoTs
-    - [x] Integration test to use run_query and check the results using the typed values. use table-driven testing.
-    - [x] serial_type convertion needs to allow 0 can go to float or int.  Test if our test DBs work without it going to text?
-    - [ ] QOT or its rows need to store the schema type of the rows so that the caller knows how to do operations on them.
-    - [ ] Rename QOT to TempTable, and rename TypedRow to TempRow (as it is not a row in the storage format.)
-
-# Main Project On Hold
+# Main Project
 Build steel thread of parsing and execution.
 - [x] Parse to Parse tree using pest.rs.
   - e.g. Start with `select 1, x from t;` and generate `Pairs<Rule>`
@@ -23,8 +13,12 @@ Build steel thread of parsing and execution.
 -  [ ] Interpret IR to execute.
     - [x] interpret `Scan`
     - [x] return a row iterator from `run_ir`.
-    - [ ] handle `ConstantRow` by creating a QOT/TempTable.
+    - [x] handle `ConstantRow` by creating a QOT/TempTable.
+        - [x] Rename QOT to TempTable.
+	- [ ] Rename TypedRow to TempRow (as it is not a row in the storage format.)
     - [ ] handle `Project` of a `Scan` block.
+            - [ ] QOT or its rows need to store the schema names so that `Project` can select the right columns by name.
+            - [ ] `Project` should handles mixed constant/expression/bare-columns, and QOT/TempTable just used for constant-valued nested selects.
     - [x] connect root block to printer.
     - [ ] Goal is to minimize copying, using refs.  Esp. in deeper parts of IR tree.
       - Parent in IR tree to decides if clone needed.  Child to offer a ref.

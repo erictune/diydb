@@ -5,10 +5,10 @@ use anyhow::Result;
 /// Printing out tables nicely.
 /// In the future, also csv output, etc.
 
-pub fn print_table_qot(qot: &crate::QueryOutputTable, detailed: bool) -> Result<()> {
+pub fn print_table_tt(tt: &crate::TempTable, detailed: bool) -> Result<()> {
     println!(
         "   | {} |",
-        qot.column_names
+        tt.column_names
             .iter()
             .map(|x| format!("{:15}", x))
             .collect::<Vec<String>>()
@@ -17,7 +17,7 @@ pub fn print_table_qot(qot: &crate::QueryOutputTable, detailed: bool) -> Result<
     if detailed {
         println!(
             "   | {} |",
-            qot.column_types
+            tt.column_types
                 .iter()
                 .map(|x| format!("{:15}", x))
                 .collect::<Vec<String>>()
@@ -25,7 +25,7 @@ pub fn print_table_qot(qot: &crate::QueryOutputTable, detailed: bool) -> Result<
         );
     }
     {
-        for tr in qot.rows.iter() {
+        for tr in tt.rows.iter() {
             print!("{:2} |", tr.row_id);
             for v in tr.items.iter() {
                 print!(" {:15} |", v);

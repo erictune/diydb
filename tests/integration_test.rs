@@ -55,10 +55,10 @@ fn test_run_query_on_minimal_db() {
     use diydb::sql_value::SqlValue::*;
     let path = path_to_testdata("minimal.db");
     let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
-    let qot = diydb::run_query_no_print(&ps, "select * from a").unwrap();
-    assert_eq!(qot.rows.len(), 1);
-    assert_eq!(qot.rows[0].items.len(), 1);
-    assert_eq!(qot.rows[0].items[0], Int(1));
+    let tt = diydb::run_query_no_print(&ps, "select * from a").unwrap();
+    assert_eq!(tt.rows.len(), 1);
+    assert_eq!(tt.rows[0].items.len(), 1);
+    assert_eq!(tt.rows[0].items[0], Int(1));
 }
 
 #[test]
@@ -73,13 +73,13 @@ fn test_run_query_on_multipage_with_various_page_sizes() {
     for db in dbs {
         let path = path_to_testdata(db);
         let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
-        let qot = diydb::run_query_no_print(&ps, "select * from thousandrows").unwrap();
-        assert_eq!(qot.rows.len(), 1000);
+        let tt = diydb::run_query_no_print(&ps, "select * from thousandrows").unwrap();
+        assert_eq!(tt.rows.len(), 1000);
 
-        assert_eq!(qot.rows[0].row_id, 1);
-        assert_eq!(qot.rows[0].items.len(), 3);
+        assert_eq!(tt.rows[0].row_id, 1);
+        assert_eq!(tt.rows[0].items.len(), 3);
         assert_eq!(
-            qot.rows[0].items,
+            tt.rows[0].items,
             vec![
                 Text(String::from("A")),
                 Text(String::from("A")),
@@ -87,10 +87,10 @@ fn test_run_query_on_multipage_with_various_page_sizes() {
             ]
         );
 
-        assert_eq!(qot.rows[284].row_id, 285);
-        assert_eq!(qot.rows[284].items.len(), 3);
+        assert_eq!(tt.rows[284].row_id, 285);
+        assert_eq!(tt.rows[284].items.len(), 3);
         assert_eq!(
-            qot.rows[284].items,
+            tt.rows[284].items,
             vec![
                 Text(String::from("C")),
                 Text(String::from("I")),
@@ -98,10 +98,10 @@ fn test_run_query_on_multipage_with_various_page_sizes() {
             ]
         );
 
-        assert_eq!(qot.rows[999].row_id, 1000);
-        assert_eq!(qot.rows[999].items.len(), 3);
+        assert_eq!(tt.rows[999].row_id, 1000);
+        assert_eq!(tt.rows[999].items.len(), 3);
         assert_eq!(
-            qot.rows[999].items,
+            tt.rows[999].items,
             vec![
                 Text(String::from("J")),
                 Text(String::from("J")),
@@ -141,13 +141,13 @@ fn test_run_query_on_three_level_db() {
 
     let path = path_to_testdata("threelevel.db");
     let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
-    let qot = diydb::run_query_no_print(&ps, "select * from t").unwrap();
+    let tt = diydb::run_query_no_print(&ps, "select * from t").unwrap();
 
-    assert_eq!(qot.rows.len(), 100000);
+    assert_eq!(tt.rows.len(), 100000);
     for i in 0..100000 {
-        assert_eq!(qot.rows[i].row_id as usize, i + 1);
-        assert_eq!(qot.rows[i].items.len(), 5);
-        assert_eq!(qot.rows[i], expected_row_for_three_level_db(i as i64));
+        assert_eq!(tt.rows[i].row_id as usize, i + 1);
+        assert_eq!(tt.rows[i].items.len(), 5);
+        assert_eq!(tt.rows[i], expected_row_for_three_level_db(i as i64));
     }
 }
 
@@ -155,10 +155,10 @@ fn test_run_query_on_three_level_db() {
 #[test]
 fn test_run_dbless_selects() {
     let ps = diydb::pager::PagerSet::new();
-    let qot = diydb::run_query_no_print(&ps, "select 1, 2, 3").unwrap();
+    let tt = diydb::run_query_no_print(&ps, "select 1, 2, 3").unwrap();
     use diydb::sql_value::SqlValue;
-    assert_eq!(qot.rows.len(), 1);
-    assert_eq!(qot.rows[0].row_id as usize, 1);
-    assert_eq!(qot.rows[0].items.len(), 3);
-    assert_eq!(qot.rows[0].items, vec![SqlValue::Int(1), SqlValue::Int(2), SqlValue::Int(3)]);
+    assert_eq!(tt.rows.len(), 1);
+    assert_eq!(tt.rows[0].row_id as usize, 1);
+    assert_eq!(tt.rows[0].items.len(), 3);
+    assert_eq!(tt.rows[0].items, vec![SqlValue::Int(1), SqlValue::Int(2), SqlValue::Int(3)]);
 }

@@ -1,6 +1,6 @@
 //! executes SQL intermediate representation (IR).
 
-use crate::QueryOutputTable;
+use crate::TempTable;
 use crate::ir;
 use crate::pager;
 use anyhow::Result;
@@ -31,7 +31,7 @@ fn ast_constant_to_sql_type(c: &ast::Constant) -> SqlType {
     }
 }
 
-pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::QueryOutputTable> {
+pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> {
     match ir {
         // TODO support root Project blocks.  This requires printing rows that
         // have constant exprs, dropping rows, etc.
@@ -40,7 +40,7 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::QueryOutput
 
         ir::Block::Project(_) => panic!("IR that uses Project not supported yet."),
         ir::Block::ConstantRow(cr) => {
-            Ok(QueryOutputTable {
+            Ok(TempTable {
                 rows: vec![
                     TypedRow {
                         row_id: 1,

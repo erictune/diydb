@@ -31,7 +31,7 @@ const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
 const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
 const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 
-/// QueryOutputTable collects results into a temporary in-memory table of limited size
+/// TempTable collects query results into a temporary in-memory table of limited size.
 ///
 /// # Design Rationale
 /// In internal code, the database avoids making copies for efficiency, since queries can process many more rows than they
@@ -40,7 +40,7 @@ const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 /// and we can release any the page locks as soon as possible.
 /// The assumption here is that the caller is an interactive user who wants a limited number of rows (thousands).
 /// For non-interactive bulk use, perhaps this needs to be revisted.
-pub struct QueryOutputTable {
+pub struct TempTable {
     pub rows: Vec<typed_row::TypedRow>,
     pub column_names: Vec<String>,
     pub column_types: Vec<SqlType>,
@@ -115,13 +115,13 @@ fn print_table(
         }
     }
     let mut tci = new_table_iterator(pgr, root_pgnum);
-    let qot = clone_and_cast_table_iterator(&mut tci, &col_names, &col_types)?;
+    let tt = clone_and_cast_table_iterator(&mut tci, &col_names, &col_types)?;
     // TODO: want "connection" in between these lines.
     // While we don't want copying or buffering inside the execution, it is okay to buffer lines going over the connection.
     // The execution engine can't be blocked by the printing, which might stall due to pagination, etc.  Therefore,
     // an iterator might not be right, and at the least some kind of buffer is needed.
     // There might need to be a limit to the buffer size though.
-    formatting::print_table_qot(&qot, detailed)?;
+    formatting::print_table_tt(&tt, detailed)?;
     Ok(())
 }
 
@@ -138,35 +138,35 @@ pub fn print_schema(pager: &pager::Pager) -> anyhow::Result<()> {
 }
 
 pub fn run_query(ps: &pager::PagerSet, query: &str) -> anyhow::Result<()> {
-    let qot = run_query_no_print(ps, query)?;
-    crate::formatting::print_table_qot(&qot, false)?;
+    let tt = run_query_no_print(ps, query)?;
+    crate::formatting::print_table_tt(&tt, false)?;
     Ok(())
 }
 
 pub fn run_query_no_print(
     ps: &pager::PagerSet,
     query: &str,
-) -> anyhow::Result<crate::QueryOutputTable> {
+) -> anyhow::Result<crate::TempTable> {
     // Convert parse tree to AST.
     let ss: ast::SelectStatement = pt_to_ast::pt_select_statement_to_ast(query);
     // Convert the AST to IR.
     let ir: ir::Block = ast_to_ir::ast_select_statement_to_ir(&ss);
     // Execute the IR.
-    let qot: crate::QueryOutputTable = ir_interpreter::run_ir(ps, &ir)?;
-    Ok(qot)
+    let tt: crate::TempTable = ir_interpreter::run_ir(ps, &ir)?;
+    Ok(tt)
 }
 
 fn clone_and_cast_table_iterator<'f>(
     ti: &'f mut crate::btree::table::Iterator<'f>,
     column_names: &Vec<String>,
     column_types: &Vec<String>,
-) -> Result<crate::QueryOutputTable, anyhow::Error> {
+) -> Result<crate::TempTable, anyhow::Error> {
     let column_types: Vec<SqlType> = column_types.iter().map(|s| SqlType::from_str(s.as_str()).unwrap()).collect();
     let column_types2 = column_types.clone();
     let r: Result<Vec<TypedRow>, RowCastingError> =
         RawRowCaster::new(column_types, ti).collect();
     let r = r?;
-    Ok(crate::QueryOutputTable {
+    Ok(crate::TempTable {
         // TODO: take() a limited number of rows when collect()ing them, and return error if they don't fit?
         rows: r,
         column_names: column_names.clone(),
