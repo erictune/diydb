@@ -27,6 +27,9 @@ const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
 const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
 const SCHEMA_SCHEMA: &str =
     "CREATE TABLE sqlite_schema (type text, name text, tbl_name text, rootpage integer, sql text)";
+const SCHEMA_TABLE_COL_NAMES: [&str; 5] = ["type", "name", "tbl_name", "rootpage", "sql"];
+const SCHEMA_TABLE_COL_TYPES_STR: [&str; 5] = ["text", "text", "text", "int", "text"];
+
 const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
 const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
 const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
@@ -54,8 +57,7 @@ pub fn get_creation_sql_and_root_pagenum(
     if table_name == SCHEMA_TABLE_NAME {
         return Some((SCHEMA_BTREE_ROOT_PAGENUM, String::from(SCHEMA_SCHEMA)));
     } else {
-        let record_iterator: btree::table::Iterator = new_table_iterator(pgr, SCHEMA_BTREE_ROOT_PAGENUM);
-        for (_, payload) in record_iterator {
+        for (_, payload) in new_table_iterator(pgr, SCHEMA_BTREE_ROOT_PAGENUM) {
             let vi = record::ValueIterator::new(payload);
             let row = vi.collect::<Vec<(i64, &[u8])>>();
             let this_table_name = serial_type::value_to_string(
@@ -100,40 +102,17 @@ pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Ite
     crate::btree::table::Iterator::new(pgnum, pgr)
 }
 
-fn print_table(
-    pgr: &pager::Pager,
-    root_pgnum: usize,
-    col_names: Vec<String>,
-    col_types: Vec<String>,
-    detailed: bool,
-) -> anyhow::Result<()> {
-    {
-        let (page, offset) = page_and_offset_for_pagenum(pgr, root_pgnum);
-        let hdr = btree::header::check_header(page, offset);
-        if detailed {
-            println!("{:?}", hdr);
-        }
-    }
-    let mut tci = new_table_iterator(pgr, root_pgnum);
-    let tt = clone_and_cast_table_iterator(&mut tci, &col_names, &col_types)?;
-    // TODO: want "connection" in between these lines.
-    // While we don't want copying or buffering inside the execution, it is okay to buffer lines going over the connection.
-    // The execution engine can't be blocked by the printing, which might stall due to pagination, etc.  Therefore,
-    // an iterator might not be right, and at the least some kind of buffer is needed.
-    // There might need to be a limit to the buffer size though.
-    formatting::print_table_tt(&tt, detailed)?;
-    Ok(())
-}
-
 // TODO: replace this with executing a query?
 /// Print the Schema table to standard output.
 pub fn print_schema(pager: &pager::Pager) -> anyhow::Result<()> {
-    let table_name = "sqlite_schema";
-    let (root_pagenum, create_statement) = get_creation_sql_and_root_pagenum(pager, table_name)
-        .unwrap_or_else(|| panic!("Should have looked up the schema for {}.", table_name));
-    let (_, column_names, column_types) = pt_to_ast::parse_create_statement(&create_statement);
+    let column_names = SCHEMA_TABLE_COL_NAMES.iter().map(|x| String::from(*x)).collect();
+    let column_types = SCHEMA_TABLE_COL_TYPES_STR.iter().map(|x| String::from(*x)).collect();
 
-    print_table(pager, root_pagenum, column_names, column_types, false)?;
+    let (page, offset) = page_and_offset_for_pagenum(pager, SCHEMA_BTREE_ROOT_PAGENUM);
+    let _ = btree::header::check_header(page, offset);
+    let mut tci = new_table_iterator(pager, SCHEMA_BTREE_ROOT_PAGENUM);
+    let tt = clone_and_cast_table_iterator(&mut tci, &column_names, &column_types)?;
+    formatting::print_table_tt(&tt, false)?;
     Ok(())
 }
 
