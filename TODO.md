@@ -5,10 +5,11 @@ Current Projects Stack
 
     - [x] Return typed values from queries into QoTs.
     - [x] Print tables using QoTs
-    - [ ] Integration test to use run_query and check the results using the typed values. use table-driven testing.
+    - [x] Integration test to use run_query and check the results using the typed values. use table-driven testing.
         - [ ] maybe a benchmark too?
-    - [ ] Save Constant row comment (ir_interpreter.rs)
-    - [ ] drop the stash as the rest is not needed.
+    - [x] serial_type convertion needs to allow 0 can go to float or int.  Test if our test DBs work without it going to text?
+    - [ ] QOT or its rows need to store the schema type of the rows so that the caller knows how to do operations on them.
+    - [ ] Rename QOT to TempTable, and rename TypedRow to TempRow (as it is not a row in the storage format.)
 
 # Main Project On Hold
 Build steel thread of parsing and execution.
@@ -23,18 +24,19 @@ Build steel thread of parsing and execution.
 -  [ ] Interpret IR to execute.
     - [x] interpret `Scan`
     - [x] return a row iterator from `run_ir`.
-    - [ ] handle `ConstantRow`
-    - [ ] handle `Project`.
-    - [ ] connect root block to printer.
+    - [ ] handle `ConstantRow` by creating a QOT/TempTable.
+    - [ ] handle `Project` of a `Scan` block.
+    - [x] connect root block to printer.
     - [ ] Goal is to minimize copying, using refs.  Esp. in deeper parts of IR tree.
       - Parent in IR tree to decides if clone needed.  Child to offer a ref.
       - How long is ref valid if page needs to go out?  Page waits until query done.  Refs last for lifetime of the IR execution (of the IR?)
-    - [ ] Test IR evaluation using unit testing, with fake tables.
--  [ ] end to end test of query PT/AST/IR/Execute.
+    - [x] Test IR evaluation using unit testing.
+-  [x] end to end test of query PT/AST/IR/Execute.
 Scope for "steel thread" is just constants (literals) and expressions.
 
 Future Projects
 ----------------
+
 # SQL Layer Projects
 
 ## AST Optimization

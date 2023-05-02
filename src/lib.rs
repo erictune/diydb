@@ -17,6 +17,10 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
+use std::str::FromStr;
+use sql_type::SqlType;
+use typed_row::{TypedRow, RowCastingError, RawRowCaster};
+
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
 const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
@@ -39,7 +43,7 @@ const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 pub struct QueryOutputTable {
     pub rows: Vec<typed_row::TypedRow>,
     pub column_names: Vec<String>,
-    pub column_types: Vec<String>,
+    pub column_types: Vec<SqlType>,
 }
 
 /// Get the root page number for, and the SQL CREATE statement used to create `table_name`.
@@ -50,7 +54,7 @@ pub fn get_creation_sql_and_root_pagenum(
     if table_name == SCHEMA_TABLE_NAME {
         return Some((SCHEMA_BTREE_ROOT_PAGENUM, String::from(SCHEMA_SCHEMA)));
     } else {
-        let record_iterator = new_table_iterator(pgr, SCHEMA_BTREE_ROOT_PAGENUM);
+        let record_iterator: btree::table::Iterator = new_table_iterator(pgr, SCHEMA_BTREE_ROOT_PAGENUM);
         for (_, payload) in record_iterator {
             let vi = record::ValueIterator::new(payload);
             let row = vi.collect::<Vec<(i64, &[u8])>>();
@@ -157,13 +161,15 @@ fn clone_and_cast_table_iterator<'f>(
     column_names: &Vec<String>,
     column_types: &Vec<String>,
 ) -> Result<crate::QueryOutputTable, anyhow::Error> {
-    let r: Result<Vec<crate::typed_row::TypedRow>, crate::typed_row::RowCastingError> =
-        crate::typed_row::RawRowCaster::new(ti).collect();
+    let column_types: Vec<SqlType> = column_types.iter().map(|s| SqlType::from_str(s.as_str()).unwrap()).collect();
+    let column_types2 = column_types.clone();
+    let r: Result<Vec<TypedRow>, RowCastingError> =
+        RawRowCaster::new(column_types, ti).collect();
     let r = r?;
     Ok(crate::QueryOutputTable {
         // TODO: take() a limited number of rows when collect()ing them, and return error if they don't fit?
         rows: r,
         column_names: column_names.clone(),
-        column_types: column_types.clone(),
+        column_types: column_types2,
     })
 }
