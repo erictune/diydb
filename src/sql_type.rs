@@ -2,7 +2,7 @@
 use std::str::FromStr;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// These are the SQL Column types that we support.
 /// These are believed to match the basic types that SQLite supports for `CREATE TABLE ... STRICT;` format.
 /// In particular, `BOOL` is not a distinct type.
@@ -40,7 +40,7 @@ impl FromStr for SqlType {
             "TEXT" | "STRING" => Ok(SqlType::Text),
             "BLOB" => Ok(SqlType::Blob),
             "REAL" => Ok(SqlType::Real),
-            x @ _ => Err(Error::ParseSqlTypeError(String::from(x))),
+            x => Err(Error::ParseSqlTypeError(String::from(x))),
         }
     }
 }

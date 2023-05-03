@@ -49,11 +49,11 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
                 rows: vec![
                     TypedRow {
                         row_id: 1,
-                        items: cr.row.iter().map(|e| ast_constant_to_sql_value(e)).collect(),
+                        items: cr.row.iter().map(ast_constant_to_sql_value).collect(),
                     }
                 ],
                 column_names: (0..cr.row.len()).map(|i| format!("_f{i}")).collect(),
-                column_types: cr.row.iter().map(|e| ast_constant_to_sql_type(e)).collect(),
+                column_types: cr.row.iter().map(ast_constant_to_sql_type).collect(),
             })
         }
         ir::Block::Scan(s) => {

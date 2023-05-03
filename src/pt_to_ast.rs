@@ -112,7 +112,7 @@ fn test_parse_create_statement() {
     }
 }
 
-fn parse_literal_from_rule<'i>(pair: pest::iterators::Pair<'i, Rule>) -> ast::Constant {
+fn parse_literal_from_rule(pair: pest::iterators::Pair<'_, Rule>) -> ast::Constant {
     match pair.as_rule() {
         Rule::null_literal => ast::Constant::Null(),
         Rule::true_literal => ast::Constant::Bool(true),

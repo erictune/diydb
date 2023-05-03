@@ -21,7 +21,7 @@ pub struct Header {
     pub rightmost_pointer: Option<u32>,
 }
 
-pub fn check_header<'a>(page: &'a Vec<u8>, non_btree_header_bytes: usize) -> Header {
+pub fn check_header(page: &'_ Vec<u8>, non_btree_header_bytes: usize) -> Header {
     //The 8 or 12 byte b-tree page (currently just the header).
     let mut c = Cursor::new(page);
     // The first page has a header which is not btree content, but which is included in cell pointers.

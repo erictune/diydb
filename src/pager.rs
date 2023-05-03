@@ -61,44 +61,44 @@ pub enum Error {
     #[error("Pager: Page number greater than maximum supported page number.")]
     PageNumberBeyondLimits,
     #[error("Pager: Internal error.")]
-    InternalError,
+    Internal,
     #[error("Pager: Error accessing database file: {0}")]
-    IoError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
     #[error("Pager: Error in database header: {0}")]
-    DbHdrError(#[from] crate::dbheader::Error),
+    DbHdr(#[from] crate::dbheader::Error),
     #[error("Default database pager requested when no databases loaded.")]
     NoDefaultDB,
     #[error("Default database pager requested when multiple databases loaded.")]
     AmbiguousDefaultDB,
 }
-use Error::*;
 
 // A `PagerSet` manages zero or more Pagers, one per open database.
 pub struct PagerSet {
-    pagers: Vec<Box<Pager>>
+    pagers: Vec<Pager>
 }
 
 // 'a: lifetime of self
 // 'b: lifetime of a returned Pager
 impl<'a, 'b> PagerSet
 where 'a: 'b {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self { PagerSet{ pagers: vec![] } }
     pub fn default_pager(&'a self) -> Result<&'b Pager, Error> {
         match self.pagers.len() {
-            0 => Err(NoDefaultDB),
+            0 => Err(Error::NoDefaultDB),
             1 => Ok(&self.pagers[0]),
-            _ => Err(AmbiguousDefaultDB),
+            _ => Err(Error::AmbiguousDefaultDB),
         }
     }
     pub fn default_pager_mut(&'a mut self) -> Result<&'b mut Pager, Error> {
         match self.pagers.len() {
-            0 => Err(NoDefaultDB),
+            0 => Err(Error::NoDefaultDB),
             1 => Ok(&mut self.pagers[0]),
-            _ => Err(AmbiguousDefaultDB),
+            _ => Err(Error::AmbiguousDefaultDB),
         }
     }
     pub fn opendb(&'a mut self, path: &str) -> Result<(), Error> {
-        self.pagers.push(Box::new(Pager::open(path)?));
+        self.pagers.push(Pager::open(path)?);
         self.pagers.last_mut().unwrap().initialize()?;
         Ok(())
     }
@@ -146,13 +146,13 @@ impl Pager {
                         .write(false)
                         .create(false)
                         .open(path)
-                        .map_err(|e| Error::IoError(e))?
+                        .map_err(Error::Io)?
                 );
         let h = crate::dbheader::get_header_clone(&mut file.borrow_mut())
-            .map_err(|e| Error::DbHdrError(e))?;
+            .map_err(Error::DbHdr)?;
         file.borrow_mut()
             .seek(SeekFrom::Start(0))
-            .map_err(|e| Error::IoError(e))?;
+            .map_err(Error::Io)?;
         if h.numpages > MAX_PAGE_NUM as u32 {
             return Err(Error::PageNumberBeyondLimits);
         }
@@ -166,11 +166,11 @@ impl Pager {
     // Reads in all the pages of the file. TODO: do this on demand.
     pub fn initialize(&mut self) -> Result<(), Error> {
         let h = crate::dbheader::get_header_clone(&mut self.f.borrow_mut())
-            .map_err(|e| Error::DbHdrError(e))?;
+            .map_err(Error::DbHdr)?;
         self.f
             .borrow_mut()
             .seek(SeekFrom::Start(0))
-            .map_err(|e| Error::IoError(e))?;
+            .map_err(Error::Io)?;
         if h.numpages > MAX_PAGE_NUM as u32 {
             panic!("Too many pages");
         }
@@ -191,11 +191,11 @@ impl Pager {
         self.f
             .borrow_mut()
             .seek(SeekFrom::Start((pn - 1) as u64 * self.page_size as u64))
-            .map_err(|e| Error::IoError(e))?;
+            .map_err(Error::Io)?;
         self.f
             .borrow_mut()
             .read_exact(&mut v[..])
-            .map_err(|e| Error::IoError(e))?;
+            .map_err(Error::Io)?;
         Ok(v)
     }
 
@@ -238,7 +238,7 @@ impl Pager {
         self.check_present(pn);
         match &self.pages[pn - 1] {
             Some(v) => Ok(v),
-            None => Err(Error::InternalError),
+            None => Err(Error::Internal),
         }
     }
 

@@ -46,12 +46,10 @@ SELECT ...          to do a query.
 }
 
 fn do_open(c: &mut Context, path: &str) {
-    // TODO: return errors from open
     match c.pagerset.opendb(path) {
         Ok(()) => {  }
         Err(e) => {
             println!("Error opening database {path} : {}", e);
-            return;
         }
     }
 }
@@ -59,18 +57,18 @@ fn do_open(c: &mut Context, path: &str) {
 fn do_schema(c: &mut Context) {
     println!("Printing schema table for default database...");
     match c.pagerset.default_pager() {
-        Ok(p) => match diydb::print_schema(&p) {
-            Err(e) => println!("Error printing schemas: {}", e),
-            Ok(_) => (),
-        },
+        Ok(p) => {
+            if let Err(e) = diydb::print_schema(p) {
+                println!("Error printing schemas: {}", e);
+            }
+        }
         Err(e) => println!("Error accessing default database (maybe none loaded?) : {e}"),
     }
 }
 
 fn do_select(c: &mut Context, l: &str) {
     println!("Doing query: {}", l);
-    match diydb::run_query(&c.pagerset, l) {
-        Err(e) => println!("Error running query: {}", e),
-        Ok(_) => (),
+    if let Err(e) = diydb::run_query(&c.pagerset, l) {
+        println!("Error running query: {}", e);
     }
 }

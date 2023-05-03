@@ -9,22 +9,21 @@ use crate::sql_value::SqlValue;
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Pager: Error accessing database file: {0}")]
-    IoError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
     #[error("Unable to convert type {from} to {to}.")]
-    TypeError { from: SqlType, to: SqlType },
+    Type { from: SqlType, to: SqlType },
     #[error("Unimplemented type.")]
-    UnimplementedError,
+    Unimplemented,
     #[error("Invalid serial type code.")]
     InvalidSerialTypeCode,
     #[error("Byte were not a valid string valid encoding.")]
-    InvalidStringEncodingError(#[from] std::string::FromUtf8Error),
+    InvalidStringEncoding(#[from] std::string::FromUtf8Error),
     #[error("Null found where non-null value required.")]
-    NullError,
+    Null,
     #[error("Code which was thought unreachable was reached.")]
-    UnreachableError,
+    Unreachable,
 }
 
-use Error::*;
 /// Convert a serial type number to a string describing the type suitable for debug printing.
 ///
 /// # Arguments
@@ -98,16 +97,16 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> Result<String, Error> 
         // 0	        0	            Value is a NULL.
         0 => Ok("NULL".to_string()),
         // 1	        1	            Value is an 8-bit twos-complement integer.
-        1 => Ok(format!("{}", c.read_i8().map_err(|e| IoError(e))?)),
+        1 => Ok(format!("{}", c.read_i8().map_err(Error::Io)?)),
         // 2	        2	            Value is a big-endian 16-bit twos-complement integer.
         2 => Ok(format!(
             "{}",
-            c.read_i16::<BigEndian>().map_err(|e| IoError(e))?
+            c.read_i16::<BigEndian>().map_err(Error::Io)?
         )),
         // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
         3 => {
             let mut bytes = [0_u8; 4];
-            c.read_exact(&mut bytes[1..]).map_err(|e| IoError(e))?;
+            c.read_exact(&mut bytes[1..]).map_err(Error::Io)?;
             bytes[0] = match (bytes[1] & 0b1000_0000) > 0 {
                 false => 0,
                 true => 0xff,
@@ -117,39 +116,39 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> Result<String, Error> 
         // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
         4 => Ok(format!(
             "{}",
-            c.read_i32::<BigEndian>().map_err(|e| IoError(e))?
+            c.read_i32::<BigEndian>().map_err(Error::Io)?
         )),
         // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
-        5 => Err(UnimplementedError),
+        5 => Err(Error::Unimplemented),
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
         6 => Ok(format!(
             "{}",
-            c.read_i64::<BigEndian>().map_err(|e| IoError(e))?
+            c.read_i64::<BigEndian>().map_err(Error::Io)?
         )),
         // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
         7 => Ok(format!(
             "{}",
-            c.read_f64::<BigEndian>().map_err(|e| IoError(e))?
+            c.read_f64::<BigEndian>().map_err(Error::Io)?
         )),
         // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
         8 => Ok("0".to_string()),
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
         9 => Ok("1".to_string()),
         // 10,11	    variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
-        10 | 11 => Err(InvalidSerialTypeCode),
+        10 | 11 => Err(Error::InvalidSerialTypeCode),
         // N≥12 & even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
         // N≥13 & odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
         x @ 12.. => {
             match (x % 2) == 0 {
                 true /* odd */ => {
                     let mut buf = vec![0_u8; (*x as usize - 12) / 2];
-                    c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
+                    c.read_exact(&mut buf[..]).map_err(Error::Io)?;
                     Ok(format!("{:?}", buf))
                 }
                 false /* even */ => {
                 let mut buf = vec![0_u8; (*x as usize - 13) / 2];
-                    c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
-                    Ok(String::from_utf8(buf).map_err(|e: std::string::FromUtf8Error| InvalidStringEncodingError(e))?)
+                    c.read_exact(&mut buf[..]).map_err(Error::Io)?;
+                    Ok(String::from_utf8(buf).map_err(Error::InvalidStringEncoding)?)
                 }
             }
         }
@@ -259,17 +258,17 @@ pub fn value_to_i64(
             if convert_nulls_to_zero {
                 Ok(0)
             } else {
-                Err(NullError)
+                Err(Error::Null)
             }
         }
         // 1	        1	            Value is an 8-bit twos-complement integer.
-        1 => Ok(c.read_i8().map_err(|e| IoError(e))? as i64),
+        1 => Ok(c.read_i8().map_err(Error::Io)? as i64),
         // 2	        2	            Value is a big-endian 16-bit twos-complement integer.
-        2 => Ok(c.read_i16::<BigEndian>().map_err(|e| IoError(e))? as i64),
+        2 => Ok(c.read_i16::<BigEndian>().map_err(Error::Io)? as i64),
         // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
         3 => {
             let mut bytes = [0_u8; 4];
-            c.read_exact(&mut bytes[1..]).map_err(|e| IoError(e))?;
+            c.read_exact(&mut bytes[1..]).map_err(Error::Io)?;
             bytes[0] = match (bytes[1] & 0b1000_0000) > 0 {
                 false => 0,
                 true => 0xff,
@@ -277,23 +276,23 @@ pub fn value_to_i64(
             Ok(i32::from_be_bytes(bytes) as i64)
         }
         // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
-        4 => Ok(c.read_i32::<BigEndian>().map_err(|e| IoError(e))? as i64),
+        4 => Ok(c.read_i32::<BigEndian>().map_err(Error::Io)? as i64),
         // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
-        5 => Err(UnimplementedError),
+        5 => Err(Error::Unimplemented),
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
-        6 => Ok(c.read_i64::<BigEndian>().map_err(|e| IoError(e))?),
+        6 => Ok(c.read_i64::<BigEndian>().map_err(Error::Io)?),
         // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
         7 => {
-            Err(TypeError{ from: SqlType::Real, to: SqlType::Int })
+            Err(Error::Type{ from: SqlType::Real, to: SqlType::Int })
         }
         // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
         8 => Ok(0_i64),
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
         9 => Ok(1_i64),
         // 10,11	    variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file, but they might be used in transient and temporary database files that SQLite sometimes generates for its own use. The meanings of these codes can shift from one release of SQLite to the next.
-        10 | 11 => Err(InvalidSerialTypeCode),
+        10 | 11 => Err(Error::InvalidSerialTypeCode),
         // N≥12         variable    BLOB or TEXT
-        12.. => Err(Error::UnimplementedError),
+        12.. => Err(Error::Unimplemented),
         i64::MIN..=-1 => Err(Error::InvalidSerialTypeCode),
     }
 }
@@ -421,38 +420,38 @@ pub fn value_to_sql_typed_value(
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
         x @ 1..=6 => {
             let i = match x {
-                1 => c.read_i8().map_err(|e| IoError(e))? as i64,
-                2 => c.read_i16::<BigEndian>().map_err(|e| IoError(e))? as i64,
+                1 => c.read_i8().map_err(Error::Io)? as i64,
+                2 => c.read_i16::<BigEndian>().map_err(Error::Io)? as i64,
                 3 => {
                     let mut bytes = [0_u8; 4];
-                    c.read_exact(&mut bytes[1..]).map_err(|e| IoError(e))?;
+                    c.read_exact(&mut bytes[1..]).map_err(Error::Io)?;
                     bytes[0] = match (bytes[1] & 0b1000_0000) > 0 {
                         false => 0,
                         true => 0xff,
                     };
                     i32::from_be_bytes(bytes) as i64
                 }
-                4 => c.read_i32::<BigEndian>().map_err(|e| IoError(e))? as i64,
+                4 => c.read_i32::<BigEndian>().map_err(Error::Io)? as i64,
                 5 => 0,
-                6 => c.read_i64::<BigEndian>().map_err(|e| IoError(e))?,
-                _ => return Err(UnreachableError),
+                6 => c.read_i64::<BigEndian>().map_err(Error::Io)?,
+                _ => return Err(Error::Unreachable),
             };
-            if  *x == 5_i64 { return Err(UnimplementedError) }
+            if  *x == 5_i64 { return Err(Error::Unimplemented) }
             match sqt {
                 SQT::Int => Ok(Int(i)),
                 SQT::Real => Ok(Real(i as f64)),
                 SQT::Text => Ok(Text(format!("{}", i))),
-                SQT::Blob => Err(TypeError{from: SQT::Int, to: SQT::Blob}),
+                SQT::Blob => Err(Error::Type{from: SQT::Int, to: SQT::Blob}),
             }
         }
         // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
         7 => {
-            let f = c.read_f64::<BigEndian>().map_err(|e| IoError(e))?;
+            let f = c.read_f64::<BigEndian>().map_err(Error::Io)?;
             match sqt {
-                SQT::Int => Err(TypeError{from: SQT::Real, to: SQT::Int}),
+                SQT::Int => Err(Error::Type{from: SQT::Real, to: SQT::Int}),
                 SQT::Real => Ok(Real(f)),
-                SQT::Text => Err(TypeError{from: SQT::Real, to: SQT::Text}),
-                SQT::Blob => Err(TypeError{from: SQT::Real, to: SQT::Blob}),
+                SQT::Text => Err(Error::Type{from: SQT::Real, to: SQT::Text}),
+                SQT::Blob => Err(Error::Type{from: SQT::Real, to: SQT::Blob}),
             }
         }
         // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
@@ -461,7 +460,7 @@ pub fn value_to_sql_typed_value(
                 SQT::Int => Ok(Int(0_i64)),
                 SQT::Real => Ok(Real(0_f64)),
                 SQT::Text => Ok(Text(String::from("0"))),
-                SQT::Blob => Err(TypeError{from: SQT::Int, to: SQT::Blob}),
+                SQT::Blob => Err(Error::Type{from: SQT::Int, to: SQT::Blob}),
             }
         }
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
@@ -470,34 +469,34 @@ pub fn value_to_sql_typed_value(
                 SQT::Int => Ok(Int(1_i64)),
                 SQT::Real => Ok(Real(1_f64)),
                 SQT::Text => Ok(Text(String::from("1"))),
-                SQT::Blob => Err(TypeError{from: SQT::Int, to: SQT::Blob}),
+                SQT::Blob => Err(Error::Type{from: SQT::Int, to: SQT::Blob}),
             }
         }
         // 10,11	variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file...
-        10 | 11 => Err(InvalidSerialTypeCode),
+        10 | 11 => Err(Error::InvalidSerialTypeCode),
         // N≥12 & even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
         // N≥13 & odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
         x @ 12.. => {
             match (*x % 2) == 0 {
                 true /* odd */=>  {
                     let mut buf = vec![0_u8; (*x as usize - 12) / 2];
-                    c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
+                    c.read_exact(&mut buf[..]).map_err(Error::Io)?;
                     match sqt {
-                        SQT::Int => Err(TypeError{from: SQT::Blob, to: SQT::Int}),
-                        SQT::Real => Err(TypeError{from: SQT::Blob, to: SQT::Real}),
-                        SQT::Text => Err(TypeError{from: SQT::Blob, to: SQT::Text}),
+                        SQT::Int => Err(Error::Type{from: SQT::Blob, to: SQT::Int}),
+                        SQT::Real => Err(Error::Type{from: SQT::Blob, to: SQT::Real}),
+                        SQT::Text => Err(Error::Type{from: SQT::Blob, to: SQT::Text}),
                         SQT::Blob => Ok(Blob(buf.clone())),
                     }
                 }
                 false /* even */ => {
                     let mut buf = vec![0_u8; (*x as usize - 13) / 2];
-                    c.read_exact(&mut buf[..]).map_err(|e| IoError(e))?;
-                    let s = String::from_utf8(buf).map_err(|e| InvalidStringEncodingError(e))?;
+                    c.read_exact(&mut buf[..]).map_err(Error::Io)?;
+                    let s = String::from_utf8(buf).map_err(Error::InvalidStringEncoding)?;
                     match sqt {
-                        SQT::Int => Err(TypeError{from: SQT::Text, to: SQT::Int}),
-                        SQT::Real => Err(TypeError{from: SQT::Text, to: SQT::Real}),
+                        SQT::Int => Err(Error::Type{from: SQT::Text, to: SQT::Int}),
+                        SQT::Real => Err(Error::Type{from: SQT::Text, to: SQT::Real}),
                         SQT::Text => Ok(Text(s)),
-                        SQT::Blob => Err(TypeError{from: SQT::Text, to: SQT::Blob}),
+                        SQT::Blob => Err(Error::Type{from: SQT::Text, to: SQT::Blob}),
                     }
                 }
             }

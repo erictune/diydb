@@ -25,7 +25,7 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> ir::Block {
             }
         }
         return ir::Block::ConstantRow(ir::ConstantRow {
-            row: row, // TODO: get this from the select expression, and make sure it does not include column refs.
+            row, // TODO: get this from the select expression, and make sure it does not include column refs.
         });
     }
     // If the select has a "from" clause, then we need a Scan wrapped in a Project.
@@ -45,7 +45,7 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> ir::Block {
         return ir::Block::Scan(scan);
     }
     ir::Block::Project(ir::Project {
-        outcols: outcols, // For star, we need to lookup the table to expand star, or do that on the fly?
+        outcols, // For star, we need to lookup the table to expand star, or do that on the fly?
         input: Box::new(ir::Block::Scan(scan)),
     })
 }

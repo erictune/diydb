@@ -40,7 +40,7 @@ fn build_typed_row(row_id: i64, column_types: &Vec<SqlType>, record: &[u8]) -> R
         }
     }
     Ok(TypedRow {
-        row_id: row_id,
+        row_id,
         items: ret.to_vec(),
     })
 }
