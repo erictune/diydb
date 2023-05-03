@@ -106,7 +106,7 @@ pub fn print_schema(pager: &pager::Pager) -> anyhow::Result<()> {
     //let column_names = SCHEMA_TABLE_COL_NAMES.iter().map(|x| String::from(*x)).collect();
     //let column_types = SCHEMA_TABLE_COL_TYPES_STR.iter().map(|x| String::from(*x)).collect();
     let tbl = Table::open_read(pager, SCHEMA_TABLE_NAME)?;
-    let tt:TempTable = tbl.to_temp_table()?;
+    let tt: TempTable = tbl.to_temp_table()?;
     formatting::print_table_tt(&tt, false)?;
     Ok(())
 }
@@ -117,10 +117,7 @@ pub fn run_query(ps: &pager::PagerSet, query: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_query_no_print(
-    ps: &pager::PagerSet,
-    query: &str,
-) -> anyhow::Result<crate::TempTable> {
+pub fn run_query_no_print(ps: &pager::PagerSet, query: &str) -> anyhow::Result<crate::TempTable> {
     // Convert parse tree to AST.
     let ss: ast::SelectStatement = pt_to_ast::pt_select_statement_to_ast(query);
     // Convert the AST to IR.

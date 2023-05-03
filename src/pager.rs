@@ -51,7 +51,6 @@
 //! -   Support dropping unused pages when memory is low.
 //! -   When there are multiple pagers (multiple open files), coordinating to stay under a total memory limit.
 
-
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom};
@@ -74,15 +73,19 @@ pub enum Error {
 
 // A `PagerSet` manages zero or more Pagers, one per open database.
 pub struct PagerSet {
-    pagers: Vec<Pager>
+    pagers: Vec<Pager>,
 }
 
 // 'a: lifetime of self
 // 'b: lifetime of a returned Pager
 impl<'a, 'b> PagerSet
-where 'a: 'b {
+where
+    'a: 'b,
+{
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self { PagerSet{ pagers: vec![] } }
+    pub fn new() -> Self {
+        PagerSet { pagers: vec![] }
+    }
     pub fn default_pager(&'a self) -> Result<&'b Pager, Error> {
         match self.pagers.len() {
             0 => Err(Error::NoDefaultDB),
@@ -148,8 +151,7 @@ impl Pager {
                         .open(path)
                         .map_err(Error::Io)?
                 );
-        let h = crate::dbheader::get_header_clone(&mut file.borrow_mut())
-            .map_err(Error::DbHdr)?;
+        let h = crate::dbheader::get_header_clone(&mut file.borrow_mut()).map_err(Error::DbHdr)?;
         file.borrow_mut()
             .seek(SeekFrom::Start(0))
             .map_err(Error::Io)?;
@@ -165,8 +167,8 @@ impl Pager {
 
     // Reads in all the pages of the file. TODO: do this on demand.
     pub fn initialize(&mut self) -> Result<(), Error> {
-        let h = crate::dbheader::get_header_clone(&mut self.f.borrow_mut())
-            .map_err(Error::DbHdr)?;
+        let h =
+            crate::dbheader::get_header_clone(&mut self.f.borrow_mut()).map_err(Error::DbHdr)?;
         self.f
             .borrow_mut()
             .seek(SeekFrom::Start(0))

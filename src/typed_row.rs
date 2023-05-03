@@ -26,14 +26,19 @@ pub enum RowCastingError {
     OneOrMoreRowsNotCastable(#[from] crate::serial_type::Error),
     #[error("Type array and value array length mismatch.")]
     ArrayLenMismatch,
-
 }
 
-fn build_typed_row(row_id: i64, column_types: &Vec<SqlType>, record: &[u8]) -> Result<TypedRow, RowCastingError> {
+fn build_typed_row(
+    row_id: i64,
+    column_types: &Vec<SqlType>,
+    record: &[u8],
+) -> Result<TypedRow, RowCastingError> {
     use crate::record::ValueIterator;
     let mut ret: Vec<SqlValue> = vec![];
     for (i, (serty, bytes)) in ValueIterator::new(record).enumerate() {
-        if i > column_types.len() { return Err(RowCastingError::ArrayLenMismatch) }
+        if i > column_types.len() {
+            return Err(RowCastingError::ArrayLenMismatch);
+        }
         match crate::serial_type::value_to_sql_typed_value(&serty, column_types[i], bytes) {
             Ok(v) => ret.push(v),
             Err(e) => return Err(RowCastingError::OneOrMoreRowsNotCastable(e)),
@@ -53,7 +58,13 @@ fn test_build_typed_row() {
         0x06, 0x08, 0x09, 0x07, 0x13, 0x00, 0x40, 0x09, 0x21, 0xca, 0xc0, 0x83, 0x12, 0x6f, 0x54,
         0x65, 0x6e,
     ];
-    let column_types: Vec<SqlType> = vec![SqlType::Int, SqlType::Int, SqlType::Real, SqlType::Text, SqlType::Int];
+    let column_types: Vec<SqlType> = vec![
+        SqlType::Int,
+        SqlType::Int,
+        SqlType::Real,
+        SqlType::Text,
+        SqlType::Int,
+    ];
     let tr = build_typed_row(1, &column_types, &test_record).unwrap();
     assert_eq!(tr.row_id, 1);
     assert_eq!(tr.items.len(), 5);
@@ -116,7 +127,10 @@ fn test_raw_row_caster() {
     let (pgnum, csql) = crate::get_creation_sql_and_root_pagenum(&pager, "a").unwrap();
     // TODO: put this into get_creation_sql_and_root_pagenum
     let (_, _, column_types) = crate::pt_to_ast::parse_create_statement(&csql);
-    let column_types: Vec<SqlType> = column_types.iter().map(|s| SqlType::from_str(s.as_str()).unwrap()).collect();
+    let column_types: Vec<SqlType> = column_types
+        .iter()
+        .map(|s| SqlType::from_str(s.as_str()).unwrap())
+        .collect();
     // let ti = tbl.iter()
     let mut ti = crate::new_table_iterator(&pager, pgnum);
     let mut rrc = RawRowCaster::new(column_types, &mut ti);

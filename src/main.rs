@@ -1,7 +1,9 @@
 use std::io::{self, BufRead, Write};
 
 fn main() {
-    let mut c: Context = Context { pagerset: diydb::pager::PagerSet::new() };
+    let mut c: Context = Context {
+        pagerset: diydb::pager::PagerSet::new(),
+    };
     let stdin = io::stdin();
     println!("DIYDB - simple SQL database");
     println!("Enter .help for list of commands");
@@ -47,7 +49,7 @@ SELECT ...          to do a query.
 
 fn do_open(c: &mut Context, path: &str) {
     match c.pagerset.opendb(path) {
-        Ok(()) => {  }
+        Ok(()) => {}
         Err(e) => {
             println!("Error opening database {path} : {}", e);
         }

@@ -99,10 +99,7 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> Result<String, Error> 
         // 1	        1	            Value is an 8-bit twos-complement integer.
         1 => Ok(format!("{}", c.read_i8().map_err(Error::Io)?)),
         // 2	        2	            Value is a big-endian 16-bit twos-complement integer.
-        2 => Ok(format!(
-            "{}",
-            c.read_i16::<BigEndian>().map_err(Error::Io)?
-        )),
+        2 => Ok(format!("{}", c.read_i16::<BigEndian>().map_err(Error::Io)?)),
         // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
         3 => {
             let mut bytes = [0_u8; 4];
@@ -114,22 +111,13 @@ pub fn value_to_string(serial_type: &i64, data: &[u8]) -> Result<String, Error> 
             Ok(i32::from_be_bytes(bytes).to_string())
         }
         // 4	        4	        Value is a big-endian 32-bit twos-complement integer.
-        4 => Ok(format!(
-            "{}",
-            c.read_i32::<BigEndian>().map_err(Error::Io)?
-        )),
+        4 => Ok(format!("{}", c.read_i32::<BigEndian>().map_err(Error::Io)?)),
         // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
         5 => Err(Error::Unimplemented),
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
-        6 => Ok(format!(
-            "{}",
-            c.read_i64::<BigEndian>().map_err(Error::Io)?
-        )),
+        6 => Ok(format!("{}", c.read_i64::<BigEndian>().map_err(Error::Io)?)),
         // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
-        7 => Ok(format!(
-            "{}",
-            c.read_f64::<BigEndian>().map_err(Error::Io)?
-        )),
+        7 => Ok(format!("{}", c.read_f64::<BigEndian>().map_err(Error::Io)?)),
         // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
         8 => Ok("0".to_string()),
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
@@ -282,9 +270,10 @@ pub fn value_to_i64(
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
         6 => Ok(c.read_i64::<BigEndian>().map_err(Error::Io)?),
         // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
-        7 => {
-            Err(Error::Type{ from: SqlType::Real, to: SqlType::Int })
-        }
+        7 => Err(Error::Type {
+            from: SqlType::Real,
+            to: SqlType::Int,
+        }),
         // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
         8 => Ok(0_i64),
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
@@ -402,8 +391,8 @@ pub fn value_to_sql_typed_value(
     sql_type: SqlType,
     data: &[u8],
 ) -> Result<SqlValue, Error> {
-    use SqlValue::*;
     use SqlType as SQT;
+    use SqlValue::*;
     let sqt = sql_type;
 
     let mut c = std::io::Cursor::new(data);
@@ -411,7 +400,7 @@ pub fn value_to_sql_typed_value(
         // Tabular comments have the following columns, and are take from SQLite docs:
         // Serial Type	Content Size	Meaning
         // 0	        0	            Value is a NULL.
-        0 => Ok(Null()),    // Nulls are always Null, regardless of what the desired type is.  All types have to handle the possibility of Null.
+        0 => Ok(Null()), // Nulls are always Null, regardless of what the desired type is.  All types have to handle the possibility of Null.
         // 1	        1	            Value is an 8-bit twos-complement integer.
         // 2	        2	            Value is a big-endian 16-bit twos-complement integer.
         // 3	        3	        Value is a big-endian 24-bit twos-complement integer.
@@ -436,42 +425,58 @@ pub fn value_to_sql_typed_value(
                 6 => c.read_i64::<BigEndian>().map_err(Error::Io)?,
                 _ => return Err(Error::Unreachable),
             };
-            if  *x == 5_i64 { return Err(Error::Unimplemented) }
+            if *x == 5_i64 {
+                return Err(Error::Unimplemented);
+            }
             match sqt {
                 SQT::Int => Ok(Int(i)),
                 SQT::Real => Ok(Real(i as f64)),
                 SQT::Text => Ok(Text(format!("{}", i))),
-                SQT::Blob => Err(Error::Type{from: SQT::Int, to: SQT::Blob}),
+                SQT::Blob => Err(Error::Type {
+                    from: SQT::Int,
+                    to: SQT::Blob,
+                }),
             }
         }
         // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
         7 => {
             let f = c.read_f64::<BigEndian>().map_err(Error::Io)?;
             match sqt {
-                SQT::Int => Err(Error::Type{from: SQT::Real, to: SQT::Int}),
+                SQT::Int => Err(Error::Type {
+                    from: SQT::Real,
+                    to: SQT::Int,
+                }),
                 SQT::Real => Ok(Real(f)),
-                SQT::Text => Err(Error::Type{from: SQT::Real, to: SQT::Text}),
-                SQT::Blob => Err(Error::Type{from: SQT::Real, to: SQT::Blob}),
+                SQT::Text => Err(Error::Type {
+                    from: SQT::Real,
+                    to: SQT::Text,
+                }),
+                SQT::Blob => Err(Error::Type {
+                    from: SQT::Real,
+                    to: SQT::Blob,
+                }),
             }
         }
         // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
-        8 => {
-            match sqt {
-                SQT::Int => Ok(Int(0_i64)),
-                SQT::Real => Ok(Real(0_f64)),
-                SQT::Text => Ok(Text(String::from("0"))),
-                SQT::Blob => Err(Error::Type{from: SQT::Int, to: SQT::Blob}),
-            }
-        }
+        8 => match sqt {
+            SQT::Int => Ok(Int(0_i64)),
+            SQT::Real => Ok(Real(0_f64)),
+            SQT::Text => Ok(Text(String::from("0"))),
+            SQT::Blob => Err(Error::Type {
+                from: SQT::Int,
+                to: SQT::Blob,
+            }),
+        },
         // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
-        9 => {
-            match sqt {
-                SQT::Int => Ok(Int(1_i64)),
-                SQT::Real => Ok(Real(1_f64)),
-                SQT::Text => Ok(Text(String::from("1"))),
-                SQT::Blob => Err(Error::Type{from: SQT::Int, to: SQT::Blob}),
-            }
-        }
+        9 => match sqt {
+            SQT::Int => Ok(Int(1_i64)),
+            SQT::Real => Ok(Real(1_f64)),
+            SQT::Text => Ok(Text(String::from("1"))),
+            SQT::Blob => Err(Error::Type {
+                from: SQT::Int,
+                to: SQT::Blob,
+            }),
+        },
         // 10,11	variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file...
         10 | 11 => Err(Error::InvalidSerialTypeCode),
         // N≥12 & even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
@@ -523,7 +528,6 @@ fn test_value_to_sql_typed_value() {
         (&1, SqlType::Real, &[0x7f], Real(127_f64)),
         (&1, SqlType::Real, &[0xff], Real(-1_f64)),
         (&1, SqlType::Real, &[0x01], Real(1_f64)),
-
         // two byte ints
         (&2, SqlType::Int, &[0x00, 0x7f], Int(127)),
         (&2, SqlType::Int, &[0xff, 0xff], Int(-1)),
@@ -546,13 +550,23 @@ fn test_value_to_sql_typed_value() {
         (&19, SqlType::Text, b"Foo", Text("Foo".to_string())),
         (&25, SqlType::Text, b"FooBar", Text("FooBar".to_string())),
         // Blob
-        (&18, SqlType::Blob, &[0x00_u8, 0x01, 0xff], Blob(Vec::from([0, 1, 255]))),
+        (
+            &18,
+            SqlType::Blob,
+            &[0x00_u8, 0x01, 0xff],
+            Blob(Vec::from([0, 1, 255])),
+        ),
     ];
     for (i, case) in cases.iter().enumerate() {
-        println!("Testing case {}: convert serial type {} to SQL type {}", i, case.0, case.1);
-        assert_eq!(value_to_sql_typed_value(case.0, case.1, case.2).unwrap(), case.3);
+        println!(
+            "Testing case {}: convert serial type {} to SQL type {}",
+            i, case.0, case.1
+        );
+        assert_eq!(
+            value_to_sql_typed_value(case.0, case.1, case.2).unwrap(),
+            case.3
+        );
     }
-
 }
 
 #[test]
@@ -576,7 +590,10 @@ fn test_value_to_sql_typed_value_errors() {
     ];
 
     for (i, case) in cases.iter().enumerate() {
-        println!("Testing case {}: convert serial type {} to SQL type {}, should error", i, case.0, case.1);
+        println!(
+            "Testing case {}: convert serial type {} to SQL type {}, should error",
+            i, case.0, case.1
+        );
         assert!(value_to_sql_typed_value(case.0, case.1, case.2).is_err());
     }
 }

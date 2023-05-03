@@ -151,7 +151,6 @@ fn test_run_query_on_three_level_db() {
     }
 }
 
-
 #[test]
 fn test_run_dbless_selects() {
     let ps = diydb::pager::PagerSet::new();
@@ -160,5 +159,8 @@ fn test_run_dbless_selects() {
     assert_eq!(tt.rows.len(), 1);
     assert_eq!(tt.rows[0].row_id as usize, 1);
     assert_eq!(tt.rows[0].items.len(), 3);
-    assert_eq!(tt.rows[0].items, vec![SqlValue::Int(1), SqlValue::Int(2), SqlValue::Int(3)]);
+    assert_eq!(
+        tt.rows[0].items,
+        vec![SqlValue::Int(1), SqlValue::Int(2), SqlValue::Int(3)]
+    );
 }
