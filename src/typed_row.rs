@@ -111,11 +111,13 @@ fn test_raw_row_caster() {
     let mut pager =
         crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
     pager.initialize().expect("Should have initialized pager.");
+    // let tbl = Table::open_read(table_name)
+
     let (pgnum, csql) = crate::get_creation_sql_and_root_pagenum(&pager, "a").unwrap();
     // TODO: put this into get_creation_sql_and_root_pagenum
     let (_, _, column_types) = crate::pt_to_ast::parse_create_statement(&csql);
     let column_types: Vec<SqlType> = column_types.iter().map(|s| SqlType::from_str(s.as_str()).unwrap()).collect();
-    //let table = StoredTable::open_read(pager, )
+    // let ti = tbl.iter()
     let mut ti = crate::new_table_iterator(&pager, pgnum);
     let mut rrc = RawRowCaster::new(column_types, &mut ti);
     {

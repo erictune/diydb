@@ -10,6 +10,8 @@ use crate::sql_type::SqlType;
 
 use crate::ast;
 use crate::typed_row::TypedRow;
+use crate::table::Table;
+
 
 fn ast_constant_to_sql_value(c: &ast::Constant) -> SqlValue {
     match c {
@@ -60,15 +62,8 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
             // it here.
             let table_name = s.tablename.as_str();
             let pager = ps.default_pager()?;
-            let (root_pagenum, create_statement) =
-                crate::get_creation_sql_and_root_pagenum(pager, table_name).unwrap_or_else(|| {
-                    panic!("Should have looked up the schema for {}.", table_name)
-                });
-            let (_, column_names, column_types) =
-                crate::pt_to_ast::parse_create_statement(&create_statement);
-            let mut tci = crate::btree::table::Iterator::new(root_pagenum, pager);
-            // TODO: make this a convenience function int typed_row.rs.
-            crate::clone_and_cast_table_iterator(&mut tci, &column_names, &column_types)
+            let tbl = Table::open_read(pager, table_name)?;
+            tbl.to_temp_table().map_err(anyhow::Error::msg)
         }
     }
 }

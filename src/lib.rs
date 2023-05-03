@@ -12,14 +12,14 @@ mod record;
 mod serial_type;
 pub mod sql_type;
 pub mod sql_value;
+mod table;
 pub mod typed_row;
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
-use std::str::FromStr;
 use sql_type::SqlType;
-use typed_row::{TypedRow, RowCastingError, RawRowCaster};
+use table::Table;
 
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
@@ -27,9 +27,6 @@ const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
 const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
 const SCHEMA_SCHEMA: &str =
     "CREATE TABLE sqlite_schema (type text, name text, tbl_name text, rootpage integer, sql text)";
-const SCHEMA_TABLE_COL_NAMES: [&str; 5] = ["type", "name", "tbl_name", "rootpage", "sql"];
-const SCHEMA_TABLE_COL_TYPES_STR: [&str; 5] = ["text", "text", "text", "int", "text"];
-
 const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
 const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
 const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
@@ -57,7 +54,8 @@ pub fn get_creation_sql_and_root_pagenum(
     if table_name == SCHEMA_TABLE_NAME {
         return Some((SCHEMA_BTREE_ROOT_PAGENUM, String::from(SCHEMA_SCHEMA)));
     } else {
-        for (_, payload) in new_table_iterator(pgr, SCHEMA_BTREE_ROOT_PAGENUM) {
+        // TODO: get rid of in favor of Table::to_temp_table()
+        for (_, payload) in crate::btree::table::Iterator::new(SCHEMA_BTREE_ROOT_PAGENUM, pgr) {
             let vi = record::ValueIterator::new(payload);
             let row = vi.collect::<Vec<(i64, &[u8])>>();
             let this_table_name = serial_type::value_to_string(
@@ -105,13 +103,10 @@ pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Ite
 // TODO: replace this with executing a query?
 /// Print the Schema table to standard output.
 pub fn print_schema(pager: &pager::Pager) -> anyhow::Result<()> {
-    let column_names = SCHEMA_TABLE_COL_NAMES.iter().map(|x| String::from(*x)).collect();
-    let column_types = SCHEMA_TABLE_COL_TYPES_STR.iter().map(|x| String::from(*x)).collect();
-
-    let (page, offset) = page_and_offset_for_pagenum(pager, SCHEMA_BTREE_ROOT_PAGENUM);
-    let _ = btree::header::check_header(page, offset);
-    let mut tci = new_table_iterator(pager, SCHEMA_BTREE_ROOT_PAGENUM);
-    let tt = clone_and_cast_table_iterator(&mut tci, &column_names, &column_types)?;
+    //let column_names = SCHEMA_TABLE_COL_NAMES.iter().map(|x| String::from(*x)).collect();
+    //let column_types = SCHEMA_TABLE_COL_TYPES_STR.iter().map(|x| String::from(*x)).collect();
+    let tbl = Table::open_read(pager, SCHEMA_TABLE_NAME)?;
+    let tt:TempTable = tbl.to_temp_table()?;
     formatting::print_table_tt(&tt, false)?;
     Ok(())
 }
@@ -133,22 +128,4 @@ pub fn run_query_no_print(
     // Execute the IR.
     let tt: crate::TempTable = ir_interpreter::run_ir(ps, &ir)?;
     Ok(tt)
-}
-
-fn clone_and_cast_table_iterator<'f>(
-    ti: &'f mut crate::btree::table::Iterator<'f>,
-    column_names: &Vec<String>,
-    column_types: &Vec<String>,
-) -> Result<crate::TempTable, anyhow::Error> {
-    let column_types: Vec<SqlType> = column_types.iter().map(|s| SqlType::from_str(s.as_str()).unwrap()).collect();
-    let column_types2 = column_types.clone();
-    let r: Result<Vec<TypedRow>, RowCastingError> =
-        RawRowCaster::new(column_types, ti).collect();
-    let r = r?;
-    Ok(crate::TempTable {
-        // TODO: take() a limited number of rows when collect()ing them, and return error if they don't fit?
-        rows: r,
-        column_names: column_names.clone(),
-        column_types: column_types2,
-    })
 }
