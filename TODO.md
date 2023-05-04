@@ -14,16 +14,34 @@ Build steel thread of parsing and execution.
     - [x] interpret `Scan`
     - [x] return a row iterator from `run_ir`.
     - [x] handle `ConstantRow` by creating a TempTable.
-        - [ ] Rename TypedRow to TempRow (as it is not a row in the storage format.)
     - [ ] handle `Project` of a `Scan` block.
-            - [ ] TempTable or its rows need to store the schema names so that `Project` can select the right columns by name.
-            - [ ] `Project` should handles mixed constant/expression/bare-columns, and TempTable just used for constant-valued nested selects.
+            - [X] figure out how the pending changes in ast_to_ir are any different or better than before.  Test cases look good.
+            - [X] add returning error instead of panic from ast_to_ir.
+            - [ ] the conversion to TT we do for scans needs to be done to the root.  That means that we need a converter that calls an iterator on a Block.  That means that the Project Block needs to be an iterator over its children.  And the to_tt() needs
+            to be at the top of the tree.
+            - [ ] We might want to walk the IR tree to the leaves and propagate type info up and check if column names exist.
+              - Table needs to be locked, or use optimistic concurrency and check after eventaully locking the table.
+            - [ ] Simple implementation is that a `Project::Iterator` takes a `Table::Iterator` and returns the projected row.
+              - `Project::next()` wants to return references to SqlValues.  But it has to deal with 4 lifetimes of referrents:
+                - Scan values which are in turn references to their underlying values, which could be large blobs.
+                - Constants defined in the project list like `select(1,a) from t;`
+                - Constant values from a TempTable
+                - Computed values which can combine both of the above.
+                - So, what lifetime should `Project::next()` offer to its callers?  Until the next call to `next()`?  Is that possible?
+                  A reference version and a copying version, depending on the situation?
+                - See the Streaming Iterator discussion below - it provides a way to force the caller to copy whatever it needs for longer.
+                - We can also store a value for the lifetime of the iterator in the iterators "parent" object so that it lasts for the duration of the parent object : not so space efficient.
+                - An enum could allow providing variants with different lifetimes (raw btree record vs computed value offered by value.)
+                - ToOwned deserves consideration, as a way for callers to clone if necessary and take if heap allocated.  For instance we might want to take a string produced by an expression (?) to use in a parent IR object (?).
+
     - [x] connect root block to printer.
     - [ ] Goal is to minimize copying, using refs.  Esp. in deeper parts of IR tree.
       - Parent in IR tree to decides if clone needed.  Child to offer a ref.
       - How long is ref valid if page needs to go out?  Page waits until query done.  Refs last for lifetime of the IR execution (of the IR?)
     - [x] Test IR evaluation using unit testing.
 -  [x] end to end test of query PT/AST/IR/Execute.
+- [ ] Rename TypedRow to TempRow (as it is not a row in the storage format.)  TempTable Row type vs Table's Row type?
+
 Scope for "steel thread" is just constants (literals) and expressions.
 
 Future Projects
@@ -103,6 +121,14 @@ Lock Pages to allow for pager and queries to co-exist.
 - The RwLock should, IIUC, allow copy-less cloning?
 
 # Cross-Cutting Projects
+
+## Streaming Iterators and Streaming Page Cache
+Because our iterators currently return btree-references from iterators, the callers can in theory hold the references to some cells
+for the entire duration of a scan over the table.  This means that the pager cannot drop any pages until a scan of a large (perhaps larger than main memory) file is complete.  To fix this, change from using the `Iterator` pattern for the btree and table iterators, to
+a `StreamingIterator` pattern from the `streaming_iterator` crate.  This pattern forces the callers reference to memory to end before
+advancing the iterator to the next row, while still allowing for use of familiar iterator methods and functional-style constructs.
+This allows the caller to read values by references (such as when evaluating a where expression) but forces them to copy if they need values for longer (such as building an aggregation like top N).  Proof of making this work looks like scanning a large table with a "where" clause while the pager pages out pages as they are done being used, keeping memory usage within some bound such as 10 pages.
+
 
 ## Use of Indexes
 - Generate test data.

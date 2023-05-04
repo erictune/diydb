@@ -36,12 +36,23 @@ fn ast_constant_to_sql_type(c: &ast::Constant) -> SqlType {
 }
 
 pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> {
+    // TODO: add an "expanded_outcols" which has * expanded.
+    // TODO: walk down the IR and then initalize the blocks going upwards.  This may require having extra optional fields set here
+    // at runtime as opposed to at ast_to_ir time.  These could be cleared to allow resetting the IR to run again?
+    // TODO: We need to acquire tables as we initialize the blocks that use them.
     match ir {
-        // TODO support root Project blocks.  This requires printing rows that
+        // TODO: support root Project blocks.  This requires printing rows that
         // have constant exprs, dropping rows, etc.
-        // The right way to do is to have formatting::print_table accept different kinds of iterators?
-        // Project can project without converting, so we should allow it to Project a Scan without converting?
         ir::Block::Project(_) => {
+            // TODO: return an error, e.g. with anyhow!(), if there is a star or column name but input.is_none().
+            // TODO: expand stars to the list of input.column_names.  Here or in previous pass on the IR?
+            // TODO: add a method to get the list of output column types to Project, Scan and ConstantRow which can fail if they are not runtime
+            // initialized.
+            // TODO: rename constantrow to constanttable since it could have several rows, like in `select * from (select 1 union select 2);`
+            // TODO:  check each projected column to see if it is in the Scan's Tables
+            //         panic!("Cannot select * without a FROM clause"),
+            // TODO: we need a Projec Iterator that returns rows that are a composite
+            //       of the Scan's rows and any constants or computed expressions it introduces.
             // TODO: Project needs a pointer to a Scan.  For now, we will only support Project of Scan.
             panic!("IR that uses Project not supported yet.");
         }

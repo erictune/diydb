@@ -133,6 +133,13 @@ Rather it is the lifetime of the variable (referrent).  In one failed attempt at
 type with several references, but actually both references were to the same variable (the pager and its data).  Sometimes
 adding the compilers suggestions it the right things, but other times it is not.
 
+I initially approached adding lifetime specifiers and structuring that has them around lifetimes like this:
+*How can I convince the compiler to give the maximum lifetime to the returned reference
+to make life convenient for the caller.*  However, while working with iterators over pages, and then learning about streaming iterators,
+I realied that giving the caller the maximum lifetime isn't good always because memory usage is not limited: the callee cannot
+do memory management of the referred-to data.  I planned to switch to streaming iterators so that the Pager
+can drop pages after they are scanned.
+
 ## Errors
 - Use `anyhow` for application code that has to deal with errors from many modules.
 - Use `thiserror` for code in a module that is or might become a reusable library (separate crate).
