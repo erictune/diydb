@@ -35,7 +35,32 @@ fn ast_constant_to_sql_type(c: &ast::Constant) -> SqlType {
     }
 }
 
+/// A block of IR can provide either a Materialized view ("TempTable"), or an object that provides a Stream of rows ("Table").
+enum EitherTable<'a> {
+    Materialized(crate::TempTable),
+    Stream(crate::Table<'a>),
+}
+
+/// Run an IR representation of a query.
 pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> {
+    let res = prepare_ir(ps, ir);
+    match res {
+        Ok(it) => {
+            let tt = match it {
+                // If the result is already "materialized", then return that table.
+                EitherTable::Materialized(tt) => tt,
+                // If the result is "streaming", materialize it now.
+                // TODO: impose row limits here: return an error if take(MAX +1) returns MAX+1 rows.
+                EitherTable::Stream(tbl) => { tbl.to_temp_table()? }
+            };
+            return Ok(tt);
+        }
+        Err(e) => { return Err(anyhow::anyhow!(e)); }
+    }
+}
+
+/// Recursively walk down a tree of IR, returning iterators to the output of this subtree.
+fn prepare_ir<'a>(ps: &'a pager::PagerSet, ir: &ir::Block) -> Result<EitherTable<'a>> {
     // TODO: add an "expanded_outcols" which has * expanded.
     // TODO: walk down the IR and then initalize the blocks going upwards.  This may require having extra optional fields set here
     // at runtime as opposed to at ast_to_ir time.  These could be cleared to allow resetting the IR to run again?
@@ -54,16 +79,17 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
             // TODO: we need a Projec Iterator that returns rows that are a composite
             //       of the Scan's rows and any constants or computed expressions it introduces.
             // TODO: Project needs a pointer to a Scan.  For now, we will only support Project of Scan.
-            panic!("IR that uses Project not supported yet.");
+            Err(anyhow::anyhow!("IR that uses Project not supported yet."))
+            // TODO: limit recursion depth.
         }
-        ir::Block::ConstantRow(cr) => Ok(TempTable {
+        ir::Block::ConstantRow(cr) => Ok(EitherTable::Materialized(TempTable {
             rows: vec![TypedRow {
                 row_id: 1,
                 items: cr.row.iter().map(ast_constant_to_sql_value).collect(),
             }],
             column_names: (0..cr.row.len()).map(|i| format!("_f{i}")).collect(),
             column_types: cr.row.iter().map(ast_constant_to_sql_type).collect(),
-        }),
+        })),
         ir::Block::Scan(s) => {
             // Question: what happens if the IR was built based on assumptions about the schema (e.g. number and types of columns),
             // and then the schema changed?  How about storing the message digest of the creation_sql in the Scan block and verify
@@ -71,7 +97,7 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
             let table_name = s.tablename.as_str();
             let pager = ps.default_pager()?;
             let tbl = Table::open_read(pager, table_name)?;
-            tbl.to_temp_table().map_err(anyhow::Error::msg)
+            Ok(EitherTable::Stream(tbl))
         }
     }
 }

@@ -20,6 +20,7 @@ extern crate pest_derive;
 
 use sql_type::SqlType;
 use table::Table;
+use typed_row::TypedRow;
 
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
@@ -41,7 +42,7 @@ const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 /// The assumption here is that the caller is an interactive user who wants a limited number of rows (thousands).
 /// For non-interactive bulk use, perhaps this needs to be revisted.
 pub struct TempTable {
-    pub rows: Vec<typed_row::TypedRow>,
+    pub rows: Vec<TypedRow>,
     pub column_names: Vec<String>,
     pub column_types: Vec<SqlType>,
 }
