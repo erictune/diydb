@@ -14,22 +14,25 @@ Build steel thread of parsing and execution.
     - [x] interpret `Scan`
     - [x] return a row iterator from `run_ir`.
     - [x] handle `ConstantRow` by creating a TempTable.
-    - [ ] handle `Project` of a `Scan` block.
-            - [X] figure out how the pending changes in ast_to_ir are any different or better than before.  Test cases look good.
-            - [X] add returning error instead of panic from ast_to_ir.
+    - [X] add returning error instead of panic from ast_to_ir.
+    - [ ] read src/IRnotes.txt, merge into  IR.md, update IR.md with the plan for IR and XBs.
+    - [ ] eliminate rowid from TypedRow - add back later if needed or have a flag to include it as first item?
+    - [ ] write xb.rs which hold executor blocks.
+    - [ ] write ir_to_xb.rs which converts the ir to executor blocks (which maybe will implement the streaming iterator trait.
+          See IRnotes.txt.  Update docs in readme.  See the Streaming Iterator discussion below too. - it provides a way to force the caller to copy whatever it needs for longer.
+    - [ ] make run_query run the executor blocks. (First just scan and constant). (see IR notes).
+    - write the executors for scan and constant_table and text the executor loop.
+    - [ ] Implement `project`.
+      -  [ ] should work already in ast_to_ir.
+      -  [ ] Check out stash for ideas on how to handle the block type enum.
+      -  [ ] Add to IR tree, then add to XB tree.
+      - handle `Project` of a `Scan` block.
             - [ ] the conversion to TT we do for scans needs to be done to the root.  That means that we need a converter that calls an iterator on a Block.  That means that the Project Block needs to be an iterator over its children.  And the to_tt() needs
             to be at the top of the tree.
-            - [ ] We might want to walk the IR tree to the leaves and propagate type info up and check if column names exist.
+            - [ ] We might want to walk the IR tree to the leaves and propagate type info up and check if column names exist?
               - Table needs to be locked, or use optimistic concurrency and check after eventaully locking the table.
-            - [ ] Simple implementation is that a `Project::Iterator` takes a `Table::Iterator` and returns the projected row.
-              - `Project::next()` wants to return references to SqlValues.  But it has to deal with 4 lifetimes of referrents:
-                - Scan values which are in turn references to their underlying values, which could be large blobs.
-                - Constants defined in the project list like `select(1,a) from t;`
-                - Constant values from a TempTable
-                - Computed values which can combine both of the above.
-                - So, what lifetime should `Project::next()` offer to its callers?  Until the next call to `next()`?  Is that possible?
+                - What lifetime should `Project::next()` offer to its callers?  Until the next call to `next()`?  Is that possible?
                   A reference version and a copying version, depending on the situation?
-                - See the Streaming Iterator discussion below - it provides a way to force the caller to copy whatever it needs for longer.
                 - We can also store a value for the lifetime of the iterator in the iterators "parent" object so that it lasts for the duration of the parent object : not so space efficient.
                 - An enum could allow providing variants with different lifetimes (raw btree record vs computed value offered by value.)
                 - ToOwned deserves consideration, as a way for callers to clone if necessary and take if heap allocated.  For instance we might want to take a string produced by an expression (?) to use in a parent IR object (?).
@@ -76,7 +79,7 @@ Future Projects
   - e.g. `select * from t where rowid = 3`
 - [ ] Post IR generation, detect that `Scan` can be replaced with  `SeekRowid`
 - [ ] Execute it, and check that it was more efficient (steps executed?)
-
+- [ ] Here is a detailed treatment with theorems, reduction rules, and some test cases: https://arxiv.org/pdf/1607.04197.pdf
 # Small Tasks
 
 Quick Cleanups for when you don't have a lot of time:
@@ -140,10 +143,14 @@ This allows the caller to read values by references (such as when evaluating a w
 - Add RangeIteraror that returns index rows from Lo to Hi (with lower / upper bounds, like btree)/
 - How are Indexes updated atomically with the table?
 
+## Sequential I/O optimization
+The Scan IR Op is not required to walk the database tree in order, just visit all the pages.
+The tree could be walked to determine a list of leaf pages, and those could be prefeched and visited in
+the order in which they are ready, using an async framework.
+
 ## ACID
 
 Think about ACID and what that means for implementing the database.
-
 
 ## Spilled Payloads.
 Decide how to handle spilled payloads.  Options:

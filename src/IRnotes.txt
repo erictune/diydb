@@ -1,0 +1,139 @@
+Example SQL:
+
+select max(a,b) as c from (
+  select x+1 as a, 2*x as b from t
+)
+
+----
+
+Example IR:
+
+Obj #1:
+Project(
+    ases: ["c"],
+    exprs: [Binop::max(InColIdx(0), InColIdx(1))]
+    child: Box(#2)
+)
+
+Obj #2:
+Project(
+  ases: ["a","b"],
+  exprs: [BinOp::add(InColIdx(?), Const(1)),
+    Scan(t)
+  )
+  child: Box(#3)
+)
+
+Obj #2:
+Scan(
+  ases: <these are the column names>
+  // no child
+  table_name: table_name,
+)
+
+----
+
+Example Execution Blocks:
+
+Boxing the IRs lets you hold on to them during execution and delete them when you delete the execution;
+not have them stuck on the stack of the function that created them.
+
+Obj #4:
+ProjectExecutor(
+    ir: Box(#1)
+    child: Box(#5)
+    current_row: Vec<SqlValue> // Might need to have enum of either SqlValue or &SqlValue, to avoid copies for large blobs?
+)
+
+Obj #5:
+ProjectExecutor(
+    ir: Box(#2)
+    child: Box(#6)
+    current_row: Vec<SqlValue> // Might need to have enum of either SqlValue or &SqlValue, to avoid copies for large blobs?
+)
+
+Obj #6:
+ScanExecutor(
+    ir: Box(#3)
+    // No child
+    table: Table,
+    it: Table::iterator(),
+    current_row: Vec<SqlValue> // Might need to have enum of either SqlValue or &SqlValue, to avoid copies for large blobs?
+)
+
+Executors are like streaming iterators with additional metadata about the thing being streamed (like row headers);
+
+----
+
+
+Impls:
+
+impl ProjectExecutor {
+    fn outcol_names() -> vec<String> { /* get from ir */ }
+    fn init() { /* is anything required? */
+    fn get(&self) -> Vec<SqlValue> { return &current_row }
+    fn advance(&mut self) { current_row = child executor.get()
+    fn child() -> Option<&Executor> { return child }
+}
+
+impl ScanExecutor {
+    fn outcol_names() -> vec<String> { /* get from ir */ }
+    fn init() { /* it = table.iter(); */
+    fn get(&self) -> Vec<SqlValue> { return &current_row }
+    fn advance(&mut self) { current_row = table_iter.next() };
+    fn child() -> Option<&Executor> { return child }
+}
+
+impl ConstantTableExecutor {
+    fn outcol_names() -> vec<String> { /* get from ir */ }
+    fn init() { /* it = table.iter(); */
+    fn get(&self) -> Vec<SqlValue> { return &current_row }
+    fn advance(&mut self) { current_row = table_iter.next() };
+    fn child() -> Option<&Executor> { return child }
+}
+
+
+----
+
+Example Exection method 1:
+Not optimal, but works.  And allows inserting asynchrony.
+
+let blocks = blocks_sorted_from_bottom_to_top(blocks);
+while let Some(row) = out {
+    let item = None;
+    for block in blocks {
+        if out is None
+            let out = true => block.get();
+            block.advance
+        else
+            let in = out;
+            let out = block.get(in);
+            block.advance();
+    emit(out)
+}
+
+----
+
+Advanced execution method, for later, is to provide a streaming_iterator interface, like this:
+https://docs.rs/streaming-iterator/latest/src/streaming_iterator/lib.rs.html#984-987
+
+And then wire them up so there is no loop.
+
+---
+
+
+We want to avoid cloning long things (text, blobs), and to avoid excessive allocations, so we like returning references (I think?  not tested).
+There could be a Vec<SqlValueOrRef> but that might get confusing.
+Need to think more on this.  There could be variant versions of Executors that copy or clone entire rows, based on need.
+Not sure what is better.
+
+---
+
+TODOs:
+- rename constantRow to constant table.
+- write the executors for scan and constant_table and text the executor loop.
+- write a dummy pass-thru executor (beginning of limit).
+- write a "run_executors" function.
+- write a "ir_to_executors" function.
+- get rid of typed_row or use it universally - need universal return value for all blocks for get().  Maybe boolean "with_rowid_as_first_col" option to scan row iterator.
+- make copies for now, and work on removing them later?

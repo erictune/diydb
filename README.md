@@ -108,6 +108,11 @@ In no particular order.
   - chose which indexes to use when multiple available
   - chose loop order for joins.
   - simplify code using relational-algebra-like rules
+  - JIT the code for speed/fun?
+    - WHERE expressions used in scans could be a jitted function.
+      - Calling rust modules from within JIT-ed code: https://y.tsutsumi.io/2018/09/30/using-rust-functions-in-llvms-jit/
+      - Inkwell.
+    - Then an entire tree of IR could be JIT-ed?
 
 # Similar Projects
 

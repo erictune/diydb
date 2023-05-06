@@ -52,7 +52,6 @@ pub struct FromClause {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectStatement {
-    // TODO: can we be more specific than Node here?
     pub select: SelectClause,
     pub from: Option<FromClause>,
     // pub r#where: Option<WhereClause>,

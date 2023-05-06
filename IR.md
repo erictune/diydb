@@ -24,16 +24,15 @@ can be strung together using different
 
 |       type         | creation arguments | eval() step input | eval() step output  |
 | ------------------ | ------------------ | ---------------- | ------------- |
-| `ScanConstantRows` | literal     values | no eval args     | `Row`        |
+| `TempTable`        | literal     values | no eval args     | `Row`        |
 | `Scan`             | table name         | no eval args     | `Row`        |
 | `SeekRowid`        | table name, rowid  | no eval args     | `Row`        |
 | `IndexedSeekEq`    | table, index, key  | no eval args     | `Row`        |
 | `Filter`           | `&LogicalOp`, `&RowIterable` | `Row` | `Option<Row>` |
-| `Project`          | `&RowIterable`     | `Row`            | `Row`        |
-| `AddColFromExpr`   | `&ColExpr`, list of named cols used  | `Row` | `Row` |
-| `Eq`, `Gt`, etc    | `&Expr`            | ?                | `LogicalOp`  |
-| `Negate`           | `&Expr`            |  ?               | ?            |
-| `Add`, `Mul`, etc  | `&Expr`            |  `&Cell`         | `&Cell`      |
+| `Project`          | list of `&ColExpr` | `Row`            | `Row`        |
+
+A `ColExpr` is an expression referencing elements of a row by column name (or index for efficiency).
+They include binary ops (`Eq`, `Gt`, `Add`, `Mul`) and unary ops (`Negate`)
 
 # Examples of SQL converted to IR
 
