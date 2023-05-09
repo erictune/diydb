@@ -131,6 +131,10 @@ Not sure what is better.
 
 TODOs:
 - rename constantRow to constant table.
+- Add a pass over IR to do these things before we execute it.
+  - Generate temporary names for constant valued columns without "AS" in projects.
+  - Check column refs against the table schema and return error if not found. (schema hash to be confirmed at execution time).
+  - Expand each star to the list of all columns in the schema.
 - write the executors for scan and constant_table and text the executor loop.
 - write a dummy pass-thru executor (beginning of limit).
 - write a "run_executors" function.

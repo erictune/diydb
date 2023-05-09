@@ -3,7 +3,6 @@
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
-// TODO: consider whether the Error types should be "per-architectural layer" or common to all methods in the DB.
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
     #[error("The magic bytes for this file are wrong.")]
@@ -25,8 +24,8 @@ pub enum Error {
 // Code to open db files and (in the future) lock the file at the OS level.
 //  It also provides a function to get the DB file headers.
 
-// TODO: consider moving the header reader to use the pager interface so header accesses can use locks.
-// That might mean that it doesn't use the Reader/BufReader interface, (uses Page) and so it won't have to return ReadFailed?
+// TODO: Change DbfileHeader to operate on a byte slice (portion of a page).  Change callsites to do their own file read.
+// TODO: implement the header as a "c representation" struct to get experience with those (https://doc.rust-lang.org/reference/type-layout.html#the-c-representation).  Unsafely cast the file's first 100 bytes to such a struct and verify it before returning it. (crate bytemuck might help).
 
 // The database file header.
 #[derive(Debug, Clone)]

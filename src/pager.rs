@@ -167,6 +167,7 @@ impl Pager {
 
     // Reads in all the pages of the file. TODO: do this on demand.
     pub fn initialize(&mut self) -> Result<(), Error> {
+	// TODO: remove this it is redundant with open.
         let h =
             crate::dbheader::get_header_clone(&mut self.f.borrow_mut()).map_err(Error::DbHdr)?;
         self.f

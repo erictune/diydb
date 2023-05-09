@@ -164,7 +164,6 @@ fn test_parsing_literals() {
     }
 }
 
-// TODO: expand star into list of all column names of all tables in the input table list.
 pub fn pt_select_statement_to_ast(query: &str) -> ast::SelectStatement {
     let select_stmt = SQLParser::parse(Rule::select_stmt, query)
         .expect("unsuccessful parse") // unwrap the parse result

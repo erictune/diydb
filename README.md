@@ -146,10 +146,14 @@ do memory management of the referred-to data.  I planned to switch to streaming 
 can drop pages after they are scanned.
 
 ## Errors
+My approach to errors was this:
+- avoid expect().  A program which may be embedded in other code (like SQLite) or which may handle concurrent requests (like other
+  databases) should not panic.
+  - unwrap() may be used only when it is clear from the control for that it cannot happen, e.g. `if x.is_ok() { f(x.unwrap) }`.
+- In each module that is or might become a reusable library (separate crate), define an `Error` enum.
+  - Use `thiserror` macros for this enum.
+    - For passed-along errors, such as `std::io::Error`:
+        - Use `#[from]` macro of `thiserror` in the Error definition.
+        - Use `map_err(|e| Error::MyWrappedError(e))?` at the error site.
+  - Use `#from` to pass on lower-level error messages.
 - Use `anyhow` for application code that has to deal with errors from many modules.
-- Use `thiserror` for code in a module that is or might become a reusable library (separate crate).
-- For each library-ish module, define an Error enum use `thiserror` macros.
-- For library-specific errors, use `expect("My Description")` and `unwrap()` with `map_err(|_| Error::MyDescription)?`.
-- For passed-along errors, such as `std::io::Error`:
-  - Use `#[from]` macro of `thiserror` in the Error definition.
-  - Use `map_err(|e| Error::MyWrappedError(e))?` at the error site.

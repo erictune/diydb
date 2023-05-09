@@ -1,5 +1,4 @@
 //! represents access to a file-backed SQLite database table.
-//! TODOX: move TempTable into here?
 
 use crate::typed_row::{RawRowCaster, RowCastingError, TypedRow};
 use crate::{pager, sql_type::SqlType};

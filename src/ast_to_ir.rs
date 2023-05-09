@@ -8,11 +8,6 @@ use crate::ir;
 use std::boxed::Box;
 use anyhow::bail;
 
-// TODO: Consider that there could be a trait ToIR with method to_ir().
-// However, we have a bounded set of things that need to be
-// converted, so enums are working fine so far.
-
-// TODO: use this in the main query processing path.
 pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block, anyhow::Error> {
     // If the select only has a select clause,then we just need to return a constant
     // expression.
@@ -49,9 +44,9 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
     let mut outcols: Vec<ast::SelItem> = vec![];
     for item in &ss.select.items[..] {
         match item {
-            ast::SelItem::Const(_) => outcols.push(item.clone()), // TODO: temporary name for constant valued columns?
-            ast::SelItem::ColName(_) => outcols.push(item.clone()), // TODO: Is this a good time to check if row in table's schema?  Or at execution time?
-            ast::SelItem::Star => outcols.push(item.clone()),       // TODO: expand star here?
+            ast::SelItem::Const(_) => outcols.push(item.clone()),
+            ast::SelItem::ColName(_) => outcols.push(item.clone()),
+            ast::SelItem::Star => outcols.push(item.clone()),
         }
     }
     if outcols.len() == 1 && match outcols[0] { ast::SelItem::Star => true, _ => false} {
@@ -87,8 +82,6 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
 
 #[test]
 fn test_ast_select_statement_to_ir() {
-    // These should not panic.
-    // TODO: have them return a Result.
     struct Case {
         desc: String,
         input: ast::SelectStatement,
@@ -142,7 +135,6 @@ fn test_ast_select_statement_to_ir() {
                 tablename: String::from("t"),
             })),
         },
-        // TODO: test the case of "select 1 from t" which should error out.
         Case {
             desc: "Select 1 from t;".to_string(),
             input: ast::SelectStatement {

@@ -4,27 +4,6 @@
 use super::{cell, interior, leaf, PageType, RowId};
 use crate::pager::PageNum;
 
-// TODO: add table object: represents a Table (as opposed to Index) btree stored in SQLite format.
-// pub struct Table<'a> {
-//     root_page: crate::pager::PageNum,
-//     pager: &'a crate::pager::Pager,
-// }
-//
-// impl<'a> Table<'a> {
-//     /// Returns an interator over all items in the Table.
-//     pub fn iter() -> TableIterator<'a> {
-//         unimplemented!();
-//     }
-//     pub fn get() -> Option<(i64, &'a [u8])> {
-//         unimplemented!();
-//     }
-//     /// Returns an interator over items with keys between lo and hi.
-//     /// TODO: use Exclusive/Inclusive like the std btree hashmap does.
-//     pub fn range() -> TableIterator<'a> {
-//         unimplemented!();
-//     }
-// }
-
 enum EitherIter<'z> {
     Leaf(super::leaf::Iterator<'z>),
     Interior(super::interior::ScanIterator<'z>),
@@ -93,7 +72,8 @@ impl<'p> Iterator<'p> {
         let mut next_page = starting_page;
         loop {
             let page = self.pager.get_page_ro(next_page).unwrap();
-            // TODO: make it less complicated to just get the type of the new page you are about to work with.
+            // TODO: if the borrow checker gets confused by this loop, then the stack could be made to
+            // have a maximum height, e.g. 12, given that there are at most 2^64 pages and it is balanced.
             let hdr = super::header::check_header(page, Self::btree_start_offset(starting_page));
             let rmp = hdr.rightmost_pointer;
             let page_type = hdr.btree_page_type;
@@ -131,8 +111,6 @@ impl<'p> Iterator<'p> {
         }
     }
 }
-
-// TODO: if this is hard to make work, then test a simpler version that passes in a slice of ints and then iterates over them with references.
 
 impl<'p> core::iter::Iterator for Iterator<'p> {
     // The iterator returns a tuple of (rowid, cell_payload).
