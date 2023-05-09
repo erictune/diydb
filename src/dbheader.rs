@@ -1,7 +1,6 @@
 //! dbheader reads the header of a database file.
 
-use byteorder::{BigEndian, ReadBytesExt};
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
@@ -63,27 +62,22 @@ fn bytes_identical<T: Ord>(a: &[T], b: &[T]) -> bool {
 }
 
 pub fn get_header_clone(f: &mut std::fs::File) -> Result<DbfileHeader, Error> {
-    let mut v = vec![0_u8; crate::dbheader::SQLITE_DB_HEADER_BYTES];
+    let mut v = [0_u8; SQLITE_DB_HEADER_BYTES];
     f.seek(SeekFrom::Start(0)).map_err(|_| Error::ReadFailed)?;
     f.read_exact(&mut v[..]).map_err(|_| Error::ReadFailed)?;
-    let mut c = Cursor::new(v);
-    get_header(&mut c)
+    get_header(&v)
 }
 
-pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
-    f.seek(SeekFrom::Start(0)).map_err(|_| Error::ReadFailed)?;
+pub fn get_header(h: &[u8; SQLITE_DB_HEADER_BYTES]) -> Result<DbfileHeader, Error> {
     // Offset	Size	Description
     // 0        16	    The header string: "SQLite format 3\000"
-
-    let mut fileid_buffer = [0; 16];
-    f.read_exact(&mut fileid_buffer)
-        .map_err(|_| Error::ReadFailed)?;
+    let fileid_buffer : [u8; 16] = h[0..16].try_into().map_err(|_| Error::ReadFailed)?;
     if !bytes_identical(&fileid_buffer, SQLITE3_MAGIC_STRING) {
         return Err(Error::WrongMagic);
     }
     // Offset	Size	Description
     // 16	    2	    The database page size in bytes. Must be a power of two between 512 and 32768 inclusive, or the value 1 representing a page size of 65536.
-    let pagesize: u32 = match f.read_u16::<BigEndian>().map_err(|_| Error::ReadFailed)? {
+    let pagesize: u32 = match u16::from_be_bytes(h[16..18].try_into().map_err(|_| Error::ReadFailed)?) {
         512 => 512,
         1024 => 1024,
         2048 => 2048,
@@ -97,10 +91,10 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // Offset	Size	Description
     // 18	    1	    File format write version. 1 for legacy; 2 for WAL.
     // 19	    1	    File format read version. 1 for legacy; 2 for WAL.
-    if f.read_u8().map_err(|_| Error::ReadFailed)? != 0x01 {
+    if h[18] != 0x01 {
         return Err(Error::Unsupported);
     }
-    if f.read_u8().map_err(|_| Error::ReadFailed)? != 0x01 {
+    if h[19] != 0x01 {
         return Err(Error::Unsupported);
     }
 
@@ -109,38 +103,38 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // 21	1	Maximum embedded payload fraction. Must be 64.
     // 22	1	Minimum embedded payload fraction. Must be 32.
     // 23	1	Leaf payload fraction. Must be 32.
-    if f.read_u8().map_err(|_| Error::ReadFailed)? != 0x00 {
+    if h[20] != 0x00 {
         return Err(Error::Unsupported);
     }
-    if f.read_u8().map_err(|_| Error::ReadFailed)? != 0x40 {
+    if h[21] != 0x40 {
         return Err(Error::Invalid);
     }
-    if f.read_u8().map_err(|_| Error::ReadFailed)? != 0x20 {
+    if h[22] != 0x20 {
         return Err(Error::Invalid);
     }
-    if f.read_u8().map_err(|_| Error::ReadFailed)? != 0x20 {
+    if h[23] != 0x20 {
         return Err(Error::Invalid);
     }
 
     // Offset	Size	Description
     // 24	    4	    File change counter.
     // 28	    4	    Size of the database file in pages. The "in-header database size".
-    let changecnt: u32 = f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)?;
-    let numpages: u32 = f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)?;
+    let changecnt: u32 = u32::from_be_bytes(h[24..28].try_into().map_err(|_| Error::ReadFailed)?);
+    let numpages: u32 = u32::from_be_bytes(h[28..32].try_into().map_err(|_| Error::ReadFailed)?);
 
     // Offset	Size	Description
     // 32	    4	    Page number of the first freelist trunk page.
     // 36	    4	    Total number of freelist pages.
     // 40	    4	    The schema cookie.
     // 44	    4	    The schema format number. Supported schema formats are 1, 2, 3, and 4.
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if u32::from_be_bytes(h[32..36].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
         return Err(Error::UnsupportedFreelistUse);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if u32::from_be_bytes(h[36..40].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
         return Err(Error::UnsupportedFreelistUse);
     }
-    let _ = f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)?;
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x4 {
+    let _ = u32::from_be_bytes(h[40..44].try_into().map_err(|_| Error::ReadFailed)?);
+    if u32::from_be_bytes(h[44..48].try_into().map_err(|_| Error::ReadFailed)?) != 0x4 {
         return Err(Error::UnsupportedSchema);
     }
 
@@ -151,36 +145,34 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // 60	    4	    The "user version" as read and set by the user_version pragma.
     // 64	    4	    True (non-zero) for incremental-vacuum mode. False (zero) otherwise.
     // 68	    4	    The "Application ID" set by PRAGMA application_id.
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if u32::from_be_bytes(h[48..52].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
         println!("a");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if u32::from_be_bytes(h[52..56].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
         println!("b");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x1 {
+    if u32::from_be_bytes(h[56..60].try_into().map_err(|_| Error::ReadFailed)?) != 0x1 {
         println!("c");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if u32::from_be_bytes(h[60..64].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
         println!("d");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if u32::from_be_bytes(h[64..68].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
         println!("e");
         return Err(Error::Unsupported);
     }
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != 0x0 {
+    if u32::from_be_bytes(h[68..72].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
         println!("f");
         return Err(Error::Unsupported);
     }
 
     // Offset	Size	Description
     // 72	20	Reserved for expansion. Must be zero.
-    let mut reserved_buffer = [0; 20];
-    f.read_exact(&mut reserved_buffer)
-        .map_err(|_| Error::ReadFailed)?;
+    let reserved_buffer : [u8; 20] = h[72..92].try_into().map_err(|_| Error::ReadFailed)?;
     if !bytes_identical(&reserved_buffer, TWENTY_ZEROS) {
         return Err(Error::WrongMagic);
     }
@@ -188,12 +180,12 @@ pub fn get_header<R: Read + Seek>(f: &mut R) -> Result<DbfileHeader, Error> {
     // Offset	Size	Description
     // 92	4	The version-valid-for number.
     // 96	4	SQLITE_VERSION_NUMBER
-    let _version_valid_for = f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)?;
-    if f.read_u32::<BigEndian>().map_err(|_| Error::ReadFailed)? != SQLITE_VERSION_NUMBER {
+    let _version_valid_for = u32::from_be_bytes(h[92..96].try_into().map_err(|_| Error::ReadFailed)?);
+    let _svn : [u8; 4] = h[96..100].try_into().map_err(|_| Error::ReadFailed).map_err(|_| Error::ReadFailed)?;
+    if u32::from_be_bytes(_svn) != SQLITE_VERSION_NUMBER {
         return Err(Error::Unsupported);
     }
 
-    f.seek(SeekFrom::Start(0)).map_err(|_| Error::ReadFailed)?;
     Ok(DbfileHeader {
         pagesize,
         changecnt,
