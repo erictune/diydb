@@ -102,7 +102,6 @@ where
     }
     pub fn opendb(&'a mut self, path: &str) -> Result<(), Error> {
         self.pagers.push(Pager::open(path)?);
-        self.pagers.last_mut().unwrap().initialize()?;
         Ok(())
     }
 }
@@ -111,7 +110,7 @@ where
 pub struct Pager {
     f: Box<RefCell<std::fs::File>>,
     // TODO: pages could return a RefCell so that pages can be paged in on demand.
-    // Then get rid of `initialize()` and have `check_present()` call `make_present()` where needed.
+    // Then have `check_present()` call `make_present()` where needed.
     // When implementing that, some things to consider are:
     // - The memory overhead: I think it should be low, given that pages (512B-4kB) are much larger than the overhead (16B-24B?).
     // - The cpu overhead: Is it paid by every function in the stack of iterators and , or once per at allocation and de-allocation, or on every access?  Perhaps benchmark it.
@@ -137,6 +136,9 @@ pub type PageNum = usize;
 const MAX_PAGE_NUM: PageNum = 10_000; // 10_000 * 4k page ~= 40MB
 
 impl Pager {
+    /// opens a database file and verfies it is a SQLite db file, and reads in an unspecified number of pages of the database.
+    ///
+    /// Additional pages may be read in as needed later.
     pub fn open(path: &str) -> Result<Self, Error> {
         let file =
                 // TODO: Lock file when opening so that other processes do not also
@@ -158,29 +160,25 @@ impl Pager {
         if h.numpages > MAX_PAGE_NUM as u32 {
             return Err(Error::PageNumberBeyondLimits);
         }
+        //TODO: read these in on demand.
+        let mut pages = vec![None; h.numpages as usize];
+        for pn in 1_usize..(h.numpages as usize) + 1 {
+            let mut v = vec![0_u8; h.pagesize as usize];
+            file
+                .borrow_mut()
+                .seek(SeekFrom::Start((pn - 1) as u64 * h.pagesize as u64))
+                .map_err(Error::Io)?;
+            file
+                .borrow_mut()
+                .read_exact(&mut v[..])
+                .map_err(Error::Io)?;
+            pages[pn - 1] = Some(v);
+        }
         Ok(Pager {
             f: Box::new(file),
-            pages: vec![],
+            pages: pages.into(),
             page_size: h.pagesize as u32,
         })
-    }
-
-    // Reads in all the pages of the file. TODO: do this on demand.
-    pub fn initialize(&mut self) -> Result<(), Error> {
-	// TODO: remove this it is redundant with open.
-        let h =
-            crate::dbheader::get_header_clone(&mut self.f.borrow_mut()).map_err(Error::DbHdr)?;
-        self.f
-            .borrow_mut()
-            .seek(SeekFrom::Start(0))
-            .map_err(Error::Io)?;
-        if h.numpages > MAX_PAGE_NUM as u32 {
-            panic!("Too many pages");
-        }
-        for pn in 1..h.numpages + 1 {
-            self.make_page_present(pn as usize)?;
-        }
-        Ok(())
     }
 
     #[allow(dead_code)]
@@ -204,6 +202,9 @@ impl Pager {
 
     // TODO: implement transparent paging in of pages.
     pub fn make_page_present(&mut self, pn: PageNum) -> Result<(), Error> {
+        if pn > MAX_PAGE_NUM {
+            return Err(Error::PageNumberBeyondLimits);
+        }
         if pn > self.pages.len() {
             // println!("Extending pager capacity to {}", pn);
             self.pages.resize(pn, None)
@@ -247,7 +248,6 @@ impl Pager {
 
     #[allow(dead_code)]
     pub fn get_page_rw(self, _: PageNum) -> Result<Vec<u8>, Error> {
-        //self.check_initialized();
         // TODO: support writing pages. This will need reader/writer locks.
         unimplemented!("Writing not implemented")
     }
@@ -267,15 +267,13 @@ fn path_to_testdata(filename: &str) -> String {
 #[test]
 fn test_open_db() {
     let path = path_to_testdata("minimal.db");
-    let mut pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
-    pager.initialize().expect("Should have initialized pager.");
+    let _pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
 }
 
 #[test]
 fn test_get_page_ro() {
     let path = path_to_testdata("minimal.db");
-    let mut pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
-    pager.initialize().expect("Should have initialized pager.");
+    let pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
     assert!(
         pager
             .get_page_ro(1)

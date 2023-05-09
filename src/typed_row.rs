@@ -119,9 +119,8 @@ fn test_raw_row_caster() {
     use SqlValue::*;
     // literal 0 | literal 1 | float 3.1415 | "Ten" | NULL
     let path = path_to_testdata("minimal.db");
-    let mut pager =
+    let pager =
         crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
-    pager.initialize().expect("Should have initialized pager.");
     // let tbl = Table::open_read(table_name)
 
     let (pgnum, csql) = crate::get_creation_sql_and_root_pagenum(&pager, "a").unwrap();

@@ -167,7 +167,6 @@ fn test_table_iterator_on_minimal_db() {
     let path = path_to_testdata("minimal.db");
     let mut pager =
         crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
-    pager.initialize().expect("Should have initialized pager.");
     let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "a");
     let mut ri = crate::new_table_iterator(&pager, x.unwrap().0);
     let first_item = ri.next().clone();
@@ -183,9 +182,8 @@ fn test_table_iterator_on_three_level_db() {
     // row 1: 1
     // row 1000000: 1000000
     let path = path_to_testdata("threelevel.db");
-    let mut pager =
+    let pager =
         crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
-    pager.initialize().expect("Should have initialized pager.");
     let x = crate::get_creation_sql_and_root_pagenum(&pager, "t");
     let pgnum = x.unwrap().0;
 
