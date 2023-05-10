@@ -23,15 +23,66 @@ pub enum Error {
 // Code to open db files and (in the future) lock the file at the OS level.
 //  It also provides a function to get the DB file headers.
 
-// TODO: Change DbfileHeader to operate on a byte slice (portion of a page).  Change callsites to do their own file read.
-// TODO: implement the header as a "c representation" struct to get experience with those (https://doc.rust-lang.org/reference/type-layout.html#the-c-representation).  Unsafely cast the file's first 100 bytes to such a struct and verify it before returning it. (crate bytemuck might help).
-
-// The database file header.
+// The database file header fields that we return from public interface.
 #[derive(Debug, Clone)]
 pub struct DbfileHeader {
     pub pagesize: u32,
     pub numpages: u32,
     pub changecnt: u32,
+}
+
+// The database file header as stored in a sqlite file.
+// All the [u8; 32] fields are 32 bit big-endian unsigned integers.
+#[derive(Debug, Clone)]
+#[repr(C)]
+struct DbfileHeaderReprC {
+    // Offset	Size	Description
+    // 0        16	The header string: "SQLite format 3\000"
+    magic: [u8; 16],
+    // 16	2	The database page size in bytes. Must be a power of two between 512 and 32768 inclusive, or the value 1 meaning 65536.
+    pagesize: [u8; 2],
+    // 18	1	File format write version. 1 for legacy; 2 for WAL.
+    ffwv: u8,
+    // 19	1	File format read version. 1 for legacy; 2 for WAL.
+    ffrv: u8,
+    // 20	1	Bytes of unused "reserved" space at the end of each page. Usually 0.
+    reserved_end: u8,
+    // 21	1	Maximum embedded payload fraction. Must be 64.
+    maxepf: u8,
+    // 22	1	Minimum embedded payload fraction. Must be 32.
+    minepf: u8,
+    // 23	1	Leaf payload fraction. Must be 32.
+    lpf: u8,
+    // 24	4	File change counter.
+    fcc: [u8; 4],
+    // 28	4	Size of the database file in pages. The "in-header database size".
+    numpages: [u8; 4],
+    // 32	4	Page number of the first freelist trunk page.
+    pnfftp: [u8; 4],
+    // 36	4	Total number of freelist pages.
+    nflp: [u8; 4],
+    // 40	4	The schema cookie.
+    sc: [u8; 4],
+    // 44	4	The schema format number. Supported schema formats are 1, 2, 3, and 4.
+    sfn: [u8; 4],
+    // 48	4	Default page cache size.
+    dpcs: [u8; 4],
+    // 52	4	The page number of the largest root b-tree page when in auto-vacuum or incremental-vacuum modes, or zero otherwise.
+    lrbpv: [u8; 4],
+    // 56	4	The database text encoding. A value of 1 means UTF-8. A value of 2 means UTF-16le. A value of 3 means UTF-16be.
+    encoding: [u8; 4],
+    // 60	4	The "user version" as read and set by the user_version pragma.
+    userversion: [u8; 4],
+    // 64	4	True (non-zero) for incremental-vacuum mode. False (zero) otherwise.
+    ivm: [u8; 4],
+    // 68	4	The "Application ID" set by PRAGMA application_id.
+    appid: [u8; 4],
+    // 72	20	Reserved for expansion. Must be zero.
+    reserved: [u8; 20],
+    // 92	4	The version-valid-for number.
+    vvf: [u8; 4],
+    // 96	4	SQLITE_VERSION_NUMBER
+    sqlite_version_number: [u8; 4],
 }
 
 const SQLITE_DB_HEADER_BYTES: usize = 100;
@@ -69,15 +120,17 @@ pub fn get_header_clone(f: &mut std::fs::File) -> Result<DbfileHeader, Error> {
 }
 
 pub fn get_header(h: &[u8; SQLITE_DB_HEADER_BYTES]) -> Result<DbfileHeader, Error> {
-    // Offset	Size	Description
-    // 0        16	    The header string: "SQLite format 3\000"
-    let fileid_buffer : [u8; 16] = h[0..16].try_into().map_err(|_| Error::ReadFailed)?;
-    if !bytes_identical(&fileid_buffer, SQLITE3_MAGIC_STRING) {
+    if std::mem::size_of::<[u8; SQLITE_DB_HEADER_BYTES]>() != std::mem::size_of::<DbfileHeaderReprC>() {
+        return Err(Error::ReadFailed);
+    }
+    let hdri = unsafe {
+      std::mem::transmute::<[u8; SQLITE_DB_HEADER_BYTES], DbfileHeaderReprC>(*h)
+    };
+    // The header must have the magic string that identifies the file as a sqlite file.
+    if !bytes_identical(&hdri.magic, SQLITE3_MAGIC_STRING) {
         return Err(Error::WrongMagic);
     }
-    // Offset	Size	Description
-    // 16	    2	    The database page size in bytes. Must be a power of two between 512 and 32768 inclusive, or the value 1 representing a page size of 65536.
-    let pagesize: u32 = match u16::from_be_bytes(h[16..18].try_into().map_err(|_| Error::ReadFailed)?) {
+    let pagesize: u32 = match u16::from_be_bytes(hdri.pagesize) {
         512 => 512,
         1024 => 1024,
         2048 => 2048,
@@ -88,101 +141,59 @@ pub fn get_header(h: &[u8; SQLITE_DB_HEADER_BYTES]) -> Result<DbfileHeader, Erro
         1 => 65536,
         _ => return Err(Error::UnsupportedPagesize),
     };
-    // Offset	Size	Description
-    // 18	    1	    File format write version. 1 for legacy; 2 for WAL.
-    // 19	    1	    File format read version. 1 for legacy; 2 for WAL.
-    if h[18] != 0x01 {
+    if hdri.ffwv != 0x01 {
         return Err(Error::Unsupported);
     }
-    if h[19] != 0x01 {
+    if hdri.ffrv != 0x01 {
         return Err(Error::Unsupported);
     }
-
-    // Offset	Size	Description
-    // 20	1	Bytes of unused "reserved" space at the end of each page. Usually 0.
-    // 21	1	Maximum embedded payload fraction. Must be 64.
-    // 22	1	Minimum embedded payload fraction. Must be 32.
-    // 23	1	Leaf payload fraction. Must be 32.
-    if h[20] != 0x00 {
+    if hdri.reserved_end != 0x00 {
         return Err(Error::Unsupported);
     }
-    if h[21] != 0x40 {
+    if hdri.maxepf != 0x40 {
         return Err(Error::Invalid);
     }
-    if h[22] != 0x20 {
+    if hdri.minepf != 0x20 {
         return Err(Error::Invalid);
     }
-    if h[23] != 0x20 {
+    if hdri.lpf != 0x20 {
         return Err(Error::Invalid);
     }
-
-    // Offset	Size	Description
-    // 24	    4	    File change counter.
-    // 28	    4	    Size of the database file in pages. The "in-header database size".
-    let changecnt: u32 = u32::from_be_bytes(h[24..28].try_into().map_err(|_| Error::ReadFailed)?);
-    let numpages: u32 = u32::from_be_bytes(h[28..32].try_into().map_err(|_| Error::ReadFailed)?);
-
-    // Offset	Size	Description
-    // 32	    4	    Page number of the first freelist trunk page.
-    // 36	    4	    Total number of freelist pages.
-    // 40	    4	    The schema cookie.
-    // 44	    4	    The schema format number. Supported schema formats are 1, 2, 3, and 4.
-    if u32::from_be_bytes(h[32..36].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
+    let changecnt: u32 = u32::from_be_bytes(hdri.fcc);
+    let numpages: u32 = u32::from_be_bytes(hdri.numpages);
+    if u32::from_be_bytes(hdri.pnfftp) != 0x0 {
         return Err(Error::UnsupportedFreelistUse);
     }
-    if u32::from_be_bytes(h[36..40].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
+    if u32::from_be_bytes(hdri.nflp) != 0x0 {
         return Err(Error::UnsupportedFreelistUse);
     }
-    let _ = u32::from_be_bytes(h[40..44].try_into().map_err(|_| Error::ReadFailed)?);
-    if u32::from_be_bytes(h[44..48].try_into().map_err(|_| Error::ReadFailed)?) != 0x4 {
+    let _schema_cookie = u32::from_be_bytes(hdri.sc);
+    if u32::from_be_bytes(hdri.sfn) != 0x4 {
         return Err(Error::UnsupportedSchema);
     }
-
-    // Offset	Size	Description
-    // 48	    4	    Default page cache size.
-    // 52	    4	    The page number of the largest root b-tree page when in auto-vacuum or incremental-vacuum modes, or zero otherwise.
-    // 56	    4	    The database text encoding. A value of 1 means UTF-8. A value of 2 means UTF-16le. A value of 3 means UTF-16be.
-    // 60	    4	    The "user version" as read and set by the user_version pragma.
-    // 64	    4	    True (non-zero) for incremental-vacuum mode. False (zero) otherwise.
-    // 68	    4	    The "Application ID" set by PRAGMA application_id.
-    if u32::from_be_bytes(h[48..52].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
-        println!("a");
+    if u32::from_be_bytes(hdri.dpcs) != 0x0 {
         return Err(Error::Unsupported);
     }
-    if u32::from_be_bytes(h[52..56].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
-        println!("b");
+    if u32::from_be_bytes(hdri.lrbpv) != 0x0 {
         return Err(Error::Unsupported);
     }
-    if u32::from_be_bytes(h[56..60].try_into().map_err(|_| Error::ReadFailed)?) != 0x1 {
-        println!("c");
+    if u32::from_be_bytes(hdri.encoding) != 0x1 {
         return Err(Error::Unsupported);
     }
-    if u32::from_be_bytes(h[60..64].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
-        println!("d");
+    if u32::from_be_bytes(hdri.userversion) != 0x0 {
         return Err(Error::Unsupported);
     }
-    if u32::from_be_bytes(h[64..68].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
-        println!("e");
+    if u32::from_be_bytes(hdri.ivm) != 0x0 {
         return Err(Error::Unsupported);
     }
-    if u32::from_be_bytes(h[68..72].try_into().map_err(|_| Error::ReadFailed)?) != 0x0 {
-        println!("f");
+    if u32::from_be_bytes(hdri.appid) != 0x0 {
         return Err(Error::Unsupported);
     }
-
-    // Offset	Size	Description
-    // 72	20	Reserved for expansion. Must be zero.
-    let reserved_buffer : [u8; 20] = h[72..92].try_into().map_err(|_| Error::ReadFailed)?;
-    if !bytes_identical(&reserved_buffer, TWENTY_ZEROS) {
+    if !bytes_identical(&hdri.reserved, TWENTY_ZEROS) {
         return Err(Error::WrongMagic);
     }
-
-    // Offset	Size	Description
-    // 92	4	The version-valid-for number.
-    // 96	4	SQLITE_VERSION_NUMBER
-    let _version_valid_for = u32::from_be_bytes(h[92..96].try_into().map_err(|_| Error::ReadFailed)?);
-    let _svn : [u8; 4] = h[96..100].try_into().map_err(|_| Error::ReadFailed).map_err(|_| Error::ReadFailed)?;
-    if u32::from_be_bytes(_svn) != SQLITE_VERSION_NUMBER {
+    let _version_valid_for = u32::from_be_bytes(hdri.vvf);
+    if u32::from_be_bytes(hdri.sqlite_version_number) != SQLITE_VERSION_NUMBER {
         return Err(Error::Unsupported);
     }
 
