@@ -1,6 +1,24 @@
-Intermediate Representation
-====================
+Intermediate Representation and friends
+=======================================
 
+This database uses a number of different representation for SQL programs:
+- SQL statements - strings of text
+- a *Parse Tree*  (PT) - a tree of objects built by a generated parser, from
+  generated types, closely matching the original SQL statements.  Uses a
+  single enum for all PT types.  Retains character-level information.
+- an *Abstract Syntax Tree* (AST) - a tree of hand-written objects.  Enums are
+  narrowly defined simplifying match statements.  Discards character-level information.
+  Some optimizations can be are performed at the AST level.  Types still map directly
+  to SQL keywords.
+- an *Intermediate Representation* (IR) - a tree (graph?) of hand-written objects
+  that represent, roughly, the operations in the relational algebra: e.g. project.
+  Does not closely map to SQL keywords.  Optimization performed at this level may
+  combine or split operations.  Query planning will be performed on the IR.
+- an *Execution Block* (XB) tree - a tree (graph?) of blocks closely mirroring the
+  IR, which are used to "execute" the IR.  If bytecode or JIT code generation were
+  implemented, then it would replace this layer.
+
+# Examples
 
 # Tables used in examples
 
@@ -11,72 +29,185 @@ insert into t values (1,10)
 insert into t values (2,20)
 ```
 
-Index `t_a` as shown below: 
+Index `t_a` as shown below:
 ```
 create index t_a on t (a)
 ```
 
 # IR Types
-These types hold some data (creation arguments), and can be evaluated.  By using traits, they
-can be strung together using different 
+Some IR blocks have a child block.  These read in rows and produce rows.
+The can be chained.
+Some have several children, as in the case of a join or union.
 
-**TODO: combine AddColFromExpr into Project for consistency with how relational algebra is defined on e.g. wikipedia.**
-
-|       type         | creation arguments | eval() step input | eval() step output  |
-| ------------------ | ------------------ | ---------------- | ------------- |
-| `TempTable`        | literal     values | no eval args     | `Row`        |
-| `Scan`             | table name         | no eval args     | `Row`        |
-| `SeekRowid`        | table name, rowid  | no eval args     | `Row`        |
-| `IndexedSeekEq`    | table, index, key  | no eval args     | `Row`        |
-| `Filter`           | `&LogicalOp`, `&RowIterable` | `Row` | `Option<Row>` |
-| `Project`          | list of `&ColExpr` | `Row`            | `Row`        |
-
-A `ColExpr` is an expression referencing elements of a row by column name (or index for efficiency).
-They include binary ops (`Eq`, `Gt`, `Add`, `Mul`) and unary ops (`Negate`)
+|        type        | purpose                               |
+| ------------------ | ------------------------------------- |
+| `TempTable`        | holds a constant row or set of rows, not stored |
+| `Scan`             | scans a stored table                  |
+| `SeekRowid`        | finds a specific rowid in a stored table |
+| `IndexedSeek`      | finds a specific row with the aid of an index |
+| `Filter`           | returns only those rows that match an expression |
+| `Project`          | returns only a subset of columns, and/or computes values on columns. |
+| `Union`            | return rows from multiple sources |
+| `Join`             | returns only a subset of columns, and/or computes values on columns. |
+etc...
 
 # Examples of SQL converted to IR
-
-**TODO: combine AddColFromExpr into Project for consistency with how relational algebra is defined on e.g. wikipedia.**
-
 
 |  Preconditions | SQL Statement           |    IR    |   Notes |
 | - | --------------- | ----------- | --------- |
 | None | `select 1` | `ScanConstantRows` |  |
-| Table `t` | `select * from t` | `Scan("t")` |  A star says we don't need a `Project`. |
-| Table `t` | `select * from t where rowid = 1` | `SeekRowid("t", rowid)` |  | 
-| Table `t` | `select * from t where a = 1` | `Filter(LogicalColExpr(Eq(Col("a"), Const(1, int)), Scan(t)` | `Filter` only returns rows from _arg2_ which match expression _arg1_. |
-| Table `t` | `select a from t` | `Project(["a"], Scan("t"))` | `Project` drops columns not mentioned in the column list (arg1) from table (arg2) |
+| Table `t` | `select * from t` | `Scan("t")` |  Selecting only * means we don't need a `Project` block. |
+| Table `t` | `select * from t where rowid = 1` | `SeekRowid("t", rowid)` | |
+| Table `t` | `select * from t where a = 1` | `Filter("a=1", Scan(t))` | |
+| Table `t` | `select a from t` | `Project(["a"], Scan("t"))` | |
 | Table `t` | `select b from t where rowid = 1` | `Project(["b"], RowidSeek("t", 1))` | |
-| Table `t` | `select b from t where a = 1` | `Project(["b"], Filter(Eq(Col("a"), Const(1, int)), Scan(a)))` | `Filter` only returns rows from _arg2_ which match expression _arg1_. | 
-| Table `t` and Index `t_a` | `select b from t where a = 1` | `Project(["b"], IndexedSeekEq("t", "t_a", 1))` | `Filter` only returns rows from _arg2_ which match expression _arg1_. | 
-| Table `t`  | `select a + a from t` | `Project(["_expr1"], NewColFromExpr("_expr1", Expr(Add(Col("a"), Col("a"))), Scan(t)))` |  NewColFromExpr adds a new column to table named _arg1_ to the table _arg3_ computed with expression _arg2_.   |
-| None | `select 1 + 1`    | `ScanConstantRow(2)` | Constant expressions are evaluated before query exectution
-| Table `t` | `select *, -a from t` | `AddColFromExpr("_expr1", Expr(UnaryMinus(Col("a"))), Scan(t))` | `AddColFromExpr` adds a new column to table named _arg1_ to the table _arg3_ computed with expression _arg2_. |
-| Table `t` | `select a + a from t` | `Project(["_expr1"], AddColFromExpr("_expr1", Expr(UnaryMinus(Col("a"))), Scan(t)))` |  NewColFromExpr .   |
-| Table `t` and Index `t_a` | `select * from t` | `Scan("t")` | No change. |
-| Table `t` and Index `t_a` | `select * from t where rowid = 1` | `RowidSeek("t", rowid)` | No change | 
-| Table `t` and Index `t_a` | `select * from t where a = 1` | `IndexSeekEq("t", "t_a", 1)` | `IndexSeekEq` returns the range of values in _arg1_ equal to _arg3_ using index table _arg2_. | 
+| Table `t` | `select b from t where a = 1` | `Project(["b"], Filter("a=1", Scan(a)))` | |
+| Table `t` and Index `t_a` | `select b from t where a = 1` | `Project(["b"], IndexedSeek("t", "t_a", "a=1"))` | |
+| Table `t`  | `select a + a from t` | `Project(["a+a"], Scan(t)))` |  |
+| None | `select 1 + 1`    | `TempTable([[2]])` | Constant expressions are simplified in the AST representation.  Select with no from are represented as a constant table. |
 
-# IR Traits
+Note that expressions, which are written above for conciseness as e.g.`"a+1"`, are actually AST expression trees.
 
-TBD: if there should be stronger typing of Exprs? SQLite does not use strong types.
+Here is a more complicated example.  This SQL:
+```sql
+select max(i,j) as k from (select a+1 as i, 2 * a as j from t)
+```
+turns into 3 IR blocks:
+```
+Obj #1:
+Project(
+    colnames: ["k"],  // list of names of the output columns.
+    exprs: [BinOp::max(Column("i"),Column("j")]  // list of the expressions that generate the output columns.
+    child: Box(#2)  // This points to obj #2.
+)
 
-Trait names to be determined.  Whether to use common rust traits or new ones is TBD also.
-TBD if traits are needed.
+Obj #2:
+Project(
+  colnames: ["i",
+             "j"],
+  exprs: [BinOp::add(Column("a"), Const::Int(1)),
+          BinOp::mul(Column("a"), Const::Int(2))]
+  child: Box(#3)
+)
 
-| tenative trait name |      trait description              | example IR types meeting it   |
-| ------------------- | ----------------------------------- | ------------------------------ | 
-| `LogicalOp`         | evaluation returns boolean          | `Eq`, `Gt`, `Ne`               |
-| `RowIterable`       | evaluation returns sequence of rows | `ScanConstantRows`, `Scan`, `SeekRowid` |
-| `NumericOp`         | evaluation returns numeric scalar   | `Negate`, `Add`                |
-| `NullaryOp`         | evaluation takes a no arguments     | `ScanConstantRows`, `Scan`, `SeekRowid` |
-| `UnaryOp`           | evaluation takes one scalar args    | `Negate`, `Sqrt`               |
-| `BinaryOp`          | evaluation takes two scalar args    | `Add`, `Mul`                   |
+Obj #3:
+Scan(
+  colnames: ["a",
+             "b",
+             "c"],
+  table_name: table_name,
+)
 
-# Questions and Observations
--   To stepwise evaluate a `Filter`, you have to check if it has a row ready right now, which is different from it being done.
--   An immediate table is needed to handle some sql expressions.  Also, an immediate table would help with testing SQL.  This requires
-    a ScannableTable trait that can iterate over a constant or btree-based table. 
--   Is index selection part of AST to IR conversion, or  a subsequent steps (optimization, interpretation, codegen).
--   A complete implementation of `SeekRowid` would allow for expressions rather than a constant rowid, right?
+# IR Optimization
 
+IR optimizations might include:
+- converting scans to seeks, index selection.
+- deciding the order of joins
+- splitting, combining, or moving projects.
+
+I need to learn more about this.
+
+# Execution Blocks
+
+Execution blocks are (I think going to be) 1:1 with IR blocks.
+
+Continuing the example from above, we'd build the following execution blocks to run the query:
+
+
+```
+Obj #4:
+ProjectExecutor(
+    ir: Box(#1)
+    child: Box(#5)
+    current_row: Vec<SqlValue> // Might need to have enum of either SqlValue or &SqlValue, to avoid copies for large blobs?
+)
+
+Obj #5:
+ProjectExecutor(
+    ir: Box(#2)
+    child: Box(#6)
+    current_row: Vec<SqlValue> // Might need to have enum of either SqlValue or &SqlValue, to avoid copies for large blobs?
+)
+
+Obj #6:
+ScanExecutor(
+    ir: Box(#3)
+    // No child
+    table: Table,
+    it: Table::iterator(),
+    current_row: Vec<SqlValue> // Might need to have enum of either SqlValue or &SqlValue, to avoid copies for large blobs?
+)
+```
+XBs will have a streaming iterators trait.
+They will have additional traits too,
+e.g. `trait ExecutionBlock : StreamingIterator {...}`.
+The other methods will be for metadata about the thing being streamed (like column names and sql types);
+
+Boxing the IRs lets you hold on to them during execution and delete them when you delete the execution;
+not have them stuck on the stack of the function that built the IR.
+
+XBs implement an ExecutionBlock trait:
+```rust
+trait ExecutionBlock : StreamingIterator {
+    fn outcol_names() -> vec<String>;           // Gives the names of the rows being produced.
+    fn init();                                  // To be called once before starting execution.
+// These come from StreamingIterator?  Or do we not want to be that generic?
+    fn get(&self) -> Option<Vec<SqlValue>>      // return the current row, if any.
+    fn advance(&mut self)                       // advances to return a new row.
+    fn child() -> Option<&trait ExecutionBlock> // gives a pointer to the child block, unless a leaf.
+}
+```
+
+Question: do get() and advance() look like, or actually implement the `streaming_iterator::StreamingInterator` trait.
+
+
+One way to execute a graph of execution blocks is to advance each one and propagate the result to the next one,
+as follows:
+
+```rust
+let blocks = blocks_sorted_from_bottom_to_top(blocks);
+while let Some(row) = out {
+    let item = None;
+    for block in blocks {
+        if out is None
+            let out = true => block.get();
+            block.advance
+        else
+            let in = out;
+            let out = block.get(in);
+            block.advance();
+    }
+    emit(out);
+}
+```
+
+Another way is to have the block internally know their `child()` and call it so you call from the top.
+
+Example Impls:
+```
+impl ProjectExecutor {
+    fn outcol_names() -> vec<String> { /* get from ir */ }
+    fn init() { /* is anything required? */
+    fn get(&self) -> Vec<SqlValue> { return &current_row }
+    fn advance(&mut self) { current_row = child executor.get()
+    fn child() -> Option<&Executor> { return child }
+}
+
+impl ScanExecutor {
+    fn outcol_names() -> vec<String> { /* get from ir */ }
+    fn init() { /* it = table.iter(); */
+    fn get(&self) -> Vec<SqlValue> { return &current_row }
+    fn advance(&mut self) { current_row = table_iter.next() };
+    fn child() -> Option<&Executor> { return child }
+}
+
+impl ConstantTableExecutor {
+    fn outcol_names() -> vec<String> { /* get from ir */ }
+    fn init() { /* it = table.iter(); */
+    fn get(&self) -> Vec<SqlValue> { return &current_row }
+    fn advance(&mut self) { current_row = table_iter.next() };
+    fn child() -> Option<&Executor> { return child }
+}
+```
+
+See also: [https://docs.rs/streaming-iterator/latest/src/streaming_iterator/lib.rs.html#984-987]

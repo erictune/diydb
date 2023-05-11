@@ -59,7 +59,13 @@ Files are organized as follows:
 * SQL Command Processor
     * `sql.pest` - Defines grammar for parser.
     * `parser.rs` - Module holds generated parser [https://pest.rs/] and tests for grammar.
-    * `pt_to_ast.rs` - Functions to convert parse tree to abstract syntax tree.
+    * `pt_to_ast.rs` - Functions to convert parse tree to abstract syntax tree (AST).
+    * `ast.rs` - defines the types of the AST.
+    * `ast_to_ir.rs` - converts the AST to an intermediate representation that can be further optimized.
+    * `ir.rs` - types used in the IR.
+    * PENDING: `ir_to_xb.rs` - converts IR into "execution blocks" (XBs), which can directly be executed (interpreted).
+    * PENDING: `xb.rs` - types used for XBs.
+    * `IR.md` - describes how PT, AST, IR, and XBs are used.
 * Execution
   * `serial_types.rs` - handles SQLite *serial types* (which can differ from row to row within a column, and are different from SQL types).
   * `record.rs` - iterates over and parses row records that are stored in btree cells.

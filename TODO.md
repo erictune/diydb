@@ -15,11 +15,19 @@ Build steel thread of parsing and execution.
     - [x] return a row iterator from `run_ir`.
     - [x] handle `ConstantRow` by creating a TempTable.
     - [X] add returning error instead of panic from ast_to_ir.
-    - [ ] read src/IRnotes.txt, merge into  IR.md, update IR.md with the plan for IR and XBs.
-    - [ ] eliminate rowid from TypedRow - add back later if needed or have a flag to include it as first item?
     - [ ] write xb.rs which hold executor blocks.
     - [ ] write ir_to_xb.rs which converts the ir to executor blocks (which maybe will implement the streaming iterator trait.
-          See IRnotes.txt.  Update docs in readme.  See the Streaming Iterator discussion below too. - it provides a way to force the caller to copy whatever it needs for longer.
+    - rename constantRow to TempTable.
+    - try to implement get and advance for Table and TempTable.  Need a trait.  Is it StreamingIterator or StreamingRowIterator (no generic type)?
+    - write the executors for scan and constant_table and text the executor loop.
+    - write a dummy pass-thru executor (beginning of limit).
+    - write a "run_executors" function.
+    - write a "ir_to_executors" function.
+    - Add a pass over IR to do these things before we execute it.
+    - Generate temporary names for constant valued columns without "AS" in projects.
+    - Check column refs against the table schema and return error if not found. (schema hash to be confirmed at execution time).
+    - Expand each star to the list of all columns in the schema.
+    - [ ] eliminate rowid from TypedRow - add back later if needed or have a flag to include it as first item?
     - [ ] make run_query run the executor blocks. (First just scan and constant). (see IR notes).
     - write the executors for scan and constant_table and text the executor loop.
     - [ ] Implement `project`.
@@ -80,26 +88,31 @@ Future Projects
 - [ ] Post IR generation, detect that `Scan` can be replaced with  `SeekRowid`
 - [ ] Execute it, and check that it was more efficient (steps executed?)
 - [ ] Here is a detailed treatment with theorems, reduction rules, and some test cases: https://arxiv.org/pdf/1607.04197.pdf
+- [ ] Implement SearchIterator (SeekIterator?) for Table, and support "WHERE rowid = #" queries using that.
+
 # Small Tasks
 
 Quick Cleanups for when you don't have a lot of time:
-- semicolon at end of sql queries.
+- Have semicolon at end of sql queries.
+- `.explain` by printing IR out.
 - Integration tests should run end-to-end using run_query(), checking the results.
 - Replacing unwrap and expect with returning errors (using thiserr in modules, and anyhow in main).
-  Remaining file: lib.rs, pt_to_ast.rs, and btree/*.rs.
+  Remaining file: lib.rs, pt_to_ast.rs, and btree/
 - Using clippy.
 - Improve the CLI to allow opening named files.
-- Make a Pager::Page object that has is_present(), purpose(), start_offset(), and data() methods.
-- Make a Btree::Page object that has btree_header() and btree_type() attributes.
+- Make a Pager::Page object that has is_present(), purpose(), start_offset(), use_read() and use_write() methods.
+  The use_read() and use_write()s return a Pager::PageRef which the caller puts on their stack to hold a lock.
+  They wrap the RwLock::LockResult().
+- Make a Pager::PageRef object that represents a read or write lock on a page and allows borrowing the page contents
+ via borrow() and borrow_mut() methods.
+- Make a Table::read_lock() and table_writelock() methods that lock the table from being redefined, and locks the schema table
+  row from being modified.
 - Replace panics that are likely to happen during interactive with Results<>.
 - Try to Box the File in pager.rs in a temporary box, and then use it, then move it to the Box in the constructed struct,
   so that we can run the header check in open().
 - Lock db file when opening it.
 - look for stale TODOs
-- run rustfmt
-- Implement SearchIterator (SeekIterator?) for Table, and support "WHERE rowid = #" queries using that.
 - Get full coverage of lib.rs in integration test.
-- `.explain` by printing IR out.
 
 
 # B-tree Layer Projects
