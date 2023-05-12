@@ -1,6 +1,6 @@
 //! represents access to a file-backed SQLite database table.
 
-use crate::typed_row::{RawRowCaster, RowCastingError, TypedRow};
+use crate::typed_row::{RawRowCaster, RowCastingError, Row};
 use crate::{pager, sql_type::SqlType};
 use std::str::FromStr;
 
@@ -47,7 +47,7 @@ impl<'a> Table<'a> {
     }
 
     pub fn to_temp_table(&self) -> core::result::Result<crate::TempTable, Error> {
-        let r: Result<Vec<TypedRow>, RowCastingError> =
+        let r: Result<Vec<Row>, RowCastingError> =
             RawRowCaster::new(self.column_types.clone(), &mut self.iter()).collect();
         let r = match r {
             Err(_) => return Err(Error::CastingError),

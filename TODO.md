@@ -27,7 +27,8 @@ Build steel thread of parsing and execution.
     - Generate temporary names for constant valued columns without "AS" in projects.
     - Check column refs against the table schema and return error if not found. (schema hash to be confirmed at execution time).
     - Expand each star to the list of all columns in the schema.
-    - [ ] eliminate rowid from TypedRow - add back later if needed or have a flag to include it as first item?
+    - [X] eliminate rowid from TypedRow - add back later if needed or have a flag to include it as first item?
+    - [X] Rename TypedRow to Row
     - [ ] make run_query run the executor blocks. (First just scan and constant). (see IR notes).
     - write the executors for scan and constant_table and text the executor loop.
     - [ ] Implement `project`.
@@ -51,7 +52,6 @@ Build steel thread of parsing and execution.
       - How long is ref valid if page needs to go out?  Page waits until query done.  Refs last for lifetime of the IR execution (of the IR?)
     - [x] Test IR evaluation using unit testing.
 -  [x] end to end test of query PT/AST/IR/Execute.
-- [ ] Rename TypedRow to TempRow (as it is not a row in the storage format.)  TempTable Row type vs Table's Row type?
 
 Scope for "steel thread" is just constants (literals) and expressions.
 

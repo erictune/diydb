@@ -74,7 +74,6 @@ fn test_run_query_on_multipage_with_various_page_sizes() {
         let tt = diydb::run_query_no_print(&ps, "select * from thousandrows").unwrap();
         assert_eq!(tt.rows.len(), 1000);
 
-        assert_eq!(tt.rows[0].row_id, 1);
         assert_eq!(tt.rows[0].items.len(), 3);
         assert_eq!(
             tt.rows[0].items,
@@ -85,7 +84,6 @@ fn test_run_query_on_multipage_with_various_page_sizes() {
             ]
         );
 
-        assert_eq!(tt.rows[284].row_id, 285);
         assert_eq!(tt.rows[284].items.len(), 3);
         assert_eq!(
             tt.rows[284].items,
@@ -96,7 +94,6 @@ fn test_run_query_on_multipage_with_various_page_sizes() {
             ]
         );
 
-        assert_eq!(tt.rows[999].row_id, 1000);
         assert_eq!(tt.rows[999].items.len(), 3);
         assert_eq!(
             tt.rows[999].items,
@@ -110,9 +107,8 @@ fn test_run_query_on_multipage_with_various_page_sizes() {
 }
 
 #[cfg(test)]
-fn expected_row_for_three_level_db(i: i64) -> diydb::typed_row::TypedRow {
-    diydb::typed_row::TypedRow {
-        row_id: i + 1,
+fn expected_row_for_three_level_db(i: i64) -> diydb::typed_row::Row {
+    diydb::typed_row::Row {
         items: format!("{:05}", i)
             .replace("0", "A")
             .replace("1", "B")
@@ -143,7 +139,6 @@ fn test_run_query_on_three_level_db() {
 
     assert_eq!(tt.rows.len(), 100000);
     for i in 0..100000 {
-        assert_eq!(tt.rows[i].row_id as usize, i + 1);
         assert_eq!(tt.rows[i].items.len(), 5);
         assert_eq!(tt.rows[i], expected_row_for_three_level_db(i as i64));
     }
@@ -155,7 +150,6 @@ fn test_run_dbless_selects() {
     let tt = diydb::run_query_no_print(&ps, "select 1, 2, 3").unwrap();
     use diydb::sql_value::SqlValue;
     assert_eq!(tt.rows.len(), 1);
-    assert_eq!(tt.rows[0].row_id as usize, 1);
     assert_eq!(tt.rows[0].items.len(), 3);
     assert_eq!(
         tt.rows[0].items,

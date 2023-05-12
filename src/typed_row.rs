@@ -15,8 +15,7 @@ use std::str::FromStr;
 
 /// can hold a sequence of values of any of the SQL types (sqlite supported subset), along with a rowid.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TypedRow {
-    pub row_id: i64,
+pub struct Row {
     pub items: Vec<SqlValue>,
 }
 
@@ -28,11 +27,10 @@ pub enum RowCastingError {
     ArrayLenMismatch,
 }
 
-fn build_typed_row(
-    row_id: i64,
+fn build_row(
     column_types: &Vec<SqlType>,
     record: &[u8],
-) -> Result<TypedRow, RowCastingError> {
+) -> Result<Row, RowCastingError> {
     use crate::record::ValueIterator;
     let mut ret: Vec<SqlValue> = vec![];
     for (i, (serty, bytes)) in ValueIterator::new(record).enumerate() {
@@ -44,14 +42,13 @@ fn build_typed_row(
             Err(e) => return Err(RowCastingError::OneOrMoreRowsNotCastable(e)),
         }
     }
-    Ok(TypedRow {
-        row_id,
+    Ok(Row {
         items: ret.to_vec(),
     })
 }
 
 #[test]
-fn test_build_typed_row() {
+fn test_build_row() {
     use SqlValue::*;
     // literal 0 | literal 1 | float 3.1415 | "Ten" | NULL
     let test_record: &[u8] = &[
@@ -65,8 +62,7 @@ fn test_build_typed_row() {
         SqlType::Text,
         SqlType::Int,
     ];
-    let tr = build_typed_row(1, &column_types, &test_record).unwrap();
-    assert_eq!(tr.row_id, 1);
+    let tr = build_row(&column_types, &test_record).unwrap();
     assert_eq!(tr.items.len(), 5);
     assert_eq!(tr.items[0], Int(0));
     assert_eq!(tr.items[1], Int(1));
@@ -98,11 +94,11 @@ impl<'a> RawRowCaster<'a> {
 }
 
 impl<'a> Iterator for RawRowCaster<'a> {
-    type Item = Result<TypedRow, RowCastingError>;
+    type Item = Result<Row, RowCastingError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.it.next() {
             None => None,
-            Some(r) => Some(build_typed_row(r.0, &self.column_types, r.1)),
+            Some(r) => Some(build_row(&self.column_types, r.1)),
         }
     }
 }
@@ -139,7 +135,6 @@ fn test_raw_row_caster() {
         let x = x.unwrap();
         assert!(x.is_ok());
         let x = x.unwrap();
-        assert_eq!(x.row_id, 1);
         assert_eq!(x.items.len(), 1);
         assert_eq!(x.items[0], Int(1));
     }

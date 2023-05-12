@@ -26,7 +26,7 @@ pub fn print_table_tt(tt: &crate::TempTable, detailed: bool) -> Result<()> {
     }
     {
         for tr in tt.rows.iter() {
-            print!("{:2} |", tr.row_id);
+            print!("   |");
             for v in tr.items.iter() {
                 print!(" {:15} |", v);
             }

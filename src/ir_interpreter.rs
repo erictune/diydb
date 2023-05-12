@@ -10,7 +10,7 @@ use crate::sql_value::SqlValue;
 
 use crate::ast;
 use crate::table::Table;
-use crate::typed_row::TypedRow;
+use crate::typed_row::Row;
 
 fn ast_constant_to_sql_value(c: &ast::Constant) -> SqlValue {
     match c {
@@ -83,8 +83,7 @@ fn prepare_ir<'a>(ps: &'a pager::PagerSet, ir: &ir::Block) -> Result<EitherTable
             // TODO: limit recursion depth.
         }
         ir::Block::ConstantRow(cr) => Ok(EitherTable::Materialized(TempTable {
-            rows: vec![TypedRow {
-                row_id: 1,
+            rows: vec![Row {
                 items: cr.row.iter().map(ast_constant_to_sql_value).collect(),
             }],
             column_names: (0..cr.row.len()).map(|i| format!("_f{i}")).collect(),
