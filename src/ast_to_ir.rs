@@ -5,8 +5,8 @@
 
 use crate::ast;
 use crate::ir;
-use std::boxed::Box;
 use anyhow::bail;
+use std::boxed::Box;
 
 pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block, anyhow::Error> {
     // If the select only has a select clause,then we just need to return a constant
@@ -21,9 +21,7 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
                 ast::SelItem::Star => bail!("Cannot select * without a FROM clause"),
             }
         }
-        return Ok(ir::Block::ConstantRow(ir::ConstantRow {
-            row,
-        }));
+        return Ok(ir::Block::ConstantRow(ir::ConstantRow { row }));
     }
     // At this point, the select has a "from" clause, (though in a degenerate case, it might not
     // be referenced by the select or where or other clauses.
@@ -49,7 +47,12 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
             ast::SelItem::Star => outcols.push(item.clone()),
         }
     }
-    if outcols.len() == 1 && match outcols[0] { ast::SelItem::Star => true, _ => false} {
+    if outcols.len() == 1
+        && match outcols[0] {
+            ast::SelItem::Star => true,
+            _ => false,
+        }
+    {
         // No project block needed if all columns selected.
         return Ok(ir::Block::Scan(scan));
         // Ponder: This could be moved to an opimization pass?
@@ -78,7 +81,6 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
         input: Box::new(ir::Block::Scan(scan)),
     }))
 }
-
 
 #[test]
 fn test_ast_select_statement_to_ir() {
@@ -139,18 +141,14 @@ fn test_ast_select_statement_to_ir() {
             desc: "Select 1 from t;".to_string(),
             input: ast::SelectStatement {
                 select: ast::SelectClause {
-                    items: vec![
-                        ast::SelItem::Const(ast::Constant::Int(1)),
-                    ]
+                    items: vec![ast::SelItem::Const(ast::Constant::Int(1))],
                 },
                 from: Some(ast::FromClause {
                     tablename: String::from("t"),
                 }),
             },
             expected: Ok(ir::Block::Project(ir::Project {
-                outcols: vec![
-                    ast::SelItem::Const(ast::Constant::Int(1)),
-                ],
+                outcols: vec![ast::SelItem::Const(ast::Constant::Int(1))],
                 input: std::boxed::Box::new(ir::Block::Scan(ir::Scan {
                     tablename: String::from("t"),
                 })),
@@ -189,11 +187,9 @@ fn test_ast_select_statement_to_ir() {
             desc: "Select a;".to_string(), // Error detected at IR phase.
             input: ast::SelectStatement {
                 select: ast::SelectClause {
-                    items: vec![
-                        ast::SelItem::ColName(ast::ColName {
-                            name: String::from("a"),
-                        }),
-                    ],
+                    items: vec![ast::SelItem::ColName(ast::ColName {
+                        name: String::from("a"),
+                    })],
                 },
                 from: None,
             },
@@ -203,9 +199,7 @@ fn test_ast_select_statement_to_ir() {
             desc: "Select *;".to_string(), // Error detected at IR phase.
             input: ast::SelectStatement {
                 select: ast::SelectClause {
-                    items: vec![
-                        ast::SelItem::Star,
-                    ],
+                    items: vec![ast::SelItem::Star],
                 },
                 from: None,
             },

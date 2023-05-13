@@ -164,12 +164,10 @@ impl Pager {
         let mut pages = vec![None; h.numpages as usize];
         for pn in 1_usize..(h.numpages as usize) + 1 {
             let mut v = vec![0_u8; h.pagesize as usize];
-            file
-                .borrow_mut()
+            file.borrow_mut()
                 .seek(SeekFrom::Start((pn - 1) as u64 * h.pagesize as u64))
                 .map_err(Error::Io)?;
-            file
-                .borrow_mut()
+            file.borrow_mut()
                 .read_exact(&mut v[..])
                 .map_err(Error::Io)?;
             pages[pn - 1] = Some(v);

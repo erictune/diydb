@@ -1,6 +1,6 @@
 //! represents access to a file-backed SQLite database table.
 
-use crate::typed_row::{RawRowCaster, RowCastingError, Row};
+use crate::typed_row::{RawRowCaster, Row, RowCastingError};
 use crate::{pager, sql_type::SqlType};
 use std::str::FromStr;
 
@@ -21,6 +21,14 @@ pub enum Error {
 }
 
 impl<'a> Table<'a> {
+    pub fn column_names(&self) -> &Vec<String> {
+        &self.column_names
+    }
+
+    pub fn column_types(&self) -> &Vec<SqlType> {
+        &self.column_types
+    }
+
     pub fn open_read(pager: &'a pager::Pager, table_name: &str) -> Result<Table<'a>, Error> {
         let (root_pagenum, create_statement) =
             match crate::get_creation_sql_and_root_pagenum(pager, table_name) {

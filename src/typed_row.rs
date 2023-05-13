@@ -27,10 +27,7 @@ pub enum RowCastingError {
     ArrayLenMismatch,
 }
 
-fn build_row(
-    column_types: &Vec<SqlType>,
-    record: &[u8],
-) -> Result<Row, RowCastingError> {
+pub fn build_row(column_types: &Vec<SqlType>, record: &[u8]) -> Result<Row, RowCastingError> {
     use crate::record::ValueIterator;
     let mut ret: Vec<SqlValue> = vec![];
     for (i, (serty, bytes)) in ValueIterator::new(record).enumerate() {

@@ -120,12 +120,13 @@ pub fn get_header_clone(f: &mut std::fs::File) -> Result<DbfileHeader, Error> {
 }
 
 pub fn get_header(h: &[u8; SQLITE_DB_HEADER_BYTES]) -> Result<DbfileHeader, Error> {
-    if std::mem::size_of::<[u8; SQLITE_DB_HEADER_BYTES]>() != std::mem::size_of::<DbfileHeaderReprC>() {
+    if std::mem::size_of::<[u8; SQLITE_DB_HEADER_BYTES]>()
+        != std::mem::size_of::<DbfileHeaderReprC>()
+    {
         return Err(Error::ReadFailed);
     }
-    let hdri = unsafe {
-      std::mem::transmute::<[u8; SQLITE_DB_HEADER_BYTES], DbfileHeaderReprC>(*h)
-    };
+    let hdri =
+        unsafe { std::mem::transmute::<[u8; SQLITE_DB_HEADER_BYTES], DbfileHeaderReprC>(*h) };
     // The header must have the magic string that identifies the file as a sqlite file.
     if !bytes_identical(&hdri.magic, SQLITE3_MAGIC_STRING) {
         return Err(Error::WrongMagic);

@@ -10,48 +10,31 @@ Build steel thread of parsing and execution.
 -  [x] Build IR from AST: See IR.md
     - e.g. from AST, build this IR: `Project([Constant(1), ColName("x")], Scan("t")))`
     - [x] test the above case
--  [ ] Interpret IR to execute.
+-  [X] Interpret IR to execute.
     - [x] interpret `Scan`
     - [x] return a row iterator from `run_ir`.
     - [x] handle `ConstantRow` by creating a TempTable.
     - [X] add returning error instead of panic from ast_to_ir.
-    - [ ] write xb.rs which hold executor blocks.
-    - [ ] write ir_to_xb.rs which converts the ir to executor blocks (which maybe will implement the streaming iterator trait.
-    - rename constantRow to TempTable.
-    - try to implement get and advance for Table and TempTable.  Need a trait.  Is it StreamingIterator or StreamingRowIterator (no generic type)?
-    - write the executors for scan and constant_table and text the executor loop.
-    - write a dummy pass-thru executor (beginning of limit).
-    - write a "run_executors" function.
-    - write a "ir_to_executors" function.
-    - Add a pass over IR to do these things before we execute it.
-    - Generate temporary names for constant valued columns without "AS" in projects.
-    - Check column refs against the table schema and return error if not found. (schema hash to be confirmed at execution time).
-    - Expand each star to the list of all columns in the schema.
+    - [x] write hold executor blocks.
+    - [x] write code that creates executor blocks from ir (prepare_ir).
+    - [x] implement streaming iterators for ScanXB and ConstantRowXB.
     - [X] eliminate rowid from TypedRow - add back later if needed or have a flag to include it as first item?
     - [X] Rename TypedRow to Row
-    - [ ] make run_query run the executor blocks. (First just scan and constant). (see IR notes).
-    - write the executors for scan and constant_table and text the executor loop.
-    - [ ] Implement `project`.
-      -  [ ] should work already in ast_to_ir.
-      -  [ ] Check out stash for ideas on how to handle the block type enum.
-      -  [ ] Add to IR tree, then add to XB tree.
-      - handle `Project` of a `Scan` block.
-            - [ ] the conversion to TT we do for scans needs to be done to the root.  That means that we need a converter that calls an iterator on a Block.  That means that the Project Block needs to be an iterator over its children.  And the to_tt() needs
-            to be at the top of the tree.
-            - [ ] We might want to walk the IR tree to the leaves and propagate type info up and check if column names exist?
-              - Table needs to be locked, or use optimistic concurrency and check after eventaully locking the table.
-                - What lifetime should `Project::next()` offer to its callers?  Until the next call to `next()`?  Is that possible?
-                  A reference version and a copying version, depending on the situation?
-                - We can also store a value for the lifetime of the iterator in the iterators "parent" object so that it lasts for the duration of the parent object : not so space efficient.
-                - An enum could allow providing variants with different lifetimes (raw btree record vs computed value offered by value.)
-                - ToOwned deserves consideration, as a way for callers to clone if necessary and take if heap allocated.  For instance we might want to take a string produced by an expression (?) to use in a parent IR object (?).
-
-    - [x] connect root block to printer.
-    - [ ] Goal is to minimize copying, using refs.  Esp. in deeper parts of IR tree.
-      - Parent in IR tree to decides if clone needed.  Child to offer a ref.
-      - How long is ref valid if page needs to go out?  Page waits until query done.  Refs last for lifetime of the IR execution (of the IR?)
+    - [?] Defined trait for XBs that can stream rows and which have column metadata. (didn't work)
     - [x] Test IR evaluation using unit testing.
 -  [x] end to end test of query PT/AST/IR/Execute.
+-  [ ] add minimal Project support
+    - [ ] just support constant values and direct mention of columns.
+    - [ ] should work already in ast_to_ir.
+    - [ ] finish Project in ir_interpreter.rs.  needs to look into the input ir block to get its output columns, so it can
+          come up with a strategy.
+    - [ ] generate errors when columns names don't exist at preparation time.
+    - [ ] test various permutations of project-using queries in integration testing.
+    - [ ] rename constantRow to ConstantTable and have it contain a TempTable.
+    - [ ] add ir_interpreter unit tests?
+
+A Goal is to minimize copying, using refs.  Esp. in deeper parts of IR tree. Idea is that parent in IR tree to decides if clone needed.  Child to offer a ref to uncloned data.  Not there yet.  Using streaming_iterator limits outstanding lifetime to 1 row.
+
 
 Scope for "steel thread" is just constants (literals) and expressions.
 
@@ -59,6 +42,18 @@ Future Projects
 ----------------
 
 # SQL Layer Projects
+
+## Finish Projection.
+- [ ] Generate temporary names for constant valued columns without "AS" in projects.
+- [ ] Expression trees evaluated at runtime.
+- [ ] refer to source columns by index rather than by name to avoid lookup.
+- [ ] An enum could allow providing XB variants that handle different formats of data, with different lifetimes (raw btree record vs converted btree record).  Or an enum could allow individual SqlValues to be lazily converted.  Or Scan could support limited projection.  All of these could enable next items:
+- [ ] push any projections that drop columns into the Scan so they don't need to be converted from storage format before being emitted.
+- [ ] push any functions on longer values (Strings, Blobs?) down to the lowest project to reduce  amount of data copied.
+- [ ] Check column refs against the table schema and return error if not found. (schema hash to be confirmed at execution time).
+- [ ] Expand each star to the list of all columns in the schema.
+- [ ] Implement Table locking at query time that prevents schema update and table delete.
+- [ ] Implement Page locking at Scan time that releases done-with leaf pages (and used interior pages) held as long as needed).
 
 # Nested Select
 - `SELECT a, b FROM (SELECT 1 as a, "two" as b, 3 as c)` becoming `Project(TempTable)`
@@ -89,6 +84,7 @@ Future Projects
 - [ ] Execute it, and check that it was more efficient (steps executed?)
 - [ ] Here is a detailed treatment with theorems, reduction rules, and some test cases: https://arxiv.org/pdf/1607.04197.pdf
 - [ ] Implement SearchIterator (SeekIterator?) for Table, and support "WHERE rowid = #" queries using that.
+
 
 # Small Tasks
 
