@@ -41,6 +41,7 @@ const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 /// and we can release any the page locks as soon as possible.
 /// The assumption here is that the caller is an interactive user who wants a limited number of rows (thousands).
 /// For non-interactive bulk use, perhaps this needs to be revisted.
+#[derive(Debug)]
 pub struct TempTable {
     pub rows: Vec<Row>,
     pub column_names: Vec<String>,

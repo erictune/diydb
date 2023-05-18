@@ -44,7 +44,7 @@ fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
 
 fn pagerset_with_open_db_for_run_query_tests(path: &str) -> diydb::pager::PagerSet {
     let mut ps = diydb::pager::PagerSet::new();
-    ps.opendb(path).expect("Should have opened {path}.");
+    ps.opendb(path).expect(format!("Should have opened {}.", path).as_str());
     ps.into()
 }
 
@@ -155,4 +155,20 @@ fn test_run_dbless_selects() {
         tt.rows[0].items,
         vec![SqlValue::Int(1), SqlValue::Int(2), SqlValue::Int(3)]
     );
+}
+
+#[test]
+fn test_run_selects() {
+    let path = path_to_testdata("for_exprs.db");
+    let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
+    let cases = vec![
+        ("select * from t",),
+        // TODO: support projection. ("select a, c, e from t",),
+    ];
+    for case in cases {
+        println!("running: {}", case.0);
+        let tt = diydb::run_query_no_print(&ps, case.0);
+        println!("{:#?}", tt);
+        assert!(tt.is_ok());
+    }
 }

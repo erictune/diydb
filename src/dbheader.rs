@@ -6,8 +6,11 @@ use std::io::{Read, Seek, SeekFrom};
 pub enum Error {
     #[error("The magic bytes for this file are wrong.")]
     WrongMagic,
-    #[error("A field value is not supported by this code, though it may be valid Sqlite format.")]
-    Unsupported,
+    #[error("Header field {field:?} value {value:?} is not supported by this code, though it may be valid Sqlite format.", )]
+    Unsupported {
+        field: &'static str,
+        value: u64,
+    },
     #[error("The pagesize is not supported by this code, though it may be valid Sqlite format.")]
     UnsupportedPagesize,
     #[error("A field value specified a free list that is not supported by this code, though it may be valid Sqlite format.")]
@@ -29,6 +32,7 @@ pub struct DbfileHeader {
     pub pagesize: u32,
     pub numpages: u32,
     pub changecnt: u32,
+    pub sqlite_version_number: u32,
 }
 
 // The database file header as stored in a sqlite file.
@@ -90,7 +94,6 @@ const SQLITE3_MAGIC_STRING: &[u8] = &[
     0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00,
 ];
 const TWENTY_ZEROS: &[u8] = &[0; 20];
-const SQLITE_VERSION_NUMBER: u32 = 3037000; // This is the one I'm using for generating test files.
 
 fn bytes_identical<T: Ord>(a: &[T], b: &[T]) -> bool {
     if a.len() != b.len() {
@@ -143,13 +146,13 @@ pub fn get_header(h: &[u8; SQLITE_DB_HEADER_BYTES]) -> Result<DbfileHeader, Erro
         _ => return Err(Error::UnsupportedPagesize),
     };
     if hdri.ffwv != 0x01 {
-        return Err(Error::Unsupported);
+        return Err(Error::Unsupported{ field: "File format write version", value: hdri.ffwv as u64});
     }
     if hdri.ffrv != 0x01 {
-        return Err(Error::Unsupported);
+        return Err(Error::Unsupported{ field: "File format read version", value: hdri.ffrv as u64});
     }
     if hdri.reserved_end != 0x00 {
-        return Err(Error::Unsupported);
+        return Err(Error::Unsupported{ field: "Bytes of unused reserved space at the end of each page", value: hdri.reserved_end as u64});
     }
     if hdri.maxepf != 0x40 {
         return Err(Error::Invalid);
@@ -172,35 +175,40 @@ pub fn get_header(h: &[u8; SQLITE_DB_HEADER_BYTES]) -> Result<DbfileHeader, Erro
     if u32::from_be_bytes(hdri.sfn) != 0x4 {
         return Err(Error::UnsupportedSchema);
     }
-    if u32::from_be_bytes(hdri.dpcs) != 0x0 {
-        return Err(Error::Unsupported);
+    let dpcs = u32::from_be_bytes(hdri.dpcs);
+    if dpcs != 0x0 {
+        return Err(Error::Unsupported{ field: "Default page cache size", value: dpcs as u64});
     }
-    if u32::from_be_bytes(hdri.lrbpv) != 0x0 {
-        return Err(Error::Unsupported);
+    let lrbpv = u32::from_be_bytes(hdri.lrbpv);
+    if lrbpv != 0x0 {
+        return Err(Error::Unsupported{ field: "largest root b-tree page for vacuuming", value: lrbpv as u64});
     }
-    if u32::from_be_bytes(hdri.encoding) != 0x1 {
-        return Err(Error::Unsupported);
+    let encoding = u32::from_be_bytes(hdri.encoding);
+    if encoding != 0x1 {
+        return Err(Error::Unsupported{ field: "text encoding", value: encoding as u64});
     }
-    if u32::from_be_bytes(hdri.userversion) != 0x0 {
-        return Err(Error::Unsupported);
+    let userversion = u32::from_be_bytes(hdri.userversion);
+    if userversion != 0x0 {
+        return Err(Error::Unsupported{ field: "User version", value: userversion as u64});
     }
-    if u32::from_be_bytes(hdri.ivm) != 0x0 {
-        return Err(Error::Unsupported);
+    let ivm = u32::from_be_bytes(hdri.ivm);
+    if ivm != 0x0 {
+        return Err(Error::Unsupported{ field: "incremental vacuum mode", value: ivm as u64});
     }
-    if u32::from_be_bytes(hdri.appid) != 0x0 {
-        return Err(Error::Unsupported);
+    let appid = u32::from_be_bytes(hdri.appid);
+    if appid != 0x0 {
+        return Err(Error::Unsupported{ field: "Application ID", value: appid as u64});
     }
     if !bytes_identical(&hdri.reserved, TWENTY_ZEROS) {
         return Err(Error::WrongMagic);
     }
     let _version_valid_for = u32::from_be_bytes(hdri.vvf);
-    if u32::from_be_bytes(hdri.sqlite_version_number) != SQLITE_VERSION_NUMBER {
-        return Err(Error::Unsupported);
-    }
+    let sqlite_version_number = u32::from_be_bytes(hdri.sqlite_version_number);
 
     Ok(DbfileHeader {
         pagesize,
         changecnt,
         numpages,
+        sqlite_version_number,
     })
 }

@@ -3,7 +3,6 @@
 use crate::ir;
 use crate::pager;
 use crate::TempTable;
-use anyhow::bail;
 use anyhow::Result;
 
 use crate::pager::PagerSet;
@@ -263,7 +262,7 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
                 column_types: c.column_types().clone(),
             });
         }
-        AnyXB::P(p) => return Err(anyhow::anyhow!("IR that uses Project not supported yet.")),
+        AnyXB::P(_) => return Err(anyhow::anyhow!("IR that uses Project not supported yet.")),
         AnyXB::S(s) => {
             let mut it = s.streaming_iterator();
             let mut rows = vec![];
