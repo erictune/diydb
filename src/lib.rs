@@ -7,6 +7,7 @@ mod ir;
 mod ir_interpreter;
 pub mod pager;
 pub mod parser;
+mod project;
 mod pt_to_ast;
 mod record;
 mod serial_type;
