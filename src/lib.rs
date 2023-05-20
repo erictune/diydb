@@ -23,6 +23,8 @@ use sql_type::SqlType;
 use table::Table;
 use typed_row::Row;
 
+use streaming_iterator::StreamingIterator;
+
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
 const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
@@ -47,6 +49,70 @@ pub struct TempTable {
     pub rows: Vec<Row>,
     pub column_names: Vec<String>,
     pub column_types: Vec<SqlType>,
+}
+
+impl TempTable {
+    fn streaming_iterator<'a>(&'a self) -> TempTableStreamingIterator<'a> {
+        // Could not get streaming_iterator::convert or streaming_iterator::convert_ref to work here.
+        TempTableStreamingIterator::new(self.rows.iter())
+    }
+    fn column_names(&self) -> Vec<String> {
+        self.column_names.clone()
+    }
+    fn column_types(&self) -> Vec<SqlType> {
+        self.column_types.clone()
+    }
+}
+
+pub struct TempTableStreamingIterator<'a> {
+    it: std::slice::Iter<'a, Row>,
+    item: Option<Row>,
+}
+impl<'a> TempTableStreamingIterator<'a> {
+    fn new(it: std::slice::Iter<'a, Row>) -> TempTableStreamingIterator<'a> {
+        TempTableStreamingIterator {
+            it,
+            item: None,
+        }
+    }
+}
+
+impl<'a> StreamingIterator for TempTableStreamingIterator<'a> {
+    type Item = Row;
+
+    #[inline]
+    fn advance(&mut self) {
+        self.item = match self.it.next() {
+            None => None,
+            Some(r) => Some(Row{ items: r.items.clone()})
+        }
+    }
+
+    #[inline]
+    fn get(&self) -> Option<&Row> {
+        self.item.as_ref()
+    }
+}
+
+#[test]
+fn test_temp_table() {
+    use sql_value::SqlValue;
+    let tbl = TempTable {
+        rows: vec![
+            Row{ items: vec![SqlValue::Int(1)] },
+        ],
+        column_names: vec!["b".to_string()],
+        column_types: vec![SqlType::Int],
+    };
+    assert_eq!(tbl.column_names(), vec![String::from("b")]);
+    assert_eq!(tbl.column_types(), vec![SqlType::Int]);
+    let mut it = tbl.streaming_iterator();
+    //let mut it = &mut cvt as &dyn streaming_iterator::StreamingIterator<Item = &Row>;
+    it.advance();
+    assert_eq!(it.get(), Some(&Row{ items: vec![SqlValue::Int(1)]}));
+    it.advance();
+    assert_eq!(it.get(), None);
+
 }
 
 /// Get the root page number for, and the SQL CREATE statement used to create `table_name`.

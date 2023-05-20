@@ -42,11 +42,14 @@
 //!     * We will solve this later on.
 
 use crate::ast;
+
+use enum_as_inner::EnumAsInner;
 use std::boxed::Box;
+
 
 /// `Block` represents any of the IR blocks that can be chained together.
 /// A Block takes rows in from 0, one or more sources, and emits rows to a parent block.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, EnumAsInner)]
 pub enum Block {
     Scan(Scan),
     Project(Project),
@@ -56,7 +59,7 @@ pub enum Block {
 /// `ConstantRow` represents a table that has one row.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConstantRow {
-    pub row: Vec<ast::Constant>,
+    pub row: Vec<ast::Constant>
 }
 
 /// `Scan` represents a one-pass scan over all the rows of a table.

@@ -1,18 +1,15 @@
 //! executes SQL intermediate representation (IR).
 
-use crate::ir;
-use crate::pager;
-use crate::TempTable;
 use anyhow::Result;
-
-use crate::pager::PagerSet;
-
 use streaming_iterator::StreamingIterator;
 
+use crate::ast;
+use crate::ir;
+use crate::pager;
+use crate::pager::PagerSet;
 use crate::sql_type::SqlType;
 use crate::sql_value::SqlValue;
-
-use crate::ast;
+use crate::TempTable;
 use crate::table::Table;
 use crate::typed_row::build_row;
 use crate::typed_row::Row;
@@ -232,6 +229,9 @@ where
 pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> {
     let xb = match ir {
         ir::Block::Project(_) => {
+            // TODO: project should only contain Scan, not ConstantRow, for now?  So can use
+            // let input_columns = p.input.as_scan().map_err(...).column_names();
+            // and so on.
             return Err(anyhow::anyhow!("IR that uses Project not supported yet."))
         }
         ir::Block::ConstantRow(cr) => AnyXB::C(ConstantRowXB::new(Box::new(TempTable {
