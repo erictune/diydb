@@ -163,7 +163,11 @@ fn test_run_selects() {
     let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
     let cases = vec![
         ("select * from t",),
-        // TODO: support projection. ("select a, c, e from t",),
+        ("select a, c, e from t",),
+        ("select 1, 2, 3",),
+        // ("select 1, 2, 3 from t",),
+        // ("select d, 1, a, 2, c, 3 from t",),
+
     ];
     for case in cases {
         println!("running: {}", case.0);

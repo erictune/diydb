@@ -1,10 +1,11 @@
 //! executes SQL intermediate representation (IR).
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::ast;
 use crate::ir;
 use crate::pager;
+use crate::project;
 use crate::sql_type::SqlType;
 use crate::sql_value::SqlValue;
 use crate::TempTable;
@@ -37,11 +38,30 @@ fn ast_constant_to_sql_type(c: &ast::Constant) -> SqlType {
 /// Run an IR representation of a query, returning a TempTable with the results of the query.
 pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> {
     match ir {
-        ir::Block::Project(_) => {
-            // TODO: project should only contain Scan, not ConstantRow, for now?  So can use
-            // let input_columns = p.input.as_scan().map_err(...).column_names();
-            // and so on.
-            return Err(anyhow::anyhow!("IR that uses Project not supported yet."))
+        ir::Block::Project(p) => {
+            let child = p.input.as_scan().context("Project should only have Scan as child")?;
+            let tbl = Table::open_read(ps.default_pager()?, child.tablename.as_str())?;
+            let (actions, column_names, column_types) = project::build_project(
+                    &tbl.column_names(),
+                    &tbl.column_types(),
+                    &p.outcols)?;
+            use streaming_iterator::StreamingIterator;
+            let mut it = tbl.streaming_iterator().map(|row| project::project_row(&actions, row));
+            let mut rows: Vec<Row> = vec![];
+            loop {
+                it.advance();
+                if it.get().is_none() { break; }
+                let res = it.get().unwrap().as_ref();
+                match res {
+                    Err(e) => {return Err(anyhow::anyhow!(format!("Not able to convert value: {}", e)))}
+                    Ok(r) => rows.push(r.clone()),
+                }
+            }
+            Ok(TempTable {
+                rows,
+                column_names,
+                column_types,
+            })
         }
         ir::Block::ConstantRow(cr) => {
             return Ok(TempTable {
@@ -53,8 +73,8 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
             });
         }
         ir::Block::Scan(s) => {
-            // TODO: lock table at this point so schema does not change.
-            // TODO: if we previously loaded the schema speculatively during IR optimization, verify unchanged now, e.g. using a message hash.
+            // TODO: lock the table in the pager when opening the table for read.
+            // TODO: if we previously loaded the schema speculatively during IR optimization, verify unchanged now, e.g. with hash.
             Table::open_read(ps.default_pager()?, s.tablename.as_str())?
                 .to_temp_table()
                 .map_err(|e| anyhow::anyhow!(e))
