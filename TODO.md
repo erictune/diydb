@@ -17,10 +17,8 @@ Build steel thread of parsing and execution.
     - [X] add returning error instead of panic from ast_to_ir.
     - [x] write hold executor blocks.
     - [x] write code that creates executor blocks from ir (prepare_ir).
-    - [x] implement streaming iterators for ScanXB and ConstantRowXB.
     - [X] eliminate rowid from TypedRow - add back later if needed or have a flag to include it as first item?
     - [X] Rename TypedRow to Row
-    - [?] Defined trait for XBs that can stream rows and which have column metadata. (didn't work)
     - [x] Test IR evaluation using unit testing.
 -  [x] end to end test of query PT/AST/IR/Execute.
 -  [ ] add minimal Project support
@@ -47,7 +45,6 @@ Future Projects
 - [ ] Generate temporary names for constant valued columns without "AS" in projects.
 - [ ] Expression trees evaluated at runtime.
 - [ ] refer to source columns by index rather than by name to avoid lookup.
-- [ ] An enum could allow providing XB variants that handle different formats of data, with different lifetimes (raw btree record vs converted btree record).  Or an enum could allow individual SqlValues to be lazily converted.  Or Scan could support limited projection.  All of these could enable next items:
 - [ ] push any projections that drop columns into the Scan so they don't need to be converted from storage format before being emitted.
 - [ ] push any functions on longer values (Strings, Blobs?) down to the lowest project to reduce  amount of data copied.
 - [ ] Check column refs against the table schema and return error if not found. (schema hash to be confirmed at execution time).

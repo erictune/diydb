@@ -63,9 +63,8 @@ Files are organized as follows:
     * `ast.rs` - defines the types of the AST.
     * `ast_to_ir.rs` - converts the AST to an intermediate representation that can be further optimized.
     * `ir.rs` - types used in the IR.
-    * PENDING: `ir_to_xb.rs` - converts IR into "execution blocks" (XBs), which can directly be executed (interpreted).
-    * PENDING: `xb.rs` - types used for XBs.
-    * `IR.md` - describes how PT, AST, IR, and XBs are used.
+    * `ir_interpreter.rs` - converts IR into iterators and functions that can be run.
+    * `IR.md` - describes how PT, AST, and IR are used.
 * Execution
   * `serial_types.rs` - handles SQLite *serial types* (which can differ from row to row within a column, and are different from SQL types).
   * `record.rs` - iterates over and parses row records that are stored in btree cells.

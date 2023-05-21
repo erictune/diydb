@@ -14,9 +14,9 @@ This database uses a number of different representation for SQL programs:
   that represent, roughly, the operations in the relational algebra: e.g. project.
   Does not closely map to SQL keywords.  Optimization performed at this level may
   combine or split operations.  Query planning will be performed on the IR.
-- an *Execution Block* (XB) tree - a tree (graph?) of blocks closely mirroring the
-  IR, which are used to "execute" the IR.  If bytecode or JIT code generation were
-  implemented, then it would replace this layer.
+
+The IR is currently interpreted. If bytecode or JIT code generation were implemented,
+then it would generate code from the IR.
 
 # Examples
 
@@ -107,61 +107,23 @@ IR optimizations might include:
 
 I need to learn more about this.
 
-# Execution Blocks
+# Interpreting IR
 
-Execution blocks are (I think going to be) 1:1 with IR blocks.
+I considered building a data structure parallel to the IR that contains "execution blocks".
+This turned out to be difficult to build in Rust - ownership gott to complex for me to follow.
 
-Continuing the example from above, we'd build the following execution blocks to run the query:
+Currently, only certain fixed sequences of IR blocks can be interpreted, and they are interpreted by building a
+compile-time specified chain of iterators.  I'd like to get to the point where blocks can be chained together
+at runtime and executed as a sort of dataflow graph. 
 
-
-```
-Obj #4:
-ProjectExecutor(
-    ir: Box(#1)
-    child: Box(#5)
-    current_row: Vec<SqlValue> // Might need to have enum of either SqlValue or &SqlValue, to avoid copies for large blobs?
-)
-
-Obj #5:
-ProjectExecutor(
-    ir: Box(#2)
-    child: Box(#6)
-    current_row: Vec<SqlValue> // Might need to have enum of either SqlValue or &SqlValue, to avoid copies for large blobs?
-)
-
-Obj #6:
-ScanExecutor(
-    ir: Box(#3)
-    // No child
-    table: Table,
-    it: Table::iterator(),
-    current_row: Vec<SqlValue> // Might need to have enum of either SqlValue or &SqlValue, to avoid copies for large blobs?
-)
-```
-XBs will have a streaming iterators trait.
-They will have additional traits too,
-e.g. `trait ExecutionBlock : StreamingIterator {...}`.
-The other methods will be for metadata about the thing being streamed (like column names and sql types);
-
-Boxing the IRs lets you hold on to them during execution and delete them when you delete the execution;
-not have them stuck on the stack of the function that built the IR.
-
-XBs implement an ExecutionBlock trait:
-```rust
-trait ExecutionBlock : StreamingIterator {
-    fn outcol_names() -> vec<String>;           // Gives the names of the rows being produced.
-    fn init();                                  // To be called once before starting execution.
-// These come from StreamingIterator?  Or do we not want to be that generic?
-    fn get(&self) -> Option<Vec<SqlValue>>      // return the current row, if any.
-    fn advance(&mut self)                       // advances to return a new row.
-    fn child() -> Option<&trait ExecutionBlock> // gives a pointer to the child block, unless a leaf.
-}
-```
-
-Question: do get() and advance() look like, or actually implement the `streaming_iterator::StreamingInterator` trait.
+I've used streaming iterators instead of plain iterators.  The though process here was:
+1) so the Project set can build a local row to return, and allow it to be used by reference,
+   but not need to retain all computed rows.
+2) to limit lifetime of borrows from scans to allow freeing/unlocking pages behind.)
 
 
-One way to execute a graph of execution blocks is to advance each one and propagate the result to the next one,
+
+One way to execute a dynamic graph of IR blocks is to advance each one and propagate the result to the next one,
 as follows:
 
 ```rust
@@ -171,7 +133,7 @@ while let Some(row) = out {
     for block in blocks {
         if out is None
             let out = true => block.get();
-            block.advance
+            block.advance()
         else
             let in = out;
             let out = block.get(in);
@@ -181,33 +143,4 @@ while let Some(row) = out {
 }
 ```
 
-Another way is to have the block internally know their `child()` and call it so you call from the top.
-
-Example Impls:
-```
-impl ProjectExecutor {
-    fn outcol_names() -> vec<String> { /* get from ir */ }
-    fn init() { /* is anything required? */
-    fn get(&self) -> Vec<SqlValue> { return &current_row }
-    fn advance(&mut self) { current_row = child executor.get()
-    fn child() -> Option<&Executor> { return child }
-}
-
-impl ScanExecutor {
-    fn outcol_names() -> vec<String> { /* get from ir */ }
-    fn init() { /* it = table.iter(); */
-    fn get(&self) -> Vec<SqlValue> { return &current_row }
-    fn advance(&mut self) { current_row = table_iter.next() };
-    fn child() -> Option<&Executor> { return child }
-}
-
-impl ConstantTableExecutor {
-    fn outcol_names() -> vec<String> { /* get from ir */ }
-    fn init() { /* it = table.iter(); */
-    fn get(&self) -> Vec<SqlValue> { return &current_row }
-    fn advance(&mut self) { current_row = table_iter.next() };
-    fn child() -> Option<&Executor> { return child }
-}
-```
-
-See also: [https://docs.rs/streaming-iterator/latest/src/streaming_iterator/lib.rs.html#984-987]
+But my Rust is not strong enough to make this work yet.

@@ -58,7 +58,7 @@ fn test_run_query_on_minimal_db() {
     assert_eq!(tt.rows[0].items.len(), 1);
     assert_eq!(tt.rows[0].items[0], Int(1));
 }
-
+ 
 #[test]
 fn test_run_query_on_multipage_with_various_page_sizes() {
     use diydb::sql_value::SqlValue::*;

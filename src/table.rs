@@ -24,11 +24,13 @@ pub enum Error {
     CastingError,
 }
 
-// Can't use streaming_iterator::Convert because inscrutible compiler error when used with a non-default lifetime.
-// Also, we want to convert from raw data to typed data in the process.
-// 'p is the lifetime of the pager that provides the pages we iterator over.
-//
+/// iterates over the rows of a TempTable .
+/// The lifetime 'p is the lifetime of the pager used in the table::Iterator.
+///
 pub struct TableStreamingIterator<'p> {
+    // Implementation note: Tried by could not get streaming_iterator::Convert 
+    // to work: because inscrutible compiler error when used with a non-default lifetime.
+    // Also, we want to convert from raw data to typed data in the process.
     it: crate::btree::table::Iterator<'p>,
     column_types: Vec<SqlType>,
     raw_item: Option<<crate::btree::table::Iterator<'p> as IntoIterator>::Item>,
@@ -58,7 +60,7 @@ impl<'p> StreamingIterator for TableStreamingIterator<'p> {
     }
 
     #[inline]
-    fn get(&self) -> Option<&Row> {
+    fn get(&self) -> Option<&Self::Item> {
         self.item.as_ref()
     }
 }
@@ -98,7 +100,7 @@ impl<'a> Table<'a> {
     }
 
     // TODO: hide this internal type using an impl Iterator or a simple wrapper?
-    pub fn iter(&self) -> crate::btree::table::Iterator {
+    fn iter(&self) -> crate::btree::table::Iterator {
         crate::btree::table::Iterator::new(self.root_pagenum, self.pager)
     }
 

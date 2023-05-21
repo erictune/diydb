@@ -47,23 +47,23 @@ const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 #[derive(Debug)]
 pub struct TempTable {
     pub rows: Vec<Row>,
-    pub column_names: Vec<String>,
-    pub column_types: Vec<SqlType>,
+    column_names: Vec<String>,
+    column_types: Vec<SqlType>,
 }
-
 impl TempTable {
-    fn streaming_iterator<'a>(&'a self) -> TempTableStreamingIterator<'a> {
+    pub fn streaming_iterator<'a>(&'a self) -> TempTableStreamingIterator<'a> {
         // Could not get streaming_iterator::convert or streaming_iterator::convert_ref to work here.
         TempTableStreamingIterator::new(self.rows.iter())
     }
-    fn column_names(&self) -> Vec<String> {
+    pub fn column_names(&self) -> Vec<String> {
         self.column_names.clone()
     }
-    fn column_types(&self) -> Vec<SqlType> {
+    pub fn column_types(&self) -> Vec<SqlType> {
         self.column_types.clone()
     }
 }
-
+/// iterates over the rows of a TempTable .
+/// The lifetime is bound by the lifetime of the TempTable.
 pub struct TempTableStreamingIterator<'a> {
     it: std::slice::Iter<'a, Row>,
     item: Option<Row>,
