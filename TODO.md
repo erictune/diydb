@@ -21,41 +21,33 @@ Build steel thread of parsing and execution.
     - [X] Rename TypedRow to Row
     - [x] Test IR evaluation using unit testing.
 -  [x] end to end test of query PT/AST/IR/Execute.
--  [ ] add minimal Project support
-    - [ ] just support constant values and direct mention of columns.
-    - [ ] should work already in ast_to_ir.
-    - [ ] finish Project in ir_interpreter.rs.  needs to look into the input ir block to get its output columns, so it can
-          come up with a strategy.
-    - [ ] generate errors when columns names don't exist at preparation time.
-    - [ ] test various permutations of project-using queries in integration testing.
-    - [ ] rename constantRow to ConstantTable and have it contain a TempTable.
-    - [ ] add ir_interpreter unit tests?
+-  [x] add minimal Project support
+    - [x]  support constant values, star expansion and direct mention of columns.
+    - [x]  ir_interpreter unit tests
+    - [x] refer to source columns by index rather than by name to avoid lookup.
+    - [x] Expand each star to the list of all columns in the schema.
 
-A Goal is to minimize copying, using refs.  Esp. in deeper parts of IR tree. Idea is that parent in IR tree to decides if clone needed.  Child to offer a ref to uncloned data.  Not there yet.  Using streaming_iterator limits outstanding lifetime to 1 row.
-
-
-Scope for "steel thread" is just constants (literals) and expressions.
 
 Future Projects
 ----------------
 
 # SQL Layer Projects
 
+## Where 
+- `SELECT a, b FROM t where a > b` becoming `Filter(Project(Scan))`.
+
 ## Finish Projection.
-- [ ] Generate temporary names for constant valued columns without "AS" in projects.
+- [ ] Use alternative name provided with "AS" in projects.
 - [ ] Expression trees evaluated at runtime.
-- [ ] refer to source columns by index rather than by name to avoid lookup.
 - [ ] push any projections that drop columns into the Scan so they don't need to be converted from storage format before being emitted.
 - [ ] push any functions on longer values (Strings, Blobs?) down to the lowest project to reduce  amount of data copied.
-- [ ] Check column refs against the table schema and return error if not found. (schema hash to be confirmed at execution time).
-- [ ] Expand each star to the list of all columns in the schema.
 - [ ] Implement Table locking at query time that prevents schema update and table delete.
-- [ ] Implement Page locking at Scan time that releases done-with leaf pages (and used interior pages) held as long as needed).
+- [ ] Implement Page locking at Scan time that releases done-with leaf pages (and used interior pages) held as long as needed.
 
-# Nested Select
+## Nested Select
 - `SELECT a, b FROM (SELECT 1 as a, "two" as b, 3 as c)` becoming `Project(TempTable)`
 
-# Temp table
+## Temp table
 - `CREATE TEMP table t as (SELECT 1 as a, "two" as b, 3 as c); SELECT a, b FROM t`
 
 ## AST Optimization
@@ -88,6 +80,7 @@ Future Projects
 Quick Cleanups for when you don't have a lot of time:
 - Have semicolon at end of sql queries.
 - `.explain` by printing IR out.
+- rename constantRow to ConstantTable and have it contain a TempTable.
 - Integration tests should run end-to-end using run_query(), checking the results.
 - Replacing unwrap and expect with returning errors (using thiserr in modules, and anyhow in main).
   Remaining file: lib.rs, pt_to_ast.rs, and btree/

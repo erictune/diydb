@@ -165,9 +165,9 @@ fn test_run_selects() {
         ("select * from t",),
         ("select a, c, e from t",),
         ("select 1, 2, 3",),
-        // ("select 1, 2, 3 from t",),
-        // ("select d, 1, a, 2, c, 3 from t",),
-
+        ("select 1, 2, 3 from t",),
+        ("select d, 1, a, 2, c, 3 from t",),
+        ("select *, 1, * from t",),
     ];
     for case in cases {
         println!("running: {}", case.0);

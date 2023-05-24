@@ -12,7 +12,7 @@ use crate::ast;
 /// holds possible actions to take in a ProjectStreamingIterator.
 pub enum ProjectAction {
     Take(usize), // let Take(x) ; 0 <= x < input_row.len(); take index x from input row.
-    // Constant(SqlValue), // put constant value into output row.
+    Constant(SqlValue), // put constant value into output row.
     // Expr(),
 }
 
@@ -29,7 +29,48 @@ pub fn build_project(in_colnames: &Vec<String>, in_coltypes: &Vec<SqlType>, out_
     for out_item in out_cols.iter() {
         match out_item {
             ast::SelItem::Const(c) => {
-                return Err(anyhow::anyhow!("Constant in projection: not supported yet: {}", c));
+                actions.push(ProjectAction::Constant(
+                    match c {
+                        ast::Constant::Bool(b) => {
+                            return Err(anyhow::anyhow!("Boolean constant in projection is not supported."));
+                        }
+                        ast::Constant::Int (i) => {
+                            SqlValue::Int(*i)
+                        }
+                        ast::Constant::Real (f) => {
+                            SqlValue::Real(*f)
+                        }
+                        ast::Constant::Null() => {
+                            return Err(anyhow::anyhow!("Null constant in projection is not supported."));
+                        }
+                        ast::Constant::String (s) => {
+                            SqlValue::Text(s.clone())
+                        }
+                    }
+                ));
+                // TODO: handle AS statements.
+                // TODO: sqlite names columns after the literal expression used, like "sum(1)", postgres calls it "?column?"
+                out_colnames.push(format!("?column?")); 
+                // TODO: check if columns can reference other columns by number.
+                out_coltypes.push(
+                    match c {
+                        ast::Constant::Bool(_) => {
+                            return Err(anyhow::anyhow!("Boolean constant in projection is not supported."));
+                        }
+                        ast::Constant::Int (_) => {
+                            SqlType::Int
+                        }
+                        ast::Constant::Real (_) => {
+                            SqlType::Real
+                        }
+                        ast::Constant::Null() => {
+                            return Err(anyhow::anyhow!("Null constant in projection is not supported."));
+                        }
+                        ast::Constant::String (_) => {
+                            SqlType::Text
+                        }
+                    }
+                );
             }
             ast::SelItem::ColName(n) => {
                 let idx: usize = match input_indexes.get(n.name.as_str()) {
@@ -41,7 +82,11 @@ pub fn build_project(in_colnames: &Vec<String>, in_coltypes: &Vec<SqlType>, out_
                 out_coltypes.push(in_coltypes[idx].clone());
             }
             ast::SelItem::Star => {
-                return Err(anyhow::anyhow!("Star in projection: not supported yet"));
+                for i in 0..in_colnames.len() {
+                    actions.push(ProjectAction::Take(i));
+                    out_colnames.push(in_colnames[i].clone()); // TODO: handle AS statements.
+                    out_coltypes.push(in_coltypes[i].clone());
+                }
             }
         }
     }
@@ -53,8 +98,13 @@ fn make_ast_colname(s: &str) -> ast::SelItem {
     ast::SelItem::ColName(ast::ColName{ name: String::from(s)})
 }
 
+#[cfg(test)]
+fn make_ast_constant(i: i64) -> ast::SelItem {
+    ast::SelItem::Const(ast::Constant::Int(i))
+}
+
 #[test]
-fn test_build_project() {
+fn test_build_project_colnames_only() {
     use crate::SqlType::*;
     use ProjectAction::*;
     let colnames: Vec<String> = vec!["a", "b", "c", "d", "e"].iter().map(|i| String::from(*i)).collect();
@@ -74,6 +124,82 @@ fn test_build_project() {
     assert_eq!(actual_coltypes, expected_coltypes);
 }
 
+#[test]
+fn test_build_project_constant_expression() {
+    use crate::SqlType::*;
+    use ProjectAction::*;
+    let colnames: Vec<String> = vec!["a", "b", "c", "d", "e"].iter().map(|i| String::from(*i)).collect();
+    let coltypes: Vec<SqlType> = vec![Int, Int, Real, Real, Text];
+    let out_cols = vec![
+        make_ast_constant(1),
+        ];
+    let expected_actions = vec![
+        Constant(SqlValue::Int(1))
+        ];
+    let expected_colnames: Vec<String> = vec![
+        "?column?"].iter().map(|i| String::from(*i)).collect();
+    let expected_coltypes = vec![
+        Int
+        ];
+    let (actual_actions, actual_colnames, actual_coltypes) = build_project(&colnames, &coltypes, &out_cols).unwrap();
+    assert_eq!(actual_actions, expected_actions);
+    assert_eq!(actual_colnames, expected_colnames);
+    assert_eq!(actual_coltypes, expected_coltypes);
+}
+
+
+#[test]
+fn test_build_project_multiple_star() {
+    use crate::SqlType::*;
+    use ProjectAction::*;
+    let colnames: Vec<String> = vec!["a", "b", "c", "d", "e"].iter().map(|i| String::from(*i)).collect();
+    let coltypes: Vec<SqlType> = vec![Int, Int, Real, Real, Text];
+    let out_cols = vec![
+        ast::SelItem::Star,
+        make_ast_colname("a"),
+        ast::SelItem::Star,
+        ];
+    let expected_actions = vec![
+        Take(0),
+        Take(1), 
+        Take(2), 
+        Take(3),
+        Take(4),
+        Take(0),
+        Take(0),
+        Take(1), 
+        Take(2), 
+        Take(3),
+        Take(4)];
+    let expected_colnames: Vec<String> = vec![
+        "a", 
+        "b", 
+        "c",
+        "d", 
+        "e", 
+        "a", 
+        "a", 
+        "b", 
+        "c",
+        "d", 
+        "e"].iter().map(|i| String::from(*i)).collect();
+    let expected_coltypes = vec![
+        Int, 
+        Int, 
+        Real, 
+        Real,
+        Text,
+        Int,
+        Int, 
+        Int, 
+        Real, 
+        Real,
+        Text];
+    let (actual_actions, actual_colnames, actual_coltypes) = build_project(&colnames, &coltypes, &out_cols).unwrap();
+    assert_eq!(actual_actions, expected_actions);
+    assert_eq!(actual_colnames, expected_colnames);
+    assert_eq!(actual_coltypes, expected_coltypes);
+}
 
 /// does the "Project" action of the relational algebra, using a pre-built set of actions.
 pub fn project_row(actions: &Vec<ProjectAction>, input: &Row) -> Result<Row> {
@@ -83,6 +209,9 @@ pub fn project_row(actions: &Vec<ProjectAction>, input: &Row) -> Result<Row> {
             ProjectAction::Take(idx) => {
                 input.items[*idx].clone()
             }
+            ProjectAction::Constant(v) => {
+                v.clone()
+            }
         })
     }
     Ok(Row {
@@ -91,7 +220,7 @@ pub fn project_row(actions: &Vec<ProjectAction>, input: &Row) -> Result<Row> {
 }
 
 #[test]
-fn test_project_row() {
+fn test_project_row_take() {
     use SqlValue::*;
     use ProjectAction::*;
     let input = Row{ items: vec![Int(0), Int(10), Int(20), Int(30)]};
@@ -101,4 +230,18 @@ fn test_project_row() {
     assert_eq!(output.items[0], Int(20));
     assert_eq!(output.items[1], Int(0));
     assert_eq!(output.items[2], Int(20));
+}
+
+#[test]
+fn test_project_row_constants() {
+    use SqlValue::*;
+    use ProjectAction::*;
+    let input = Row{ items: vec![Int(0), Int(10), Int(20), Int(30)]};
+    let actions = vec![Take(2), Constant(Real(123.456)), Constant(Int(7)), Constant(Text("eight".to_string()))];
+    let output = project_row(&actions, &input).unwrap();
+    assert_eq!(output.items.len(), 4);
+    assert_eq!(output.items[0], Int(20));
+    assert_eq!(output.items[1], Real(123.456));
+    assert_eq!(output.items[2], Int(7));
+    assert_eq!(output.items[3], Text("eight".to_string()));
 }
