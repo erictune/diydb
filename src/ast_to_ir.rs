@@ -47,11 +47,7 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
             ast::SelItem::Star => outcols.push(item.clone()),
         }
     }
-    if outcols.len() == 1
-        && match outcols[0] {
-            ast::SelItem::Star => true,
-            _ => false,
-        }
+    if outcols.len() == 1 && outcols[0].is_star()
     {
         // No project block needed if all columns selected.
         return Ok(ir::Block::Scan(scan));

@@ -18,9 +18,9 @@ pub enum ProjectAction {
 
 /// builds the information needed to do a project of a table at runtime.
 pub fn build_project(
-    in_colnames: &Vec<String>,
-    in_coltypes: &Vec<SqlType>,
-    out_cols: &Vec<ast::SelItem>,
+    in_colnames: &[String],
+    in_coltypes: &[SqlType],
+    out_cols: &[ast::SelItem],
 ) -> Result<(Vec<ProjectAction>, Vec<String>, Vec<SqlType>)> {
     let mut actions = vec![];
     let mut out_colnames = vec![];
@@ -50,7 +50,7 @@ pub fn build_project(
                 }));
                 // TODO: handle AS statements.
                 // TODO: sqlite names columns after the literal expression used, like "sum(1)", postgres calls it "?column?"
-                out_colnames.push(format!("?column?"));
+                out_colnames.push("?column?".to_string());
                 // TODO: check if columns can reference other columns by number.
                 out_coltypes.push(match c {
                     ast::Constant::Bool(_) => {
@@ -79,13 +79,13 @@ pub fn build_project(
                 };
                 actions.push(ProjectAction::Take(idx));
                 out_colnames.push(in_colnames[idx].clone()); // TODO: handle AS statements.
-                out_coltypes.push(in_coltypes[idx].clone());
+                out_coltypes.push(in_coltypes[idx]);
             }
             ast::SelItem::Star => {
                 for i in 0..in_colnames.len() {
                     actions.push(ProjectAction::Take(i));
                     out_colnames.push(in_colnames[i].clone()); // TODO: handle AS statements.
-                    out_coltypes.push(in_coltypes[i].clone());
+                    out_coltypes.push(in_coltypes[i]);
                 }
             }
         }

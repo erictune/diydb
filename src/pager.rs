@@ -174,8 +174,8 @@ impl Pager {
         }
         Ok(Pager {
             f: Box::new(file),
-            pages: pages.into(),
-            page_size: h.pagesize as u32,
+            pages,
+            page_size: h.pagesize,
         })
     }
 

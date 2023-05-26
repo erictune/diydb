@@ -38,7 +38,7 @@ pub fn check_header(page: &'_ Vec<u8>, non_btree_header_bytes: usize) -> Header 
         0x05 => PageType::TableInterior,
         0x0a => PageType::IndexLeaf,
         0x0d => PageType::TableLeaf,
-        b => panic!("Invalid Btree Page Type: {}", b as u8),
+        b => panic!("Invalid Btree Page Type: {}", b),
     };
 
     // 1	2	The two-byte integer at offset 1 gives the start of the first freeblock on the page, or is zero if there are no freeblocks.

@@ -31,7 +31,7 @@ impl<'a> Iterator<'a> {
             0x05 => PageType::TableInterior,
             0x0a => PageType::IndexLeaf,
             0x0d => PageType::TableLeaf,
-            b => panic!("Invalid Btree Page Type: {}", b as u8),
+            b => panic!("Invalid Btree Page Type: {}", b ),
         };
         c.seek(SeekFrom::Start(3 + non_btree_header_bytes as u64))
             .expect("Should have seeked.");

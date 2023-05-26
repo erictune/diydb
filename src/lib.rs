@@ -51,7 +51,7 @@ pub struct TempTable {
     column_types: Vec<SqlType>,
 }
 impl TempTable {
-    pub fn streaming_iterator<'a>(&'a self) -> TempTableStreamingIterator<'a> {
+    pub fn streaming_iterator(&self) -> TempTableStreamingIterator {
         // Could not get streaming_iterator::convert or streaming_iterator::convert_ref to work here.
         TempTableStreamingIterator::new(self.rows.iter())
     }
@@ -62,6 +62,7 @@ impl TempTable {
         self.column_types.clone()
     }
 }
+
 /// iterates over the rows of a TempTable .
 /// The lifetime is bound by the lifetime of the TempTable.
 pub struct TempTableStreamingIterator<'a> {
@@ -79,12 +80,7 @@ impl<'a> StreamingIterator for TempTableStreamingIterator<'a> {
 
     #[inline]
     fn advance(&mut self) {
-        self.item = match self.it.next() {
-            None => None,
-            Some(r) => Some(Row {
-                items: r.items.clone(),
-            }),
-        }
+        self.item = self.it.next().map(|r| Row{ items: r.items.clone(), })
     }
 
     #[inline]

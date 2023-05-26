@@ -1,4 +1,7 @@
 //! This module defines abstract syntax tree (AST) types for SQL.
+
+use enum_as_inner::EnumAsInner;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectClause {
     pub items: Vec<SelItem>,
@@ -13,7 +16,7 @@ impl std::fmt::Display for ColName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, EnumAsInner)]
 pub enum SelItem {
     Const(Constant),
     ColName(ColName),

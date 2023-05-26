@@ -71,8 +71,7 @@ impl<'a> core::iter::Iterator for SearchIterator<'a> {
                 let mut c = Cursor::new(cell);
                 let _ = c
                     .read_u32::<BigEndian>()
-                    .expect("Should have read left child page number.")
-                    as u32;
+                    .expect("Should have read left child page number.");
                 let (_, _) = sqlite_varint::read_varint(&cell[4..]);
                 unimplemented!();
             }
@@ -105,8 +104,7 @@ impl<'a> core::iter::Iterator for ScanIterator<'a> {
                 let mut c = Cursor::new(cell);
                 let left_child_pagenum = c
                     .read_u32::<BigEndian>()
-                    .expect("Should have read left child page number.")
-                    as u32;
+                    .expect("Should have read left child page number.");
                 Some(left_child_pagenum as crate::pager::PageNum)
             }
         }
