@@ -70,10 +70,7 @@ pub struct TempTableStreamingIterator<'a> {
 }
 impl<'a> TempTableStreamingIterator<'a> {
     fn new(it: std::slice::Iter<'a, Row>) -> TempTableStreamingIterator<'a> {
-        TempTableStreamingIterator {
-            it,
-            item: None,
-        }
+        TempTableStreamingIterator { it, item: None }
     }
 }
 
@@ -84,7 +81,9 @@ impl<'a> StreamingIterator for TempTableStreamingIterator<'a> {
     fn advance(&mut self) {
         self.item = match self.it.next() {
             None => None,
-            Some(r) => Some(Row{ items: r.items.clone()})
+            Some(r) => Some(Row {
+                items: r.items.clone(),
+            }),
         }
     }
 
@@ -98,9 +97,9 @@ impl<'a> StreamingIterator for TempTableStreamingIterator<'a> {
 fn test_temp_table() {
     use sql_value::SqlValue;
     let tbl = TempTable {
-        rows: vec![
-            Row{ items: vec![SqlValue::Int(1)] },
-        ],
+        rows: vec![Row {
+            items: vec![SqlValue::Int(1)],
+        }],
         column_names: vec!["b".to_string()],
         column_types: vec![SqlType::Int],
     };
@@ -109,10 +108,14 @@ fn test_temp_table() {
     let mut it = tbl.streaming_iterator();
     //let mut it = &mut cvt as &dyn streaming_iterator::StreamingIterator<Item = &Row>;
     it.advance();
-    assert_eq!(it.get(), Some(&Row{ items: vec![SqlValue::Int(1)]}));
+    assert_eq!(
+        it.get(),
+        Some(&Row {
+            items: vec![SqlValue::Int(1)]
+        })
+    );
     it.advance();
     assert_eq!(it.get(), None);
-
 }
 
 /// Get the root page number for, and the SQL CREATE statement used to create `table_name`.

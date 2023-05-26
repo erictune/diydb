@@ -8,9 +8,9 @@ use crate::pager;
 use crate::project;
 use crate::sql_type::SqlType;
 use crate::sql_value::SqlValue;
-use crate::TempTable;
 use crate::table::Table;
 use crate::typed_row::Row;
+use crate::TempTable;
 
 fn ast_constant_to_sql_value(c: &ast::Constant) -> SqlValue {
     match c {
@@ -39,21 +39,28 @@ fn ast_constant_to_sql_type(c: &ast::Constant) -> SqlType {
 pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> {
     match ir {
         ir::Block::Project(p) => {
-            let child = p.input.as_scan().context("Project should only have Scan as child")?;
+            let child = p
+                .input
+                .as_scan()
+                .context("Project should only have Scan as child")?;
             let tbl = Table::open_read(ps.default_pager()?, child.tablename.as_str())?;
-            let (actions, column_names, column_types) = project::build_project(
-                    &tbl.column_names(),
-                    &tbl.column_types(),
-                    &p.outcols)?;
+            let (actions, column_names, column_types) =
+                project::build_project(&tbl.column_names(), &tbl.column_types(), &p.outcols)?;
             use streaming_iterator::StreamingIterator;
-            let mut it = tbl.streaming_iterator().map(|row| project::project_row(&actions, row));
+            let mut it = tbl
+                .streaming_iterator()
+                .map(|row| project::project_row(&actions, row));
             let mut rows: Vec<Row> = vec![];
             loop {
                 it.advance();
-                if it.get().is_none() { break; }
+                if it.get().is_none() {
+                    break;
+                }
                 let res = it.get().unwrap().as_ref();
                 match res {
-                    Err(e) => {return Err(anyhow::anyhow!(format!("Not able to convert value: {}", e)))}
+                    Err(e) => {
+                        return Err(anyhow::anyhow!(format!("Not able to convert value: {}", e)))
+                    }
                     Ok(r) => rows.push(r.clone()),
                 }
             }
@@ -65,11 +72,11 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
         }
         ir::Block::ConstantRow(cr) => {
             return Ok(TempTable {
-            rows: vec![Row {
-                items: cr.row.iter().map(ast_constant_to_sql_value).collect(),
-            }],
-            column_names: (0..cr.row.len()).map(|i| format!("_f{i}")).collect(),
-            column_types: cr.row.iter().map(ast_constant_to_sql_type).collect(),
+                rows: vec![Row {
+                    items: cr.row.iter().map(ast_constant_to_sql_value).collect(),
+                }],
+                column_names: (0..cr.row.len()).map(|i| format!("_f{i}")).collect(),
+                column_types: cr.row.iter().map(ast_constant_to_sql_type).collect(),
             });
         }
         ir::Block::Scan(s) => {

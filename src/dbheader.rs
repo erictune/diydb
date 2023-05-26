@@ -7,10 +7,7 @@ pub enum Error {
     #[error("The magic bytes for this file are wrong.")]
     WrongMagic,
     #[error("Header field {field:?} value {value:?} is not supported by this code, though it may be valid Sqlite format.", )]
-    Unsupported {
-        field: &'static str,
-        value: u64,
-    },
+    Unsupported { field: &'static str, value: u64 },
     #[error("The pagesize is not supported by this code, though it may be valid Sqlite format.")]
     UnsupportedPagesize,
     #[error("A field value specified a free list that is not supported by this code, though it may be valid Sqlite format.")]
@@ -146,13 +143,22 @@ pub fn get_header(h: &[u8; SQLITE_DB_HEADER_BYTES]) -> Result<DbfileHeader, Erro
         _ => return Err(Error::UnsupportedPagesize),
     };
     if hdri.ffwv != 0x01 {
-        return Err(Error::Unsupported{ field: "File format write version", value: hdri.ffwv as u64});
+        return Err(Error::Unsupported {
+            field: "File format write version",
+            value: hdri.ffwv as u64,
+        });
     }
     if hdri.ffrv != 0x01 {
-        return Err(Error::Unsupported{ field: "File format read version", value: hdri.ffrv as u64});
+        return Err(Error::Unsupported {
+            field: "File format read version",
+            value: hdri.ffrv as u64,
+        });
     }
     if hdri.reserved_end != 0x00 {
-        return Err(Error::Unsupported{ field: "Bytes of unused reserved space at the end of each page", value: hdri.reserved_end as u64});
+        return Err(Error::Unsupported {
+            field: "Bytes of unused reserved space at the end of each page",
+            value: hdri.reserved_end as u64,
+        });
     }
     if hdri.maxepf != 0x40 {
         return Err(Error::Invalid);
@@ -177,27 +183,45 @@ pub fn get_header(h: &[u8; SQLITE_DB_HEADER_BYTES]) -> Result<DbfileHeader, Erro
     }
     let dpcs = u32::from_be_bytes(hdri.dpcs);
     if dpcs != 0x0 {
-        return Err(Error::Unsupported{ field: "Default page cache size", value: dpcs as u64});
+        return Err(Error::Unsupported {
+            field: "Default page cache size",
+            value: dpcs as u64,
+        });
     }
     let lrbpv = u32::from_be_bytes(hdri.lrbpv);
     if lrbpv != 0x0 {
-        return Err(Error::Unsupported{ field: "largest root b-tree page for vacuuming", value: lrbpv as u64});
+        return Err(Error::Unsupported {
+            field: "largest root b-tree page for vacuuming",
+            value: lrbpv as u64,
+        });
     }
     let encoding = u32::from_be_bytes(hdri.encoding);
     if encoding != 0x1 {
-        return Err(Error::Unsupported{ field: "text encoding", value: encoding as u64});
+        return Err(Error::Unsupported {
+            field: "text encoding",
+            value: encoding as u64,
+        });
     }
     let userversion = u32::from_be_bytes(hdri.userversion);
     if userversion != 0x0 {
-        return Err(Error::Unsupported{ field: "User version", value: userversion as u64});
+        return Err(Error::Unsupported {
+            field: "User version",
+            value: userversion as u64,
+        });
     }
     let ivm = u32::from_be_bytes(hdri.ivm);
     if ivm != 0x0 {
-        return Err(Error::Unsupported{ field: "incremental vacuum mode", value: ivm as u64});
+        return Err(Error::Unsupported {
+            field: "incremental vacuum mode",
+            value: ivm as u64,
+        });
     }
     let appid = u32::from_be_bytes(hdri.appid);
     if appid != 0x0 {
-        return Err(Error::Unsupported{ field: "Application ID", value: appid as u64});
+        return Err(Error::Unsupported {
+            field: "Application ID",
+            value: appid as u64,
+        });
     }
     if !bytes_identical(&hdri.reserved, TWENTY_ZEROS) {
         return Err(Error::WrongMagic);

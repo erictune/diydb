@@ -6,8 +6,6 @@ use streaming_iterator::StreamingIterator;
 use crate::typed_row::{RawRowCaster, Row, RowCastingError};
 use crate::{pager, sql_type::SqlType};
 
-
-
 pub struct Table<'a> {
     pager: &'a pager::Pager,
     _table_name: String,
@@ -28,7 +26,7 @@ pub enum Error {
 /// The lifetime 'p is the lifetime of the pager used in the table::Iterator.
 ///
 pub struct TableStreamingIterator<'p> {
-    // Implementation note: Tried by could not get streaming_iterator::Convert 
+    // Implementation note: Tried by could not get streaming_iterator::Convert
     // to work: because inscrutible compiler error when used with a non-default lifetime.
     // Also, we want to convert from raw data to typed data in the process.
     it: crate::btree::table::Iterator<'p>,
@@ -37,7 +35,10 @@ pub struct TableStreamingIterator<'p> {
     item: Option<Row>,
 }
 impl<'p> TableStreamingIterator<'p> {
-    fn new(it: crate::btree::table::Iterator<'p>, column_types: Vec<SqlType>) -> TableStreamingIterator<'p> {
+    fn new(
+        it: crate::btree::table::Iterator<'p>,
+        column_types: Vec<SqlType>,
+    ) -> TableStreamingIterator<'p> {
         TableStreamingIterator {
             it,
             column_types,
@@ -55,7 +56,10 @@ impl<'p> StreamingIterator for TableStreamingIterator<'p> {
         self.raw_item = self.it.next();
         self.item = match self.raw_item {
             None => None,
-            Some(raw) =>  Some(crate::typed_row::build_row(&self.column_types, raw.1).expect("Should have cast the row.")), // TODO: pass through errors?
+            Some(raw) => Some(
+                crate::typed_row::build_row(&self.column_types, raw.1)
+                    .expect("Should have cast the row."),
+            ), // TODO: pass through errors?
         }
     }
 
@@ -73,7 +77,7 @@ impl<'a> Table<'a> {
     pub fn column_types(&self) -> Vec<SqlType> {
         self.column_types.clone()
     }
-    
+
     pub fn open_read(pager: &'a pager::Pager, table_name: &str) -> Result<Table<'a>, Error> {
         let (root_pagenum, create_statement) =
             match crate::get_creation_sql_and_root_pagenum(pager, table_name) {
@@ -94,8 +98,7 @@ impl<'a> Table<'a> {
         })
     }
 
-    pub fn streaming_iterator(&'a self) -> TableStreamingIterator<'a>
-    {
+    pub fn streaming_iterator(&'a self) -> TableStreamingIterator<'a> {
         TableStreamingIterator::new(self.iter(), self.column_types())
     }
 
@@ -129,8 +132,8 @@ fn path_to_testdata(filename: &str) -> String {
 
 #[test]
 fn test_table() {
-    use crate::sql_value::SqlValue;
     use crate::sql_type::SqlType;
+    use crate::sql_value::SqlValue;
     let path = path_to_testdata("minimal.db");
     let pager =
         crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
@@ -139,8 +142,12 @@ fn test_table() {
     assert_eq!(tbl.column_types(), vec![SqlType::Int]);
     let mut it = tbl.streaming_iterator();
     it.advance();
-    assert_eq!(it.get(), Some(&Row{ items: vec![SqlValue::Int(1)]}));
+    assert_eq!(
+        it.get(),
+        Some(&Row {
+            items: vec![SqlValue::Int(1)]
+        })
+    );
     it.advance();
     assert_eq!(it.get(), None);
-
 }

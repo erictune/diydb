@@ -44,7 +44,8 @@ fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
 
 fn pagerset_with_open_db_for_run_query_tests(path: &str) -> diydb::pager::PagerSet {
     let mut ps = diydb::pager::PagerSet::new();
-    ps.opendb(path).expect(format!("Should have opened {}.", path).as_str());
+    ps.opendb(path)
+        .expect(format!("Should have opened {}.", path).as_str());
     ps.into()
 }
 
@@ -58,7 +59,7 @@ fn test_run_query_on_minimal_db() {
     assert_eq!(tt.rows[0].items.len(), 1);
     assert_eq!(tt.rows[0].items[0], Int(1));
 }
- 
+
 #[test]
 fn test_run_query_on_multipage_with_various_page_sizes() {
     use diydb::sql_value::SqlValue::*;
