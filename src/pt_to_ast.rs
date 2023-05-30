@@ -3,6 +3,8 @@
 //! Our AST has enums for groups of terminals that are used in the same production.
 //! The AST also discards some lexical detail like case and position in the input.
 
+use anyhow::{Result, bail};
+
 use crate::ast;
 use crate::parser::Rule;
 use crate::parser::SQLParser;
@@ -164,9 +166,8 @@ fn test_parsing_literals() {
     }
 }
 
-pub fn pt_select_statement_to_ast(query: &str) -> ast::SelectStatement {
-    let select_stmt = SQLParser::parse(Rule::select_stmt, query)
-        .expect("unsuccessful parse") // unwrap the parse result
+pub fn pt_select_statement_to_ast(query: &str) -> Result<ast::SelectStatement> {
+    let select_stmt = SQLParser::parse(Rule::select_stmt, query)?
         .next()
         .unwrap();
 
@@ -184,7 +185,7 @@ pub fn pt_select_statement_to_ast(query: &str) -> ast::SelectStatement {
                         tablename: String::from(s.as_str()),
                     });
                 } else {
-                    panic!("Too many tables in from.")
+                    bail!("Too many tables in from.")
                 }
             }
             Rule::select_items => {
@@ -202,16 +203,16 @@ pub fn pt_select_statement_to_ast(query: &str) -> ast::SelectStatement {
                             name: String::from(u.as_str()),
                         }),
                         Rule::star => SelItem::Star,
-                        Rule::expr => SelItem::Expr(crate::parser::parse_expr(&mut u.into_inner())),
-                        _ => panic!("Parse error in select item"),
+                        Rule::expr => SelItem::Expr(crate::parser::parse_expr(u.into_inner())),
+                        _ => bail!("Parse error in select item"),
                     });
                 }
             }
             Rule::EOI => (),
-            _ => panic!("Unable to parse expr:  {} ", s.as_str()),
+            _ => bail!("Unable to parse expr:  {} ", s.as_str()),
         }
     }
-    ast
+    Ok(ast)
 }
 
 // TODO: remove this and the following function and directly test that the correct AST is produced.
@@ -230,7 +231,7 @@ fn ast_select_statement_to_tuple(ss: &ast::SelectStatement) -> (Vec<String>, Vec
 
 #[cfg(test)]
 pub fn parse_select_statement(query: &str) -> (Vec<String>, Vec<String>) {
-    let ss: ast::SelectStatement = pt_select_statement_to_ast(query);
+    let ss = pt_select_statement_to_ast(query).unwrap();
     ast_select_statement_to_tuple(&ss)
 }
 

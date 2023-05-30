@@ -17,8 +17,17 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
         for item in &ss.select.items {
             match item {
                 ast::SelItem::Expr(e) => {
-                    let ast::Expr::Constant(c) = e;
-                    row.push(c.clone())
+                    match e {
+                        ast::Expr::Constant(c) => {
+                            row.push(c.clone())
+                        }
+                        ast::Expr::BinOp{..} => {
+                            // We have done a constant propagation pass over the AST.
+                            // So, if there is a BinOp expression, it must contain a ColName. 
+                            // You can't use a ColName when there is no FROM clause.
+                            bail!("Unexpected BinOp in a query without a FROM clause");
+                        }
+                    }
                 }
                 ast::SelItem::ColName(c) => bail!("Cannot select {c} without a FROM clause"),
                 ast::SelItem::Star => bail!("Cannot select * without a FROM clause"),

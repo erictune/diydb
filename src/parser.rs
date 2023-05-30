@@ -1,6 +1,8 @@
 //! `parser` contains generated parsing routines for SQL and tests on them.
 
 use pest::iterators::Pairs;
+use pest::pratt_parser::PrattParser;
+
 use crate::ast;
 
 #[allow(unused_imports)]
@@ -9,17 +11,48 @@ use pest::Parser; // This needs to be in scope for the next statements to work.
 #[grammar = "sql.pest"]
 pub struct SQLParser;
 
-pub fn parse_expr(pairs: &mut Pairs<Rule>) -> ast::Expr {
-    let p = pairs.next().unwrap();
-    match p.as_rule() {
+// From: https://pest.rs/book/examples/calculator.html, MIT,Apache2.0 licenses.
+lazy_static::lazy_static! {
+    pub static ref PRATT_PARSER: PrattParser<Rule> = {
+        use pest::pratt_parser::{Assoc::*, Op};
+        use Rule::*;
+
+        // Precedence is defined lowest to highest
+        PrattParser::new()
+            // Addition and subtract have equal precedence
+            .op(Op::infix(add, Left) | Op::infix(subtract, Left))
+            .op(Op::infix(multiply, Left) | Op::infix(divide, Left))
+    };
+}
+
+// From: https://pest.rs/book/examples/calculator.html, MIT,Apache2.0 licenses.
+pub fn parse_expr(pairs: Pairs<Rule>) -> ast::Expr {
+    PRATT_PARSER
+        .map_primary(|primary| match primary.as_rule() {
             Rule::null_literal
             | Rule::true_literal
             | Rule::false_literal
             | Rule::integer_literal
             | Rule::decimal_literal
-            | Rule::single_quoted_string => ast::Expr::Constant(crate::pt_to_ast::parse_literal_from_rule(p.clone())),
+            | Rule::single_quoted_string => ast::Expr::Constant(crate::pt_to_ast::parse_literal_from_rule(primary)),
             rule => unreachable!("parse_expr expected literal, found {:?}", rule),
-        }
+        })
+        .map_infix(|lhs, op, rhs| {
+            let op = match op.as_rule() {
+                Rule::add => ast::Op::Add,
+                Rule::subtract => ast::Op::Subtract,
+                Rule::multiply => ast::Op::Multiply,
+                Rule::divide => ast::Op::Divide,
+                rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
+            };
+            ast::Expr::BinOp {
+                lhs: Box::new(lhs),
+                op,
+                rhs: Box::new(rhs),
+            }
+        })
+        .parse(pairs)
+
 }
 
 #[test]
@@ -63,7 +96,10 @@ fn test_not_parse_invalid_literals() {
 #[test]
 fn test_parse_expr() {
     let cases = vec![
-        ("1"),
+        ("1 + 2"),
+        ("3 * 4"),
+        ("5 * 6 + 7"),
+        ("8 + 9 * 10"), 
     ];
 
     for case in cases {
@@ -101,6 +137,14 @@ fn test_not_parse_invalid_create_statements() {
     }
 }
 
+#[test] 
+fn test_parse_select_with_expr() {
+    let e = SQLParser::parse(Rule::select_stmt, "select 1 + 1");
+    if e.is_err() {
+        println!("{:?}", e.err())
+    } 
+
+}
 #[test]
 fn test_parse_select_statement() {
     let cases = vec![
@@ -110,6 +154,7 @@ fn test_parse_select_statement() {
         ("select x, 1"), // This is invalid SQL, but this check happens after parsing.
         ("select 1.01"),
         ("select 'hi'"),
+        ("select 1 + 1"),
     ];
 
     for case in cases {

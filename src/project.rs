@@ -68,6 +68,9 @@ pub fn build_project(
                     ast::Constant::String(_) => SqlType::Text,
                 });
             }
+            ast::SelItem::Expr(_) => {
+                unimplemented!("Only constant items supported in expressions at this time");
+            }
             ast::SelItem::ColName(n) => {
                 let idx: usize = match input_indexes.get(n.name.as_str()) {
                     Some(idx) => *idx,

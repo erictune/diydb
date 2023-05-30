@@ -28,7 +28,13 @@ column_name = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 // No whitespace allowed between digits
 
 atom = _{ literal }
-expr = { atom }
+bin_op = _{ add | subtract | multiply | divide }
+    add = { "+" }
+    subtract = { "-" }
+    multiply = { "*" }
+    divide = { "/" }
+// atom and bin_op  rules will be the input to the PrattParser. It expects to receive atoms separated by operators.
+expr = { atom ~ (bin_op ~ atom)* }
 
 // Reused bits in SQL statements.
 column_def = {column_name ~ type_name}

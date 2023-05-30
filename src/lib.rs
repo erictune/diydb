@@ -5,6 +5,7 @@ mod dbheader;
 mod formatting;
 mod ir;
 mod ir_interpreter;
+mod optimize_ast;
 pub mod pager;
 pub mod parser;
 mod project;
@@ -187,7 +188,9 @@ pub fn run_query(ps: &pager::PagerSet, query: &str) -> anyhow::Result<()> {
 
 pub fn run_query_no_print(ps: &pager::PagerSet, query: &str) -> anyhow::Result<crate::TempTable> {
     // Convert parse tree to AST.
-    let ss: ast::SelectStatement = pt_to_ast::pt_select_statement_to_ast(query);
+    let mut ss: ast::SelectStatement = pt_to_ast::pt_select_statement_to_ast(query)?;
+    // Optimize the AST (in place).
+    optimize_ast::simplify_ast_select_statement(&mut ss)?;
     // Convert the AST to IR.
     let ir: ir::Block = ast_to_ir::ast_select_statement_to_ir(&ss)?;
     // Execute the IR.

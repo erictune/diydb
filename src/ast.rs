@@ -104,12 +104,41 @@ impl std::fmt::Display for Constant {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Constant(Constant),
+    BinOp {
+        lhs: Box<Expr>,
+        op: Op,
+        rhs: Box<Expr>,
+    },
 }
 
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Expr::Constant(x) => write!(f, "{}", x),
+            Expr::BinOp{ lhs: l, op: o, rhs: r} => write!(f, "{} {} {}", l, o, r),
         }
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Op {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+}
+
+impl std::fmt::Display for Op {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Op::*;
+        write!(f, "{}", 
+            match self {
+                Add => "+",
+                Subtract => "-",
+                Multiply => "*",
+                Divide => "/",
+            }
+        )
     }
 }

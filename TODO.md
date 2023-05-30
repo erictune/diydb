@@ -6,7 +6,7 @@ Current Projects Stack
   - replace the Constant SelItem with Expr SelItem.
   - IR holds Constant when Expr is Constant.
 
-2. [ ] Introduce BinOps in queries.
+2. [x] Introduce BinOps in queries.
   - do constant propagation after AST is built, before IR is built = complete simplification only at this time.
   - the only new queries supported is "select 1 + 1" and "select 1+1, a from t" - the others keep the same IR.
   - no change to project handling or IR.
@@ -53,7 +53,10 @@ Future Projects
 
 ## Where 
 - `SELECT a, b FROM t where a > b` becoming `Filter(Project(Scan))`.
-
+  - simplify_ast_select_statement() should simplify expressions in where clause too.
+  - build_where() similar to build_project().
+  - build_where() to detect type mismatch in expressions.
+  
 ## Finish Projection.
 - [ ] Use alternative name provided with "AS" in projects.
 - [ ] Expression trees evaluated at runtime.
