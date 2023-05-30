@@ -21,6 +21,7 @@ extern crate pest;
 extern crate pest_derive;
 
 use sql_type::SqlType;
+use sql_value::SqlValue;
 use table::Table;
 use typed_row::Row;
 
@@ -32,6 +33,8 @@ const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
 const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
 const SCHEMA_SCHEMA: &str =
     "CREATE TABLE sqlite_schema (type text, name text, tbl_name text, rootpage integer, sql text)";
+const SCHEMA_TABLE_COL_NAMES: [&str; 5] = ["type", "name", "tbl_name", "rootpage", "sql"];
+const SCHEMA_TABLE_COL_TYPES: [SqlType; 5] = [SqlType::Text, SqlType::Text, SqlType::Text, SqlType::Int, SqlType::Text];
 const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
 const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
 const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
@@ -123,30 +126,32 @@ pub fn get_creation_sql_and_root_pagenum(
     if table_name == SCHEMA_TABLE_NAME {
         return Some((SCHEMA_BTREE_ROOT_PAGENUM, String::from(SCHEMA_SCHEMA)));
     } else {
-        // TODO: get rid of in favor of Table::to_temp_table()
-        for (_, payload) in crate::btree::table::Iterator::new(SCHEMA_BTREE_ROOT_PAGENUM, pgr) {
-            let vi = record::ValueIterator::new(payload);
-            let row = vi.collect::<Vec<(i64, &[u8])>>();
-            let this_table_name = serial_type::value_to_string(
-                &row[SCHEMA_TABLE_TBL_NAME_COLIDX].0,
-                row[SCHEMA_TABLE_TBL_NAME_COLIDX].1,
-            )
-            .unwrap();
+        let schema_table = Table::new(
+            pgr,
+            String::from(SCHEMA_TABLE_NAME),
+            SCHEMA_BTREE_ROOT_PAGENUM,
+            SCHEMA_TABLE_COL_NAMES.iter().map(|x| x.to_string()).collect(),
+            Vec::from(SCHEMA_TABLE_COL_TYPES),
+        );   
+        let mut it = schema_table.streaming_iterator();
+        while let Some(row) = it.next() {
+            let this_table_name = match &row.items[SCHEMA_TABLE_TBL_NAME_COLIDX] {
+                SqlValue::Text(s) => s.clone(),
+                _ => panic!("Type mismatch in schema table column {}, expected Text", SCHEMA_TABLE_TBL_NAME_COLIDX),
+            };
             if this_table_name != table_name {
                 continue;
             }
-            let root_pagenum = serial_type::value_to_i64(
-                &row[SCHEMA_TABLE_ROOTPAGE_COLIDX].0,
-                row[SCHEMA_TABLE_ROOTPAGE_COLIDX].1,
-                false,
-            )
-            .expect("Should have gotten root page number from schema table.")
-                as pager::PageNum;
-            let creation_sql = serial_type::value_to_string(
-                &row[SCHEMA_TABLE_SQL_COLIDX].0,
-                row[SCHEMA_TABLE_SQL_COLIDX].1,
-            )
-            .unwrap();
+            // TODO: refactor code below to "get row element as type x or return nicely formatted Error", which can be used elsewhere too.
+            let root_pagenum = match &row.items[SCHEMA_TABLE_ROOTPAGE_COLIDX] {
+                SqlValue::Int(i) => *i as pager::PageNum,
+                // TODO: return Result rather than panicing.
+                _ => panic!("Type mismatch in schema table column {}, expected Int", SCHEMA_TABLE_ROOTPAGE_COLIDX),
+            };
+            let creation_sql = match &row.items[SCHEMA_TABLE_SQL_COLIDX] {
+                SqlValue::Text(s) => s.clone(),
+                _ => panic!("Type mismatch in schema table column {}, expected Text", SCHEMA_TABLE_SQL_COLIDX),
+            };
             return Some((root_pagenum, creation_sql));
         }
     }

@@ -78,6 +78,25 @@ impl<'a> Table<'a> {
         self.column_types.clone()
     }
 
+    /// creates a Table for unspecified (read vs write).
+    /// Note: Most use cases should use open_read(), not new()
+    pub fn new(
+        pager: &'a pager::Pager,
+        table_name: String,
+        root_pagenum: pager::PageNum,
+        column_names: Vec<String>,
+        column_types: Vec<SqlType>,
+    ) -> Table<'a> {
+        Table {
+            pager,
+            _table_name: table_name,
+            root_pagenum,
+            column_names,
+            column_types,
+        }
+    }
+    
+    // opens a table for reading.
     pub fn open_read(pager: &'a pager::Pager, table_name: &str) -> Result<Table<'a>, Error> {
         let (root_pagenum, create_statement) =
             match crate::get_creation_sql_and_root_pagenum(pager, table_name) {
@@ -86,16 +105,16 @@ impl<'a> Table<'a> {
             };
         let (_, column_names, column_types) =
             crate::pt_to_ast::parse_create_statement(&create_statement);
-        Ok(Table {
+        Ok(Table::new(
             pager,
-            _table_name: String::from(table_name),
+            String::from(table_name),
             root_pagenum,
             column_names,
-            column_types: column_types
+            column_types
                 .iter()
                 .map(|s| SqlType::from_str(s.as_str()).unwrap())
                 .collect(),
-        })
+        ))    
     }
 
     pub fn streaming_iterator(&'a self) -> TableStreamingIterator<'a> {
