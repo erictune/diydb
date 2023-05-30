@@ -158,24 +158,111 @@ fn test_run_dbless_selects() {
     );
 }
 
+#[cfg(test)]
+#[allow(non_snake_case)]
+fn text_A() -> diydb::sql_value::SqlValue {
+    diydb::sql_value::SqlValue::Text("A".to_string())
+}
+#[cfg(test)]
+#[allow(non_snake_case)]
+fn text_B() -> diydb::sql_value::SqlValue {
+    diydb::sql_value::SqlValue::Text("B".to_string())
+}
+
 #[test]
 fn test_run_selects() {
+    use diydb::typed_row::Row;
+    use diydb::sql_value::SqlValue::*;
     let path = path_to_testdata("for_exprs.db");
     let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
     let cases = vec![
-        ("select * from t",),
-        ("select a, c, e from t",),
-        ("select 1, 2, 3",),
-        ("select 1, 2, 3 from t",),
-        ("select d, 1, a, 2, c, 3 from t",),
-        ("select *, 1, * from t",),
-        ("select 1 + 1",),
-        ("select 1 + 1, a from t",),
+        (
+            "select * from t",
+            vec![
+                    Row { items: vec![Int(1), Int(1), Real(1.1), Real(1.1), text_A(), text_A()] }, 
+                    Row { items: vec![Int(1), Int(2), Real(1.1), Real(2.2), text_A(), text_B()] },
+                    Row { items: vec![Int(2), Int(1), Real(2.2), Real(1.1), text_B(), text_A()] },
+                    Row { items: vec![Int(0), Int(3), Real(0.0), Real(3.3), text_A(), text_A()] },
+            ], 
+        ),
+        (
+            "select a, c, e from t",
+            vec![
+                Row { items: vec![Int(1), Real(1.1), text_A()] }, 
+                Row { items: vec![Int(1), Real(1.1), text_A()] },
+                Row { items: vec![Int(2), Real(2.2), text_B()] },
+                Row { items: vec![Int(0), Real(0.0), text_A()] },
+            ]
+        ),
+        (
+            "select 1, 2, 3",
+            vec![
+                Row { items: vec![Int(1), Int(2), Int(3)] }, 
+            ],
+        ),
+        (
+            "select 1, 2, 3 from t",
+            vec![
+                Row { items: vec![Int(1), Int(2), Int(3)] }, 
+                Row { items: vec![Int(1), Int(2), Int(3)] }, 
+                Row { items: vec![Int(1), Int(2), Int(3)] }, 
+                Row { items: vec![Int(1), Int(2), Int(3)] }, 
+            ],
+        ),
+        (
+            "select d, 1, a, 2, c, 3 from t",
+            vec![
+                Row { items: vec![Real(1.1), Int(1), Int(1), Int(2), Real(1.1), Int(3)] }, 
+                Row { items: vec![Real(2.2), Int(1), Int(1), Int(2), Real(1.1), Int(3)] },
+                Row { items: vec![Real(1.1), Int(1), Int(2), Int(2), Real(2.2), Int(3)] },
+                Row { items: vec![Real(3.3), Int(1), Int(0), Int(2), Real(0.0), Int(3)] },
+            ], 
+        ),
+        (
+            "select *, 1, * from t",
+            vec![
+                Row { items: vec![Int(1), Int(1), Real(1.1), Real(1.1), text_A(), text_A(), Int(1), Int(1), Int(1), Real(1.1), Real(1.1), text_A(), text_A()] }, 
+                Row { items: vec![Int(1), Int(2), Real(1.1), Real(2.2), text_A(), text_B(), Int(1), Int(1), Int(2), Real(1.1), Real(2.2), text_A(), text_B()] },
+                Row { items: vec![Int(2), Int(1), Real(2.2), Real(1.1), text_B(), text_A(), Int(1), Int(2), Int(1), Real(2.2), Real(1.1), text_B(), text_A()] },
+                Row { items: vec![Int(0), Int(3), Real(0.0), Real(3.3), text_A(), text_A(), Int(1), Int(0), Int(3), Real(0.0), Real(3.3), text_A(), text_A()] },
+
+            ], 
+
+        ),
+        (
+            "select 1 + 1",
+            vec![
+                Row { items: vec![Int(2)] }, 
+            ], 
+
+        ),
+        (
+            "select 1 + 1 from t",
+            vec![
+                Row { items: vec![Int(2)] }, 
+                Row { items: vec![Int(2)] }, 
+                Row { items: vec![Int(2)] }, 
+                Row { items: vec![Int(2)] }, 
+            ], 
+        ),
+        (
+            "select 1 + 1, a from t",
+            vec![
+                Row { items: vec![Int(2), Int(1),] }, 
+                Row { items: vec![Int(2), Int(1),] }, 
+                Row { items: vec![Int(2), Int(2),] }, 
+                Row { items: vec![Int(2), Int(0),] }, 
+            ], 
+        ),
     ];
     for case in cases {
+        println!("--------------\n");
         println!("running: {}", case.0);
-        let tt = diydb::run_query_no_print(&ps, case.0);
-        println!("{:#?}", tt);
-        assert!(tt.is_ok());
+        let actual = diydb::run_query_no_print(&ps, case.0);
+        assert!(actual.is_ok());
+        let actual = actual.unwrap();
+        println!("Actual rows: {:?}", actual.rows);
+        println!("Expected rows: {:?}", case.1);
+        assert_eq!(actual.rows, case.1);
     }
 }
