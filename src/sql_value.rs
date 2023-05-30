@@ -16,12 +16,12 @@ pub enum SqlValue {
 impl std::fmt::Display for SqlValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SqlValue::Int(x) => write!(f, "{}", x),
-            SqlValue::Text(x) => write!(f, "{}", x),
-            SqlValue::Blob(_) => write!(f, "<BLOB>"),
-            SqlValue::Real(x) => write!(f, "{}", x),
-            SqlValue::Bool(x) => write!(f, "{}", x),
-            SqlValue::Null() => write!(f, "NULL"),
+            SqlValue::Int(x) => x.fmt(f),
+            SqlValue::Text(x) => x.fmt(f),
+            SqlValue::Blob(_) => "<BLOB>".fmt(f),
+            SqlValue::Real(x) => x.fmt(f),
+            SqlValue::Bool(x) => x.fmt(f),
+            SqlValue::Null() => "NULL".fmt(f),
         }
     }
 }

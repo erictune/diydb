@@ -17,10 +17,10 @@ pub enum SqlType {
 impl std::fmt::Display for SqlType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SqlType::Int => write!(f, "INT"),
-            SqlType::Text => write!(f, "TEXT"),
-            SqlType::Blob => write!(f, "BLOB"),
-            SqlType::Real => write!(f, "REAL"),
+            SqlType::Int => "INT".fmt(f),
+            SqlType::Text => "TEXT".fmt(f),
+            SqlType::Blob => "BLOB".fmt(f),
+            SqlType::Real => "REAL".fmt(f),
         }
     }
 }

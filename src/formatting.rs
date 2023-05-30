@@ -26,11 +26,14 @@ pub fn print_table_tt(tt: &crate::TempTable, detailed: bool) -> Result<()> {
     }
     {
         for tr in tt.rows.iter() {
-            print!("   |");
-            for v in tr.items.iter() {
-                print!(" {:15} |", v);
-            }
-            println!();
+            println!(
+                "   | {} |",
+                tr.items
+                    .iter()
+                    .map(|x| format!("{:15}", x))
+                    .collect::<Vec<String>>()
+                    .join(" | ")
+            );
         }
     }
     Ok(())

@@ -12,7 +12,7 @@ pub struct ColName {
 }
 impl std::fmt::Display for ColName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
+        self.name.fmt(f)
     }
 }
 
@@ -26,9 +26,9 @@ pub enum SelItem {
 impl std::fmt::Display for SelItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SelItem::Expr(x) => write!(f, "{}", x),
-            SelItem::ColName(x) => write!(f, "{}", x),
-            SelItem::Star => write!(f, "*"),
+            SelItem::Expr(x) => x.fmt(f),
+            SelItem::ColName(x) => x.fmt(f),
+            SelItem::Star => "*".fmt(f),
         }
     }
 }
@@ -88,14 +88,14 @@ pub enum Constant {
 impl std::fmt::Display for Constant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Constant::Int(x) => write!(f, "{}", x),
-            Constant::String(x) => write!(f, "{}", x),
-            Constant::Real(x) => write!(f, "{}", x),
+            Constant::Int(x) => x.fmt(f),
+            Constant::String(x) => x.fmt(f),
+            Constant::Real(x) => x.fmt(f),
             Constant::Bool(x) => match x {
-                true => write!(f, "TRUE"),
-                false => write!(f, "FALSE"),
+                true => "TRUE".fmt(f),
+                false => "FALSE".fmt(f),
             },
-            Constant::Null() => write!(f, "NULL",),
+            Constant::Null() => "NULL".fmt(f),
         }
 
     }
@@ -114,8 +114,8 @@ pub enum Expr {
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expr::Constant(x) => write!(f, "{}", x),
-            Expr::BinOp{ lhs: l, op: o, rhs: r} => write!(f, "{} {} {}", l, o, r),
+            Expr::Constant(x) => x.fmt(f),
+            Expr::BinOp{ lhs: l, op: o, rhs: r} => l.fmt(f).and_then(|_| o.fmt(f)).and_then(|_| r.fmt(f)),
         }
     }
 }
@@ -132,13 +132,11 @@ pub enum Op {
 impl std::fmt::Display for Op {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Op::*;
-        write!(f, "{}", 
-            match self {
-                Add => "+",
-                Subtract => "-",
-                Multiply => "*",
-                Divide => "/",
-            }
-        )
+        match self {
+            Add => "+".fmt(f),
+            Subtract => "-".fmt(f),
+            Multiply => "*".fmt(f),
+            Divide => "/".fmt(f),
+        }
     }
 }
