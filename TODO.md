@@ -1,6 +1,24 @@
 Current Projects Stack
 ----------------------
-# Main Project
+# Expressions
+1. [X] Introduce Expr with only Constant member.
+  - No new queries supported.
+  - replace the Constant SelItem with Expr SelItem.
+  - IR holds Constant when Expr is Constant.
+
+2. [ ] Introduce BinOps in queries.
+  - do constant propagation after AST is built, before IR is built = complete simplification only at this time.
+  - the only new queries supported is "select 1 + 1" and "select 1+1, a from t" - the others keep the same IR.
+  - no change to project handling or IR.
+  - detect type mismatch between constant operand and binop.
+
+3. [ ] support colnames in expressions
+  - do partial simplification of expressions that include columns.
+  - build project function from Take() and BinOp().
+  - This adds support for queries like "select 1 + a from t" and "select a + b + c + d + e".
+  - detect type mismatch between column type and binop.
+
+# Completed Project - parse and execute queries with basic project step
 Build steel thread of parsing and execution.
 - [x] Parse to Parse tree using pest.rs.
   - e.g. Start with `select 1, x from t;` and generate `Pairs<Rule>`
@@ -105,6 +123,12 @@ Quick Cleanups for when you don't have a lot of time:
 ...
 
 # Pager Layer Projects
+
+## Staticification
+
+Use of the lazy_static module and macro could allow the pagerset to be declared as static,
+which might reduce the complexity of dealing with lifetimes of data held in the pager.
+The destructor of static resources does not run, so we would have to manually release any file system locks, flush files, etc.
 
 ## Single Thread demand paging
 

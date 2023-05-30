@@ -18,7 +18,7 @@ impl std::fmt::Display for ColName {
 
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
 pub enum SelItem {
-    Const(Constant),
+    Expr(Expr),
     ColName(ColName),
     Star,
 }
@@ -26,7 +26,7 @@ pub enum SelItem {
 impl std::fmt::Display for SelItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SelItem::Const(x) => write!(f, "{}", x),
+            SelItem::Expr(x) => write!(f, "{}", x),
             SelItem::ColName(x) => write!(f, "{}", x),
             SelItem::Star => write!(f, "*"),
         }
@@ -96,6 +96,20 @@ impl std::fmt::Display for Constant {
                 false => write!(f, "FALSE"),
             },
             Constant::Null() => write!(f, "NULL",),
+        }
+
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    Constant(Constant),
+}
+
+impl std::fmt::Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Constant(x) => write!(f, "{}", x),
         }
     }
 }

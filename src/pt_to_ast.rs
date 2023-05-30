@@ -112,7 +112,7 @@ fn test_parse_create_statement() {
     }
 }
 
-fn parse_literal_from_rule(pair: pest::iterators::Pair<'_, Rule>) -> ast::Constant {
+pub fn parse_literal_from_rule(pair: pest::iterators::Pair<'_, Rule>) -> ast::Constant {
     match pair.as_rule() {
         Rule::null_literal => ast::Constant::Null(),
         Rule::true_literal => ast::Constant::Bool(true),
@@ -202,12 +202,7 @@ pub fn pt_select_statement_to_ast(query: &str) -> ast::SelectStatement {
                             name: String::from(u.as_str()),
                         }),
                         Rule::star => SelItem::Star,
-                        Rule::null_literal
-                        | Rule::true_literal
-                        | Rule::false_literal
-                        | Rule::integer_literal
-                        | Rule::decimal_literal
-                        | Rule::single_quoted_string => SelItem::Const(parse_literal_from_rule(u)),
+                        Rule::expr => SelItem::Expr(crate::parser::parse_expr(&mut u.into_inner())),
                         _ => panic!("Parse error in select item"),
                     });
                 }

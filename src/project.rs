@@ -32,7 +32,7 @@ pub fn build_project(
     }
     for out_item in out_cols.iter() {
         match out_item {
-            ast::SelItem::Const(c) => {
+            ast::SelItem::Expr(ast::Expr::Constant(c)) => {
                 actions.push(ProjectAction::Constant(match c {
                     ast::Constant::Bool(_) => {
                         return Err(anyhow::anyhow!(
@@ -102,7 +102,7 @@ fn make_ast_colname(s: &str) -> ast::SelItem {
 
 #[cfg(test)]
 fn make_ast_constant(i: i64) -> ast::SelItem {
-    ast::SelItem::Const(ast::Constant::Int(i))
+    ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(i)))
 }
 
 #[test]

@@ -5,7 +5,7 @@
 
 use crate::ast;
 use crate::ir;
-use anyhow::bail;
+use anyhow::{bail, Result};
 use std::boxed::Box;
 
 pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block, anyhow::Error> {
@@ -16,7 +16,10 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
         let mut row: Vec<ast::Constant> = vec![];
         for item in &ss.select.items {
             match item {
-                ast::SelItem::Const(c) => row.push(c.clone()),
+                ast::SelItem::Expr(e) => {
+                    let ast::Expr::Constant(c) = e;
+                    row.push(c.clone())
+                }
                 ast::SelItem::ColName(c) => bail!("Cannot select {c} without a FROM clause"),
                 ast::SelItem::Star => bail!("Cannot select * without a FROM clause"),
             }
@@ -42,7 +45,7 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
     let mut outcols: Vec<ast::SelItem> = vec![];
     for item in &ss.select.items[..] {
         match item {
-            ast::SelItem::Const(_) => outcols.push(item.clone()),
+            ast::SelItem::Expr(_) => outcols.push(item.clone()),
             ast::SelItem::ColName(_) => outcols.push(item.clone()),
             ast::SelItem::Star => outcols.push(item.clone()),
         }
@@ -90,7 +93,7 @@ fn test_ast_select_statement_to_ir() {
             desc: "Select 1;".to_string(),
             input: ast::SelectStatement {
                 select: ast::SelectClause {
-                    items: vec![ast::SelItem::Const(ast::Constant::Int(1))],
+                    items: vec![ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(1)))],
                 },
                 from: None,
             },
@@ -137,14 +140,14 @@ fn test_ast_select_statement_to_ir() {
             desc: "Select 1 from t;".to_string(),
             input: ast::SelectStatement {
                 select: ast::SelectClause {
-                    items: vec![ast::SelItem::Const(ast::Constant::Int(1))],
+                    items: vec![ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(1)))],
                 },
                 from: Some(ast::FromClause {
                     tablename: String::from("t"),
                 }),
             },
             expected: Ok(ir::Block::Project(ir::Project {
-                outcols: vec![ast::SelItem::Const(ast::Constant::Int(1))],
+                outcols: vec![ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(1)))],
                 input: std::boxed::Box::new(ir::Block::Scan(ir::Scan {
                     tablename: String::from("t"),
                 })),
@@ -155,11 +158,11 @@ fn test_ast_select_statement_to_ir() {
             input: ast::SelectStatement {
                 select: ast::SelectClause {
                     items: vec![
-                        ast::SelItem::Const(ast::Constant::Int(1)),
+                        ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(1))),
                         ast::SelItem::ColName(ast::ColName {
                             name: String::from("a"),
                         }),
-                        ast::SelItem::Const(ast::Constant::Int(3)),
+                        ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(3))),
                     ],
                 },
                 from: Some(ast::FromClause {
@@ -168,11 +171,11 @@ fn test_ast_select_statement_to_ir() {
             },
             expected: Ok(ir::Block::Project(ir::Project {
                 outcols: vec![
-                    ast::SelItem::Const(ast::Constant::Int(1)),
+                    ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(1))),
                     ast::SelItem::ColName(ast::ColName {
                         name: String::from("a"),
                     }),
-                    ast::SelItem::Const(ast::Constant::Int(3)),
+                    ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(3))),
                 ],
                 input: std::boxed::Box::new(ir::Block::Scan(ir::Scan {
                     tablename: String::from("t"),
@@ -205,10 +208,14 @@ fn test_ast_select_statement_to_ir() {
     for case in cases {
         println!("Running case: {}", case.desc);
         let actual = ast_select_statement_to_ir(&case.input);
-        assert_eq!(actual.is_ok(), case.expected.is_ok());
+        let actual_ok = actual.is_ok();
+        let expected_ok = case.expected.is_ok();
         if actual.is_ok() {
             assert!(case.expected.is_ok());
             assert_eq!(actual.unwrap(), case.expected.unwrap());
+        } else {
+            println!("Actual's error: {}", actual.unwrap_err())
         }
+        assert_eq!(actual_ok, expected_ok);
     }
 }

@@ -1,10 +1,26 @@
 //! `parser` contains generated parsing routines for SQL and tests on them.
 
+use pest::iterators::Pairs;
+use crate::ast;
+
 #[allow(unused_imports)]
 use pest::Parser; // This needs to be in scope for the next statements to work.
 #[derive(Parser)]
 #[grammar = "sql.pest"]
 pub struct SQLParser;
+
+pub fn parse_expr(pairs: &mut Pairs<Rule>) -> ast::Expr {
+    let p = pairs.next().unwrap();
+    match p.as_rule() {
+            Rule::null_literal
+            | Rule::true_literal
+            | Rule::false_literal
+            | Rule::integer_literal
+            | Rule::decimal_literal
+            | Rule::single_quoted_string => ast::Expr::Constant(crate::pt_to_ast::parse_literal_from_rule(p.clone())),
+            rule => unreachable!("parse_expr expected literal, found {:?}", rule),
+        }
+}
 
 #[test]
 fn test_parse_literals() {
@@ -41,6 +57,17 @@ fn test_not_parse_invalid_literals() {
     ];
     for case in cases {
         assert!(SQLParser::parse(Rule::literal, case).is_err());
+    }
+}
+
+#[test]
+fn test_parse_expr() {
+    let cases = vec![
+        ("1"),
+    ];
+
+    for case in cases {
+        assert!(SQLParser::parse(Rule::expr, case).is_ok());
     }
 }
 

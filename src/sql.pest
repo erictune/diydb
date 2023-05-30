@@ -24,6 +24,13 @@ table_identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 // TODO: allow double quoted strings as column names.
 column_name = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 
+// Arithmetic and logical expressions.
+// No whitespace allowed between digits
+
+atom = _{ literal }
+expr = { atom }
+
+// Reused bits in SQL statements.
 column_def = {column_name ~ type_name}
 column_defs = { column_def ~ ("," ~ column_def)* }
 
@@ -42,7 +49,7 @@ create_stmt = {SOI ~ create ~ table ~ table_identifier ~ "(" ~ column_defs ~ ")"
 select = _{ ^"select" }
 star = { "*" }
 from = _{ ^"from" }
-select_item = {literal | column_name | star  }   // TODO: support expressions on columns in select
+select_item = { expr | column_name | star  }   // TODO: support expressions on columns in select
 select_items = { select_item ~ ("," ~ select_item)* }
 from_items = {from ~ table_identifier}
 select_stmt = {SOI ~ select ~ select_items ~ (from ~ table_identifier)? ~ EOI}
