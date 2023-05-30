@@ -25,9 +25,11 @@ fn do_command(c: &mut Context, line: &str) {
         l if l == ".schema" => do_schema(c),
         ".help" => do_help(c),
         l if l.starts_with(".open") => {
-            let file_to_open = "./record.db";
-            // TODO: parse one argument.
-            do_open(c, file_to_open)
+            if let Some((_, file_to_open)) = line.split_once(" ") {
+                do_open(c, file_to_open)
+            } else {
+                println!("Unspecified filename.");
+            }
         }
         _ => println!("Unknown command."),
     }
