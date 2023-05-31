@@ -66,8 +66,8 @@ fn test_do_binop_err() {
     }
 }
 
-// TODO: handle expressions which contain column references too, and return something to indicate that we could not simplify,
-// but there was no error.
+// TODO: handle expressions which contain column references too.
+// TODO: just call this simplify_expr.  There isn't a clear case where we need to get the Constant.
 fn try_simplify_expr_to_constant(expr: &ast::Expr) -> Result<ast::Constant>{
     match expr {
         ast::Expr::Constant(c) => return Ok(c.clone()),

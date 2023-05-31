@@ -117,7 +117,6 @@ fn test_raw_row_caster() {
     // let tbl = Table::open_read(table_name)
 
     let (pgnum, csql) = crate::get_creation_sql_and_root_pagenum(&pager, "a").unwrap();
-    // TODO: put this into get_creation_sql_and_root_pagenum
     let (_, _, column_types) = crate::pt_to_ast::parse_create_statement(&csql);
     let column_types: Vec<SqlType> = column_types
         .iter()

@@ -43,7 +43,6 @@ impl<'p> Iterator<'p> {
     ///
     /// # Arguments
     ///
-    /// TODO: Actually this is going to be a root page number.
     /// * `root_page` - The root page of the btree.  Borrowed for the lifetime of the iterator.  
     /// * `pager`     - A pager for the file that holds this btree.  
     pub fn new(root_page: crate::pager::PageNum, pager: &'p crate::pager::Pager) -> Iterator<'p> {

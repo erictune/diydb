@@ -10,8 +10,7 @@ use std::boxed::Box;
 
 pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block, anyhow::Error> {
     // If the select only has a select clause,then we just need to return a constant
-    // expression.
-    // Rationale: Doing this now means we don't need to have `Project(Some(Scan))`.
+    // single row one time (or maybe multiple rows if we support UNION in the future and simplify it).
     if ss.from.is_none() {
         let mut row: Vec<ast::Constant> = vec![];
         for item in &ss.select.items {
@@ -35,19 +34,9 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
         }
         return Ok(ir::Block::ConstantRow(ir::ConstantRow { row }));
     }
-    // At this point, the select has a "from" clause, (though in a degenerate case, it might not
-    // be referenced by the select or where or other clauses.
-
-    // TODO: add an IR optimization pass between ast_to_ir and ir_interpreter, starting with this simple optimization:
-    // Working from bottom to top, do "Constant Table Propagation":
-    // if a Project's returned row is all constants, then replace Project(Scan)
-    // with a ConstantRow.
-    // e.g.:
-    // if Project.outputrows.all(|col| match col {ast::SelItem::Const(_) => true, _ => false,}))
-    // { /* collapse Project(Scan) to ConstantRow */}
-    // This gets more complex when you add in intervening Filter expressions like `Project(Filter("a=1", ConstantRow(["a"], ["1"])))`
-    // Which will come from `select 1 as a where a = 0;`, and perhaps with other select clauses.
-
+    // At this point, the select has a "from" clause.  In a degenerate case, it might not
+    // be referenced by the select or where or other clauses, but we still have to "scan" to return
+    // one result row for every input row.
     let scan = ir::Scan {
         tablename: ss.from.as_ref().unwrap().tablename.clone(),
     };
@@ -68,23 +57,19 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
         // the Project is not adding or eliminating any rows (minor efficiency boost maybe?)
     }
     Ok(ir::Block::Project(ir::Project {
-        // TODO: For star, lookup the table to expand outcols to all column names of the input table.
-        // This could be done as a pass after building the initial IR but before interpreting it.
-        // Presumably there are some optimizations or checks that can be done once we know the types
-        // of columns.  Is there a benefit to doing that before we start execution?
-        // (e.g. don't discover issues midway through long query)
+        // TODO: Consider whether to lookup the table's column names and types at this point.
+        // Table information like sizes would be needed prior to execution to do cost-based optimization.
+        // This lookup can be done as a pass after building the initial IR but before interpreting it.
+        // Presumably there are many optimizations and checks that can be done once we know the types
+        // of columns.  
         //
         // When we do look up the schema, we will need to verify it again at execution time (abort
         // if any Scans have different column names or types than previously fetched, while locking the schema
         // row for that table.)
         //
-        // For the simple queries we deal with today, we have the option to do that here with out local view.
         // In the future when we handle nested selects, we will need to find the inner select and then work
-        // outwards so that we can propagate up output names to input names. Not sure if that is better handled
-        // in the ast_to_ir pass or later.  Clearly we want to start at the leaves of the IR an work up building
-        // the IR.  But is that the time to handle types and column names?  Or in a later pass on the IR?
-        //
-        // TODO: It might be good to add types info alongside outcols, too, so that we can pre-validate expression types(?).
+        // outwards so that we can propagate up output names to input names.  That is currently handled during interpretation.
+        // Would need to be handled earlier for code generation, and maybe for other optimizations.
         outcols,
         input: Box::new(ir::Block::Scan(scan)),
     }))

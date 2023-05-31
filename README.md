@@ -74,50 +74,7 @@ Files are organized as follows:
   * `pager.rs` - provides interface to get a page of the DB for reading.  In the future, it may or may not be present in memory  when requested.  It holds the handle to the open database file.
 
 # Future Work
-See also [TODO.md](./TODO.md).
-
-In no particular order.
-- Data
-  - Support for scanning multi-page btrees.
-  - Support searching within multi-page btrees, rather than just scanning.
-  - Support indexes.
-  - Support blobs
-  - Support overflow
-- Concurrency
-  - Support basic concurrency with at least Table-level locking. No plan for MVCC.
-  - Pager layer to support multiple writers of different tables, which will require some unsafe rust to
-    hide the locking done underneath.
-- Write support
-  - inserts
-    - insert (limited to single page btree per table.)
-    - insert (with btree growth and rebalancing.)
-    - insert (blob overflow page.)
-  - deletes/modifys with size change
-    - delete table (would need freelist, vacuum/compaction)
-    - delete or modify row
-      - needs btree rebalance
-      - needs page defrag and freeblock support.
-  - persistence
-    - write state to disk at exit
-    - write state after single-page update completed.
-    - write multi-page in crash-safe way (e.g. with journal or WAL)
-  - Consistency
-    - Write rollback journal, write the transaction, and then delete the rollback journal.
-- Parsing
-  - Selection of specific columns from tables.
-  - `WHERE` clauses in SQL statements.
-  - `JOIN`
-  - `GROUP BY`
-  - nested select (maybe?)
-- Code Generation
-  - chose which indexes to use when multiple available
-  - chose loop order for joins.
-  - simplify code using relational-algebra-like rules
-  - JIT the code for speed/fun?
-    - WHERE expressions used in scans could be a jitted function.
-      - Calling rust modules from within JIT-ed code: https://y.tsutsumi.io/2018/09/30/using-rust-functions-in-llvms-jit/
-      - Inkwell.
-    - Then an entire tree of IR could be JIT-ed?
+See [TODO.md](./TODO.md).
 
 # Similar Projects
 

@@ -49,7 +49,7 @@ pub fn build_project(
                     ast::Constant::String(s) => SqlValue::Text(s.clone()),
                 }));
                 // TODO: handle AS statements.
-                // TODO: sqlite names columns after the literal expression used, like "sum(1)", postgres calls it "?column?"
+                // Sqlite3 names columns after the literal expression used, like "sum(1)"; postgres calls it "?column?"
                 out_colnames.push("?column?".to_string());
                 // TODO: check if columns can reference other columns by number.
                 out_coltypes.push(match c {

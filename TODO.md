@@ -70,16 +70,17 @@ Future Projects
 
 ## Temp table
 - `CREATE TEMP table t as (SELECT 1 as a, "two" as b, 3 as c); SELECT a, b FROM t`
+- No locking/ACID needed for in-memory.
+
+- `GROUP BY`
+
+## `JOIN`
 
 ## AST Optimization
-- [ ] Add binary expressions on literals and column names to pest grammar.
+- [X] Add binary expressions on literals and column names to pest grammar.
   - e.g.  `select 1 + 1, x + (2 + 2) from t;`
-  - [ ] addition and subtraction is sufficient - avoid precedence problem for now.
-  - See code in stash.
-- [ ] Add operators and basic expressions in `SelectClause` to `pt_to_ast.rs` and `ast.rs`.
-- [ ] Add `ast_optimize.rs` to do constant folding.
-  - [ ] e.g.  `Project(["_1", "_2"], AddColumn(Constant(2 /* 1+1 */), AddColumn(ColExpr(Add(ColName(x), Constant(4))), Scan("t")))`
-- [ ] test execution of such queries.
+- [X] Add operators and basic expressions in `SelectClause` to `pt_to_ast.rs` and `ast.rs`.
+- [X] Add `ast_optimize.rs` to do constant folding.
 
 ## Filter
 - [ ] `select a from t where a > 3;`
@@ -123,7 +124,8 @@ Quick Cleanups for when you don't have a lot of time:
 
 
 # B-tree Layer Projects
-...
+  - Support searching for a rowid, and via an index.
+  - Support overflowing TEXT/BLOB types.
 
 # Pager Layer Projects
 
@@ -146,7 +148,8 @@ Lock Pages to allow for pager and queries to co-exist.
     - Lock one page at a time, as you realize that you need it, in TableIterator.  Then let it be borrowed by CellIterator etc. Don't need to lock the whole vector, whose size is statically set at start time.
     - The locker may need to read lock the option, figure out it is a missing page, do a write lock, pull it in, release and reqacquire, or downgrade, and then read lock and do the read query.
 
-## Multi-thread demand paging, multiple pag readers
+
+## Multi-thread demand paging, multiple page readers
 - The RwLock should, IIUC, allow copy-less cloning?
 
 # Cross-Cutting Projects
@@ -157,7 +160,6 @@ for the entire duration of a scan over the table.  This means that the pager can
 a `StreamingIterator` pattern from the `streaming_iterator` crate.  This pattern forces the callers reference to memory to end before
 advancing the iterator to the next row, while still allowing for use of familiar iterator methods and functional-style constructs.
 This allows the caller to read values by references (such as when evaluating a where expression) but forces them to copy if they need values for longer (such as building an aggregation like top N).  Proof of making this work looks like scanning a large table with a "where" clause while the pager pages out pages as they are done being used, keeping memory usage within some bound such as 10 pages.
-
 
 ## Use of Indexes
 - Generate test data.
@@ -189,12 +191,33 @@ Decide how to handle spilled payloads.  Options:
 
 ## Writing
 
-  1. Support replacing values in existing rows (fixed size types), and then writing the page after the query.
-  1. Support replacing values in existing rows (variable sized types, requires reordering cells in page).
+  1. Support replacing values in existing rows (fixed size types)
+    - seek the right place in the btree to modify.
+    - Lock table or row.
+    - Write single modified page to disk afterwards, in an consistent way.
+  1. Support replacing values in existing rows 
+    - For variable sized types (TEXT), requires reordering cells in page.
   1. Support inserting values in existing tables if there is room in a page.
-  1. Support inserting values in existing tables if there is room in a page, but allocating a page for spilled data, and writing that one too.
+    - find the right place in the btree to insert.
   1. Support inserting values into existing tables, allocating a new page, and growing and balancing btree if needed, and writing all of the changes.
+    - Write multi-page in crash-safe way (e.g. with rollback journal or WAL)
   1. Support creating a new table with create syntax, and writing the to schema table, and then writing that and the root page.
+    - Lock schema table.  order updates to btree vs schema, recover if crashing.
+  1. Support deleting items.
+    - delete table (would need freelist, vacuum/compaction)
+    - delete or modify row
+      - needs btree rebalance
+      - needs page defrag and freeblock support.
 
-- Need Table locking? (when e.g. changing the definition of a table schema)
-- Need btree locking? (when growing/shrinking the btree (this might take the form of just locking certain pages?))
+- Code Generation
+  - chose which indexes to use when multiple available
+  - chose loop order for joins.
+  - simplify code using relational-algebra-like rules
+  - JIT the code for speed/fun?
+    - WHERE expressions used in scans could be a jitted function.
+      - Calling rust modules from within JIT-ed code: https://y.tsutsumi.io/2018/09/30/using-rust-functions-in-llvms-jit/
+      - Inkwell.
+    - Then an entire tree of IR could be JIT-ed?
+
+
+
