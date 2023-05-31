@@ -7,21 +7,67 @@ fn main() {
     let stdin = io::stdin();
     println!("DIYDB - simple SQL database");
     println!("Enter .help for list of commands");
-    print!("> ");
+    print!("diydb> ");
     io::stdout().flush().unwrap();
-    for line in stdin.lock().lines() {
-        match line {
-            Ok(line) => do_command(&mut c, line.as_str()),
-            Err(e) => println!("Input error: {:}", e),
-        }
-        print!("> ");
+    let mut stdin_iter = stdin.lock().lines().into_iter();
+    'outer: while let Some(result) = stdin_iter.next() {
+        let mut line = match result {
+            Ok(line) => line,
+            Err(e) => { println!("Input error: {:}", e); continue; },
+        };
+        // Gather additional lines if multi-line command.
+        // Commands that start with "." are always single line.
+        // Commands that don't start with "." are terminated with semicolon
+        // either on the first line or other lines.
+        if !line.as_str().starts_with(".") && !line.as_str().ends_with(";") {
+            'inner: loop {
+                print!("  ...> ");
+                io::stdout().flush().unwrap();
+                let extra_line = match stdin_iter.next() {
+                    None => {
+                        println!("End of input during multi-line command");
+                        break 'outer;
+                    }
+                    Some(extra_result) => {
+                        match extra_result {
+                            Ok(extra_line) => extra_line,
+                            Err(e) => {
+                                println!("Input error during multi-line command: {:}", e);
+                                break 'inner;
+                            },
+                        }
+                    }
+                };
+                // Append the extra line to the preceding lines, space-separated.
+                line.push_str(" ");
+                line.push_str(&extra_line);
+                if line.ends_with(";") {
+                    break 'inner;
+                } else {
+                    continue
+                }
+            }
+        } 
+        // A line or lines of input are collected; run the command.
+        do_command(&mut c, line.as_str());
+        // Prompt for the next command.
+        print!("diydb> ");
         io::stdout().flush().unwrap();
     }
 }
 
 fn do_command(c: &mut Context, line: &str) {
     match line {
-        l if l.to_uppercase().starts_with("SELECT") => do_select(c, l),
+        l if l.to_uppercase().starts_with("SELECT") => {
+            if l.ends_with(";") {
+                do_select(c, &l[0..l.len()-1])
+            } else {
+                // Semicolon are considered statement separators in SQL, so they are apparently not required for
+                // API calls, or for places where SQL is stored, like the schema table.  But, they are used to end
+                // possibly multi-line statements in interactive mode, which this is.
+                println!("SQL statements must end with a semicolon.")
+            }
+        }
         l if l == ".schema" => do_schema(c),
         ".help" => do_help(c),
         l if l.starts_with(".open") => {
@@ -31,7 +77,7 @@ fn do_command(c: &mut Context, line: &str) {
                 println!("Unspecified filename.");
             }
         }
-        _ => println!("Unknown command."),
+        _ => println!("Unknown command: `{}`", line),
     }
 }
 

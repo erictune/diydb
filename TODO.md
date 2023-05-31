@@ -100,7 +100,7 @@ Future Projects
 # Small Tasks
 
 Quick Cleanups for when you don't have a lot of time:
-- Have semicolon at end of sql queries.
+- [X] Have semicolon at end of sql queries.
 - `.explain` by printing IR out.
 - rename constantRow to ConstantTable and have it contain a TempTable.
 - Integration tests should run end-to-end using run_query(), checking the results.
