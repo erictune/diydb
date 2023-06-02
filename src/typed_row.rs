@@ -35,7 +35,7 @@ pub fn build_row(column_types: &Vec<SqlType>, record: &[u8]) -> Result<Row, RowC
             return Err(RowCastingError::ArrayLenMismatch);
         }
         let v = crate::serial_type::to_sql_value(&serty, bytes).map_err(|e| RowCastingError::OneOrMoreRowsNotCastable(e))?;
-        let v = crate::serial_type::cast_to_schema_type(v, column_types[i])?;  
+        let v = crate::serial_type::cast_to_schema_type(&v, column_types[i])?;  
         ret.push(v);
     }
     Ok(Row {

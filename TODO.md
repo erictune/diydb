@@ -6,7 +6,7 @@ Goal: Support inserting rows, in a minumum way.
 I don't want to go deep into writes right now, but having at least minimal write ability may make it more clear where I need to go with the pager, and maybe other iterfaces too.
 
 Cleanups:
-- [ ] in typed_row.rs and in serial_type.rs, separate basic deserialization (to only Blob, Text, Int and Null types) from Casting to non-fundamental types (Int to Real, Int to Bool, etc).  Thus, serial_type does not need to know about SqlType.
+- [X] in typed_row.rs and in serial_type.rs, separate basic deserialization (to only Blob, Text, Int and Null types) from Casting to non-fundamental types (Int to Real, Int to Bool, etc).  Thus, serial_type does not need to know about SqlType.
 - [ ] in typed_row.rs, rename build_row() to Row.from_serialized(c, r) -> Result<Row, RowCastingError>;
 - [ ] in typed_row.rs, move the serial type sizeof code into serial_type.rs.
 - [ ] in record.rs, make a "row_builder" type, that takes an array of SQLValues, and builds the header and payload vectors, and then can copy that into some other slice ("as_bytes()").

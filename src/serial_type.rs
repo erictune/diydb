@@ -170,6 +170,61 @@ pub fn to_sql_value(
     }
 }
 
+#[test]
+fn test_to_sql_value() {
+    use SqlValue::*;
+
+    let cases: Vec<(&i64, &[u8], SqlValue)> = vec![
+        // Null storage to anything is Null
+        (&0, b"", Null()),
+        // one byte ints
+        (&1, &[0x7f], Int(127)),
+        (&1, &[0xff], Int(-1)),
+        (&1, &[0x01], Int(1)),
+        // two byte ints
+        (&2, &[0x00, 0x7f], Int(127)),
+        (&2, &[0xff, 0xff], Int(-1)),
+        (&2, &[0x00, 0x01], Int(1)),
+        (&2, &[0x01, 0x00], Int(256)),
+        // three byte ints
+        (&3, &[0x00, 0x00, 0x7f], Int(127)),
+        (&3, &[0xff, 0xff, 0xff], Int(-1)),
+        (&3, &[0x00, 0x00, 0x01], Int(1)),
+        (&3, &[0x00, 0x01, 0x00], Int(256)),
+        (&3, &[0x01, 0x00, 0x00], Int(65536)),
+        // TODO: larger ints and float.
+        // Literal 0 and 1
+        (&8, b"", Int(0)),
+        (&9, b"", Int(1)),
+        // Text of various lengths
+        (&13, b"", Text("".to_string())),
+        (&19, b"Foo", Text("Foo".to_string())),
+        (&25, b"FooBar", Text("FooBar".to_string())),
+        // Blob
+        (&18, &[0x00_u8, 0x01, 0xff], Blob(Vec::from([0, 1, 255]))),
+    ];
+    for (i, case) in cases.iter().enumerate() {
+        println!("Testing case {}: deserialize typecode {}", i, case.0);
+        assert_eq!(to_sql_value(case.0, case.1).unwrap(), case.2);
+    }
+}
+
+#[test]
+fn test_to_sql_value_errors() {
+    let cases: Vec<(&i64, &[u8])> = vec![
+        // ints to blob is error.
+        (&-1, &[0x0, 0x0]),
+        (&-12345, &[0x0, 0x0]),
+        (&10, &[0x00, 0x7f]),
+        (&11, &[0x01, 0x00, 0x00]),
+    ];
+
+    for (i, case) in cases.iter().enumerate() {
+        println!("Testing case {}: deserializetypecode {} , should error", i, case.0);
+        assert!(to_sql_value(case.0, case.1).is_err());
+    }
+}
+
 /// Convert a SQLite "Storage Class" value, stored in `sql_value::SqlValue` enum, into SQL type `t`, if possible.
 /// Returns an Error if the requested cast is invalid.
 ///
@@ -221,18 +276,20 @@ pub fn to_sql_value(
 ///
 /// Does not panic.
 pub fn cast_to_schema_type(
-    v: SqlValue,
+    v: &SqlValue,
     t: SqlType,
 ) -> Result<SqlValue, Error> {
     use SqlType as SQT;
     use SqlValue::*;
-
+    // TODO: Avoid copy of possibly large blobs and strings in some way:
+    // a. take &mut ref to the value, and use std::mem::take(), leaving arg `&mut v` empty, and the string in the return value.
+    // b. if possible, mutate the variant in place via `&mut v`?
     match v {
         Null() => Ok(Null()), // Nulls are always Null, regardless of what the desired type is.  All types have to handle the possibility of Null.
         Int(i) => {
             match t {
-                SQT::Int => Ok(Int(i)),
-                SQT::Real => Ok(Real(i as f64)),
+                SQT::Int => Ok(Int(*i)),
+                SQT::Real => Ok(Real(*i as f64)),
                 SQT::Text => Ok(Text(format!("{}", i))),
                 SQT::Blob => Err(Error::Type {
                     from: SQT::Int,
@@ -246,7 +303,7 @@ pub fn cast_to_schema_type(
                     from: SQT::Real,
                     to: SQT::Int,
                 }),
-                SQT::Real => Ok(Real(f)),
+                SQT::Real => Ok(Real(*f)),
                 SQT::Text => Err(Error::Type {
                     from: SQT::Real,
                     to: SQT::Text,
@@ -257,9 +314,6 @@ pub fn cast_to_schema_type(
                 }),
             }
         }
-        // TODO: Avoid copy of possibly large blobs and strings in some way:
-        // a. take &mut ref to the value, and use std::mem::take(), leaving arg `&mut v` empty, and the string in the return value.
-        // b. if possible, mutate the variant in place?
         Blob(b) => {
             match t {
                 SQT::Int => Err(Error::Type{from: SQT::Blob, to: SQT::Int}),
@@ -272,7 +326,7 @@ pub fn cast_to_schema_type(
             match t {
                 SQT::Int => Err(Error::Type{from: SQT::Text, to: SQT::Int}),
                 SQT::Real => Err(Error::Type{from: SQT::Text, to: SQT::Real}),
-                SQT::Text => Ok(Text(s)),  // TODO: Avoid copy of possibly large strings using std::mem::take(), leaving arg `&mut v` empty.
+                SQT::Text => Ok(Text(s.clone())),
                 SQT::Blob => Err(Error::Type{from: SQT::Text, to: SQT::Blob}),
             }
         }
@@ -280,100 +334,66 @@ pub fn cast_to_schema_type(
     }
 }
 
-
-#[cfg(test)]
-fn value_to_sql_typed_value(
-    serial_type: &i64,
-    sql_type: SqlType,
-    data: &[u8],
-) -> Result<SqlValue, Error> {
-    cast_to_schema_type(to_sql_value(serial_type, data)?, sql_type)    
-}
-
 #[test]
-fn test_value_to_sql_typed_value() {
+fn test_cast_to_schema_type() {
     use SqlValue::*;
 
-    let cases: Vec<(&i64, SqlType, &[u8], SqlValue)> = vec![
+    let cases: Vec<(SqlValue, SqlType, SqlValue)> = vec![
         // Null storage to anything is Null
-        (&0, SqlType::Int, b"", Null()),
-        (&0, SqlType::Real, b"", Null()),
-        (&0, SqlType::Text, b"", Null()),
-        (&0, SqlType::Blob, b"", Null()),
-        // one byte ints to Int works for various values.
-        (&1, SqlType::Int, &[0x7f], Int(127)),
-        (&1, SqlType::Int, &[0xff], Int(-1)),
-        (&1, SqlType::Int, &[0x01], Int(1)),
-        // one byte ints to Real.
-        (&1, SqlType::Real, &[0x7f], Real(127_f64)),
-        (&1, SqlType::Real, &[0xff], Real(-1_f64)),
-        (&1, SqlType::Real, &[0x01], Real(1_f64)),
-        // two byte ints
-        (&2, SqlType::Int, &[0x00, 0x7f], Int(127)),
-        (&2, SqlType::Int, &[0xff, 0xff], Int(-1)),
-        (&2, SqlType::Int, &[0x00, 0x01], Int(1)),
-        (&2, SqlType::Int, &[0x01, 0x00], Int(256)),
-        // three byte ints
-        (&3, SqlType::Int, &[0x00, 0x00, 0x7f], Int(127)),
-        (&3, SqlType::Int, &[0xff, 0xff, 0xff], Int(-1)),
-        (&3, SqlType::Int, &[0x00, 0x00, 0x01], Int(1)),
-        (&3, SqlType::Int, &[0x00, 0x01, 0x00], Int(256)),
-        (&3, SqlType::Int, &[0x01, 0x00, 0x00], Int(65536)),
+        (Null(), SqlType::Int,  Null()),
+        (Null(), SqlType::Real, Null()),
+        (Null(), SqlType::Text, Null()),
+        (Null(), SqlType::Blob, Null()),
+        //  int to Int works for various values.
+        (Int(127), SqlType::Int, Int(127)),
+        (Int(-1),  SqlType::Int, Int(-1)),
+        (Int(1),   SqlType::Int, Int(1)),
+        //  int to Real.
+        (Int(127), SqlType::Real, Real(127_f64)),
+        (Int(-1),  SqlType::Real, Real(-1_f64)),
+        (Int(1),   SqlType::Real, Real(1_f64)),
         // TODO: larger ints and float.
-        // Literal 0 and 1
-        (&8, SqlType::Int, b"", Int(0)),
-        (&8, SqlType::Int, b"", Int(0)),
-        (&9, SqlType::Int, b"", Int(1)),
-        (&9, SqlType::Int, b"", Int(1)),
+        // 0 and 1
+        (Int(0), SqlType::Int, Int(0)),
+        (Int(1), SqlType::Int, Int(1)),
         // Text of various lengths
-        (&13, SqlType::Text, b"", Text("".to_string())),
-        (&19, SqlType::Text, b"Foo", Text("Foo".to_string())),
-        (&25, SqlType::Text, b"FooBar", Text("FooBar".to_string())),
+        (Text("".to_string()),       SqlType::Text, Text("".to_string())),
+        (Text("Foo".to_string()),    SqlType::Text, Text("Foo".to_string())),
+        (Text("FooBar".to_string()), SqlType::Text, Text("FooBar".to_string())),
         // Blob
-        (
-            &18,
-            SqlType::Blob,
-            &[0x00_u8, 0x01, 0xff],
-            Blob(Vec::from([0, 1, 255])),
-        ),
+        (Blob(Vec::from([0, 1, 255])), SqlType::Blob, Blob(Vec::from([0, 1, 255]))),
     ];
     for (i, case) in cases.iter().enumerate() {
         println!(
-            "Testing case {}: convert serial type {} to SQL type {}",
+            "Testing case {}: convert SQL value {} to SQL type {}",
             i, case.0, case.1
         );
-        assert_eq!(
-            value_to_sql_typed_value(case.0, case.1, case.2).unwrap(),
-            case.3
-        );
+        assert_eq!(cast_to_schema_type(&case.0, case.1).unwrap(), case.2);
     }
 }
 
 #[test]
 fn test_value_to_sql_typed_value_errors() {
-    let cases: Vec<(&i64, SqlType, &[u8])> = vec![
-        // ints to blob is error.
-        (&1, SqlType::Blob, &[0x7f]),
-        (&2, SqlType::Blob, &[0x00, 0x7f]),
-        (&3, SqlType::Blob, &[0x01, 0x00, 0x00]),
-        (&8, SqlType::Blob, b""),
-        (&9, SqlType::Blob, b""),
-        // Text to anythin else is an error.
-        (&19, SqlType::Int, b"Foo"),
-        (&19, SqlType::Real, b"Foo"),
-        (&19, SqlType::Blob, b"Foo"),
-        // Blob
-        (&18, SqlType::Int, &[0x00_u8, 0x01, 0xff]),
-        (&18, SqlType::Real, &[0x00_u8, 0x01, 0xff]),
-        (&18, SqlType::Text, &[0x00_u8, 0x01, 0xff]),
-        // Blob to anythin else is an error.
+    use SqlValue::*;
+
+    let cases: Vec<(SqlValue, SqlType)> = vec![
+        // Ints to blob is error.
+        (Int(1), SqlType::Blob),
+        // Text to anything else is an error.
+        (Text("hi".to_string()), SqlType::Int),
+        (Text("hi".to_string()), SqlType::Real),
+        (Text("hi".to_string()), SqlType::Blob),
+        // Blob to anything else is an error.
+        (Blob(Vec::from([0, 1, 255])), SqlType::Int),
+        (Blob(Vec::from([0, 1, 255])), SqlType::Real),
+        (Blob(Vec::from([0, 1, 255])), SqlType::Text),
+        // Bool is not supported for casting at this time.
+        (Bool(false), SqlType::Int),
+        (Bool(true), SqlType::Int),
     ];
 
     for (i, case) in cases.iter().enumerate() {
-        println!(
-            "Testing case {}: convert serial type {} to SQL type {}, should error",
-            i, case.0, case.1
-        );
-        assert!(value_to_sql_typed_value(case.0, case.1, case.2).is_err());
+        println!("Testing case {}: convert serial type {} to SQL type {}, should error", i, &case.0, case.1);
+        assert!(cast_to_schema_type(&case.0, case.1).is_err());
     }
 }
