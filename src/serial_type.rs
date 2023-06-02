@@ -77,16 +77,14 @@ pub fn typecode_to_string(serial_type: i64) -> &'static str {
 }
 
 
-/// Convert a sqlite value in "serial type enum" format into an enum that can hold any value (`SqlTypedValue`).
+/// Convert a sqlite value in "serial type enum" format into an enum that can hold any value (`SqlValue`).
 /// Returns an Error if there is a problem reading from the data.
 ///
 ///  # Arguments
 /// * `serial_type` - A SQLite serial type code.
 /// * `data` - A slice of bytes.
-/// * `convert_nulls_to_zero`  - controls result when type is NULL.
 ///
-/// If `convert_nulls_to_zero` is true, NULL serial type results in a `SqlTypedValue::Int(0)` value.
-/// If false, NULL results in `SqlTypedValue::None()`.
+/// A NULL type code (0) results in `SqlValue::Null()`
 ///
 /// # Comparison to SQLite
 ///

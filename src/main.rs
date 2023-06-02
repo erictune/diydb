@@ -117,7 +117,6 @@ fn do_schema(c: &mut Context) {
 }
 
 fn do_select(c: &mut Context, l: &str) {
-    println!("Doing query: {}", l);
     if let Err(e) = diydb::run_query(&c.pagerset, l) {
         println!("Error running query: {}", e);
     }

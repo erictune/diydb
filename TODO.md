@@ -1,5 +1,30 @@
 Current Projects Stack
 ----------------------
+# Side Project: Minimal Writing
+
+Goal: Support inserting rows, in a minumum way.
+I don't want to go deep into writes right now, but having at least minimal write ability may make it more clear where I need to go with the pager, and maybe other iterfaces too.
+
+Cleanups:
+- [ ] in typed_row.rs and in serial_type.rs, separate basic deserialization (to only Blob, Text, Int and Null types) from Casting to non-fundamental types (Int to Real, Int to Bool, etc).  Thus, serial_type does not need to know about SqlType.
+- [ ] in typed_row.rs, rename build_row() to Row.from_serialized(c, r) -> Result<Row, RowCastingError>;
+- [ ] in typed_row.rs, move the serial type sizeof code into serial_type.rs.
+- [ ] in record.rs, make a "row_builder" type, that takes an array of SQLValues, and builds the header and payload vectors, and then can copy that into some other slice ("as_bytes()").
+- [ ] in typed_row.rs, add a row.serialize_to(&mut byte_slice) -> Result<(), SerializingError> : this gives an error if the target byte_slice does not have room for the serialized code.  It uses record.rs.  
+
+ to existing single-page tables which have room in their sole page for new cells.
+- extend serial_type.rs to work in the reverse.  Copying is okay.
+  - fuzz testing!
+- extend pager to grant write access to a page.
+- extend src/btree/cell.rs to support writing an additional cell to a page, or error if there is no room.  adds `append` method.
+- extend src/btree/leaf.rs to support appending Cells too.  
+- extend src/btree/table.rs to support appending Cells too, and seeking last page.
+- defer tree rebalancing.
+- extend parser and AST to support `INSERT INTO TABLE VALUES(...)`.  This is an append operation on a btree opened to write.
+- add run_insert method like run_query.  There is no IR for insert operations, I guess.  You just do them. 
+- read and write locks or flags in the pager?
+- defer multi-page changes which would need a rollback log or WAL file.
+
 # Expressions
 1. [X] Introduce Expr with only Constant member.
   - No new queries supported.
@@ -89,6 +114,8 @@ Future Projects
 - [ ] `Filter` in IR.
 
 ## IR Optimization
+- Maybe consolidate project, filter, and select into a single IR block operation, which is what Sqlite appears to do, if you look at `EXPLAIN QUERY PLAN` output.  This could still manifest as one or several iterators in a chain when executing it.  But moving the project closer to the lowest iterator would allow skipping serial-type conversion of unused (possibly large and even spilled) fields.
+
 - [ ] Parse a query which can be optimized by changing a scan to a rowid or index seek.
   - e.g. `select * from t where rowid = 3`
 - [ ] Post IR generation, detect that `Scan` can be replaced with  `SeekRowid`
@@ -101,33 +128,37 @@ Future Projects
 
 Quick Cleanups for when you don't have a lot of time:
 - [X] Have semicolon at end of sql queries.
-- `.explain` by printing IR out.
-- rename constantRow to ConstantTable and have it contain a TempTable.
-- Integration tests should run end-to-end using run_query(), checking the results.
-- Replacing unwrap and expect with returning errors (using thiserr in modules, and anyhow in main).
-  Remaining file: lib.rs, pt_to_ast.rs, and btree/
-- Using clippy.
-- Improve the CLI to allow opening named files.
-- Make a Pager::Page object that has is_present(), purpose(), start_offset(), use_read() and use_write() methods.
-  The use_read() and use_write()s return a Pager::PageRef which the caller puts on their stack to hold a lock.
-  They wrap the RwLock::LockResult().
-- Make a Pager::PageRef object that represents a read or write lock on a page and allows borrowing the page contents
- via borrow() and borrow_mut() methods.
-- Make a Table::read_lock() and table_writelock() methods that lock the table from being redefined, and locks the schema table
-  row from being modified.
-- Replace panics that are likely to happen during interactive with Results<>.
-- Try to Box the File in pager.rs in a temporary box, and then use it, then move it to the Box in the constructed struct,
-  so that we can run the header check in open().
-- Lock db file when opening it.
-- look for stale TODOs
-- Get full coverage of lib.rs in integration test.
+- [X] Integration tests should run end-to-end using run_query(), checking the results.
+- [ ] Replacing `panic`, `unwrap` and `expect` with returning errors (using thiserr in lower modules, and `anyhow::Result` and `bail` in main and higher modules.).
+- [ ] Get full coverage of lib.rs in integration test.
+
+# Recurring Tasks 
+
+- Run `cargo fmt` 
+- Run `cargo clippy`.
+- Look for stale TODOs
+- Review README.md
 
 
 # B-tree Layer Projects
-  - Support searching for a rowid, and via an index.
-  - Support overflowing TEXT/BLOB types.
+
+- Support searching for a rowid, and via an index.
+- Support overflowing TEXT/BLOB types.
 
 # Pager Layer Projects
+
+- [X] Improve the CLI to allow opening named files.
+- [ ] file system-level lock db file when opening it.
+- [ ] Make a Pager::Page object that has is_present(), purpose(), start_offset(), use_read() and use_write() methods.
+    - This is a precursor to supporting locking, and writes.
+- [ ] Make a Pager::PageRef object that represents a read or write lock on a page and allows borrowing the page contents
+    - use_read() and use_write() methods on Pager::Page can return the Pager::PageRef which the caller puts on their stack.
+      Pager::PageRef will wrap the RwLock::LockResult.
+- [ ] Make a Table::read_lock() and table_writelock() methods that lock the table from being redefined, and locks the schema table
+  row from being modified.
+- [ ] Replace panics that are likely to happen during interactive with Results<>.
+- [ ] Try to Box the File in pager.rs in a temporary box, and then use it, then move it to the Box in the constructed struct,
+  so that we can run the header check in open().
 
 ## Staticification
 
@@ -170,6 +201,8 @@ This allows the caller to read values by references (such as when evaluating a w
 - In Optimize step, look for  "WHERE column = value" queries and then look for applicable indexes for each WHERE constraint.
 - Add RangeIteraror that returns index rows from Lo to Hi (with lower / upper bounds, like btree)/
 - How are Indexes updated atomically with the table?
+- run queries in sqlite3 with `.eqp on` to see how it runs them, and compare to what I do (e.g. print my IR when that flag is on too).
+
 
 ## Sequential I/O optimization
 The Scan IR Op is not required to walk the database tree in order, just visit all the pages.
@@ -208,6 +241,8 @@ Decide how to handle spilled payloads.  Options:
     - delete or modify row
       - needs btree rebalance
       - needs page defrag and freeblock support.
+
+# Execution Layer Ideas
 
 - Code Generation
   - chose which indexes to use when multiple available

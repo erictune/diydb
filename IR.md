@@ -55,7 +55,7 @@ etc...
 
 |  Preconditions | SQL Statement           |    IR    |   Notes |
 | - | --------------- | ----------- | --------- |
-| None | `select 1` | `ScanConstantRows` |  |
+| None | `select 1` | `ConstantRow` |  |
 | Table `t` | `select * from t` | `Scan("t")` |  Selecting only * means we don't need a `Project` block. |
 | Table `t` | `select * from t where rowid = 1` | `SeekRowid("t", rowid)` | |
 | Table `t` | `select * from t where a = 1` | `Filter("a=1", Scan(t))` | |
