@@ -22,6 +22,8 @@ pub enum Error {
     Null,
     #[error("Code which was thought unreachable was reached.")]
     Unreachable,
+    #[error("Input value's type is not a valid storage class type.")]
+    NotStorageClassType
 }
 
 /// Convert a serial type number to a string describing the type suitable for debug printing.
@@ -136,9 +138,40 @@ pub fn value_to_sql_typed_value(
     sql_type: SqlType,
     data: &[u8],
 ) -> Result<SqlValue, Error> {
-    use SqlType as SQT;
+    cast_to_schema_type(to_sql_value(serial_type, data)?, sql_type)    
+}
+
+/// Deserialize bytes in "SQLIte serial type" format into one of a few native types (`SqlValue`).
+/// 
+/// Returns an Error if there is a problem reading from the data.
+///
+///  # Arguments
+/// * `serial_type` - A SQLite serial type code applying to `data`
+/// * `data` - A slice of bytes.
+///
+/// The possible types produced are:
+/// - SqlValue::Null
+/// - SqlValue::Int
+/// - SqlValue::Real
+/// - SqlValue::Text
+/// - SqlValue::Blob.
+/// 
+/// These types are correspond to what SQLite calls "Storage Classes" [https://www.sqlite.org/datatype3.html#storage_classes_and_datatypes]
+///
+/// This function is unaware of what the "schema type" is of the row which the stored value represents.
+/// Thus, it may be necessary later to convert SqlValue::Int(0) to SqlValue::Bool(true) or SqlValue::Real(0.0), etc.
+///
+/// SQLites rules for when to convert from a Storage class (serial type) to the type affinity of the column are complex, and not
+/// covered here.
+///
+/// # Panics
+///
+/// Does not panic.
+pub fn to_sql_value(
+    serial_type: &i64,
+    data: &[u8],
+) -> Result<SqlValue, Error> {
     use SqlValue::*;
-    let sqt = sql_type;
 
     let mut c = std::io::Cursor::new(data);
     match serial_type {
@@ -153,9 +186,9 @@ pub fn value_to_sql_typed_value(
         // 5	        6	        Value is a big-endian 48-bit twos-complement integer.
         // 6	        8	        Value is a big-endian 64-bit twos-complement integer.
         x @ 1..=6 => {
-            let i = match x {
-                1 => c.read_i8().map_err(Error::Io)? as i64,
-                2 => c.read_i16::<BigEndian>().map_err(Error::Io)? as i64,
+            match x {
+                1 => Ok(Int(c.read_i8().map_err(Error::Io)? as i64)),
+                2 => Ok(Int(c.read_i16::<BigEndian>().map_err(Error::Io)? as i64)),
                 3 => {
                     let mut bytes = [0_u8; 4];
                     c.read_exact(&mut bytes[1..]).map_err(Error::Io)?;
@@ -163,17 +196,104 @@ pub fn value_to_sql_typed_value(
                         false => 0,
                         true => 0xff,
                     };
-                    i32::from_be_bytes(bytes) as i64
+                    Ok(Int(i32::from_be_bytes(bytes) as i64))
                 }
-                4 => c.read_i32::<BigEndian>().map_err(Error::Io)? as i64,
-                5 => 0,
-                6 => c.read_i64::<BigEndian>().map_err(Error::Io)?,
-                _ => return Err(Error::Unreachable),
-            };
-            if *x == 5_i64 {
-                return Err(Error::Unimplemented);
+                4 => Ok(Int(c.read_i32::<BigEndian>().map_err(Error::Io)? as i64)),
+                5 => Err(Error::Unimplemented),
+                6 => Ok(Int(c.read_i64::<BigEndian>().map_err(Error::Io)?)),
+                _ => Err(Error::Unreachable),
             }
-            match sqt {
+        }
+        // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
+        7 => Ok(Real(c.read_f64::<BigEndian>().map_err(Error::Io)?)),
+        // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
+        8 => Ok(Int(0_i64)),
+        // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
+        9 => Ok(Int(1_i64)),
+        // 10,11	variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file...
+        10 | 11 => Err(Error::InvalidSerialTypeCode),
+        // N≥12 & even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
+        // N≥13 & odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
+        x @ 12.. => {
+            match (*x % 2) == 0 {
+                true /* odd */=>  {
+                    let mut buf = vec![0_u8; (*x as usize - 12) / 2];
+                    c.read_exact(&mut buf[..]).map_err(Error::Io)?;
+                    Ok(Blob(buf.clone()))
+                }
+                false /* even */ => {
+                    let mut buf = vec![0_u8; (*x as usize - 13) / 2];
+                    c.read_exact(&mut buf[..]).map_err(Error::Io)?;
+                    let s = String::from_utf8(buf).map_err(Error::InvalidStringEncoding)?;
+                    Ok(Text(s))
+                }
+            }
+        }
+        i64::MIN..=-1 => Err(Error::InvalidSerialTypeCode),
+    }
+}
+
+/// Convert a SQLite "Storage Class" value, stored in `sql_value::SqlValue` enum, into SQL type `t`, if possible.
+/// Returns an Error if the requested cast is invalid.
+///
+///  # Arguments
+/// * `t` - A `sql_value::SqlValue`, with one of these variants: `Int`, `Text`, `Real`, `Blob`, `Null`.
+/// * `data` - A slice of bytes.
+//////
+/// # Comparison to SQLite
+///
+/// SQLite has "Storage Classes" [https://www.sqlite.org/datatype3.html#storage_classes_and_datatypes]
+/// NULL, REAL, INTEGER, TEXT, BLOB, and each value is stored as one of those classes.
+///
+/// SQLite Columns have SQL type affinities, which are one of:
+/// TEXT, NUMERIC, INTEGER, REAL, BLOB
+/// We also support these types for columns, except NUMERIC which is wierd and we won't support that type name in the grammar
+/// and so not in converstion either.
+///
+/// SQLites rules for when to convert from a Storage class (serial type) to the type affinity are complex.
+///
+/// We implement conversion rules that allows common, recently-generated SQLite-generated tables to be read.
+/// At the same time, it avoids precision-loosing conversions.  It does not attempt to provide exact compatibility
+/// with SQLite.
+///
+/// The following table shows what happens if an input SqlValue is requested to convert to SqlType.
+/// The *Returns* column is written using `use sql_value::SqlValue::*;` and
+/// `use diydb::serial_type::Error::*;`
+///
+/// | variant in | target type | returns | comments |
+/// | ---------- | ----- | -------- | - |     
+/// | NULL       | *     | Ok(Null) |   |
+/// | Real       | Real  | Ok(Real) |   |
+/// | Real       | Int   | Err      | we don't support this to avoid silent loss of precision |
+/// | Real       | Text  | Err      |   |
+/// | Real       | Blob  | Err      |   |
+/// | Int        | Real  | Ok(Int)  | necessary since SQLite stores 2.0 as Integer(2). |
+/// | Int        | Int   | Ok(Int)  | Smaller types are sign extended to i64. |
+/// | Int        | Text  | Ok(Text) | necessary since SQLite stores "2" as Integer(2), etc. |
+/// | Int        | Blob  | Err      |   |
+/// | Text       | Real  | Err      |   |
+/// | Text       | Text  | Ok(Text) |   |
+/// | Text       | Int   | Err      |   |
+/// | Text       | Blob  | Err      |   |
+/// | Blob       | Real  | Err      |   |
+/// | Blob       | Int   | Err      |   |
+/// | Blob       | Text  | Err      |   |
+/// | BLOB       | Blob  | Ok(Blob) |   |
+///
+/// # Panics
+///
+/// Does not panic.
+pub fn cast_to_schema_type(
+    v: SqlValue,
+    t: SqlType,
+) -> Result<SqlValue, Error> {
+    use SqlType as SQT;
+    use SqlValue::*;
+
+    match v {
+        Null() => Ok(Null()), // Nulls are always Null, regardless of what the desired type is.  All types have to handle the possibility of Null.
+        Int(i) => {
+            match t {
                 SQT::Int => Ok(Int(i)),
                 SQT::Real => Ok(Real(i as f64)),
                 SQT::Text => Ok(Text(format!("{}", i))),
@@ -183,10 +303,8 @@ pub fn value_to_sql_typed_value(
                 }),
             }
         }
-        // 7	        8	        Value is a big-endian IEEE 754-2008 64-bit floating point number.
-        7 => {
-            let f = c.read_f64::<BigEndian>().map_err(Error::Io)?;
-            match sqt {
+        Real(f) => {
+            match t {
                 SQT::Int => Err(Error::Type {
                     from: SQT::Real,
                     to: SQT::Int,
@@ -202,58 +320,29 @@ pub fn value_to_sql_typed_value(
                 }),
             }
         }
-        // 8	        0	        Value is the integer 0. (Only available for schema format 4 and higher.)
-        8 => match sqt {
-            SQT::Int => Ok(Int(0_i64)),
-            SQT::Real => Ok(Real(0_f64)),
-            SQT::Text => Ok(Text(String::from("0"))),
-            SQT::Blob => Err(Error::Type {
-                from: SQT::Int,
-                to: SQT::Blob,
-            }),
-        },
-        // 9	        0	        Value is the integer 1. (Only available for schema format 4 and higher.)
-        9 => match sqt {
-            SQT::Int => Ok(Int(1_i64)),
-            SQT::Real => Ok(Real(1_f64)),
-            SQT::Text => Ok(Text(String::from("1"))),
-            SQT::Blob => Err(Error::Type {
-                from: SQT::Int,
-                to: SQT::Blob,
-            }),
-        },
-        // 10,11	variable	Reserved for internal use. These serial type codes will never appear in a well-formed database file...
-        10 | 11 => Err(Error::InvalidSerialTypeCode),
-        // N≥12 & even	(N-12)/2	Value is a BLOB that is (N-12)/2 bytes in length.
-        // N≥13 & odd	(N-13)/2	Value is a string in the text encoding and (N-13)/2 bytes in length. The nul terminator is not stored.
-        x @ 12.. => {
-            match (*x % 2) == 0 {
-                true /* odd */=>  {
-                    let mut buf = vec![0_u8; (*x as usize - 12) / 2];
-                    c.read_exact(&mut buf[..]).map_err(Error::Io)?;
-                    match sqt {
-                        SQT::Int => Err(Error::Type{from: SQT::Blob, to: SQT::Int}),
-                        SQT::Real => Err(Error::Type{from: SQT::Blob, to: SQT::Real}),
-                        SQT::Text => Err(Error::Type{from: SQT::Blob, to: SQT::Text}),
-                        SQT::Blob => Ok(Blob(buf.clone())),
-                    }
-                }
-                false /* even */ => {
-                    let mut buf = vec![0_u8; (*x as usize - 13) / 2];
-                    c.read_exact(&mut buf[..]).map_err(Error::Io)?;
-                    let s = String::from_utf8(buf).map_err(Error::InvalidStringEncoding)?;
-                    match sqt {
-                        SQT::Int => Err(Error::Type{from: SQT::Text, to: SQT::Int}),
-                        SQT::Real => Err(Error::Type{from: SQT::Text, to: SQT::Real}),
-                        SQT::Text => Ok(Text(s)),
-                        SQT::Blob => Err(Error::Type{from: SQT::Text, to: SQT::Blob}),
-                    }
-                }
+        // TODO: Avoid copy of possibly large blobs and strings in some way:
+        // a. take &mut ref to the value, and use std::mem::take(), leaving arg `&mut v` empty, and the string in the return value.
+        // b. if possible, mutate the variant in place?
+        Blob(b) => {
+            match t {
+                SQT::Int => Err(Error::Type{from: SQT::Blob, to: SQT::Int}),
+                SQT::Real => Err(Error::Type{from: SQT::Blob, to: SQT::Real}),
+                SQT::Text => Err(Error::Type{from: SQT::Blob, to: SQT::Text}),
+                SQT::Blob => Ok(Blob(b.clone())), 
             }
         }
-        i64::MIN..=-1 => Err(Error::InvalidSerialTypeCode),
+        Text(s) => {
+            match t {
+                SQT::Int => Err(Error::Type{from: SQT::Text, to: SQT::Int}),
+                SQT::Real => Err(Error::Type{from: SQT::Text, to: SQT::Real}),
+                SQT::Text => Ok(Text(s)),  // TODO: Avoid copy of possibly large strings using std::mem::take(), leaving arg `&mut v` empty.
+                SQT::Blob => Err(Error::Type{from: SQT::Text, to: SQT::Blob}),
+            }
+        }
+        Bool(_) => Err(Error::NotStorageClassType)
     }
 }
+
 
 #[test]
 fn test_value_to_sql_typed_value() {
