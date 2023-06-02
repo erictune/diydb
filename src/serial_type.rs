@@ -78,69 +78,6 @@ pub fn typecode_to_string(serial_type: i64) -> &'static str {
     }
 }
 
-
-/// Convert a sqlite value in "serial type enum" format into an enum that can hold any value (`SqlValue`).
-/// Returns an Error if there is a problem reading from the data.
-///
-///  # Arguments
-/// * `serial_type` - A SQLite serial type code.
-/// * `data` - A slice of bytes.
-///
-/// A NULL type code (0) results in `SqlValue::Null()`
-///
-/// # Comparison to SQLite
-///
-/// SQLite has "Storage Classes" [https://www.sqlite.org/datatype3.html#storage_classes_and_datatypes]
-/// NULL, REAL, INTEGER, TEXT, BLOB, and each value is stored as one of those classes.
-///
-/// SQLite Columns have SQL type affinities, which are one of:
-/// TEXT, NUMERIC, INTEGER, REAL, BLOB
-/// We also support these types for columns, except NUMERIC which is wierd and we won't support that type name in the grammar
-/// and so not in converstion either.
-///
-/// SQLites rules for when to convert from a Storage class (serial type) to the type affinity are complex.
-///
-/// We implement automatic conversion rules that allows common, recently-generated SQLite-generated tables to be read.
-/// At the same time, it avoids precision-loosing kr surprising conversions, and does not attempt to provide exact compatibility
-/// with SQLite.
-///
-/// The following table shows what happens if a Storage Class (StoCl) is *read* from a SQLite file, and conversion is requested
-/// to the SQL type (SqlTy).   The Ok Return Type column is written assuming that `use sql_value::SqlValue::*;` and
-/// `use diydb::serial_type::Error::*;`
-///
-/// | StoCl | SqlTy | Return type enum variant | comments |
-/// | ----- | ----- | -------- | - |
-/// | NULL  | *     | Ok(Null) | |
-/// | REAL  | REAL  | Ok(Real) | |
-/// | REAL  | INT   | Err      | we don't support this to avoid silent loss of precision |
-/// | REAL  | TEXT  | Err      | |
-/// | REAL  | BLOB  | Err      | |
-/// | INT   | REAL  | Ok(Int)  | necessary since SQLite stores 2.0 as Integer(2). |
-/// | INT   | INT   | Ok(Int)  | Smaller types are sign extended to i64. |
-/// | INT   | TEXT  | Ok(Text) | necessary since SQLite stores "2" as Integer(2), etc. |
-/// | INT   | BLOB  | Err      | |
-/// | TEXT  | REAL  | Err      | |
-/// | TEXT  | TEXT  | Ok(Text) | |
-/// | TEXT  | INT   | Err      | |
-/// | TEXT  | BLOB  | Err      | |
-/// | BLOB  | REAL  | Err      | |
-/// | BLOB  | INT   | Err      | |
-/// | BLOB  | TEXT  | Err      | |
-/// | BLOB  | BLOB  | Ok(Blob) | |
-///
-/// When we get to writes, we may need a new conversion table.
-///
-/// # Panics
-///
-/// Does not panic.
-pub fn value_to_sql_typed_value(
-    serial_type: &i64,
-    sql_type: SqlType,
-    data: &[u8],
-) -> Result<SqlValue, Error> {
-    cast_to_schema_type(to_sql_value(serial_type, data)?, sql_type)    
-}
-
 /// Deserialize bytes in "SQLIte serial type" format into one of a few native types (`SqlValue`).
 /// 
 /// Returns an Error if there is a problem reading from the data.
@@ -343,6 +280,15 @@ pub fn cast_to_schema_type(
     }
 }
 
+
+#[cfg(test)]
+fn value_to_sql_typed_value(
+    serial_type: &i64,
+    sql_type: SqlType,
+    data: &[u8],
+) -> Result<SqlValue, Error> {
+    cast_to_schema_type(to_sql_value(serial_type, data)?, sql_type)    
+}
 
 #[test]
 fn test_value_to_sql_typed_value() {
