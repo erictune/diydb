@@ -57,7 +57,7 @@ impl<'p> StreamingIterator for TableStreamingIterator<'p> {
         self.item = match self.raw_item {
             None => None,
             Some(raw) => Some(
-                crate::typed_row::build_row(&self.column_types, raw.1)
+                crate::typed_row::from_serialized(&self.column_types, raw.1)
                     .expect("Should have cast the row."),
             ), // TODO: pass through errors?
         }

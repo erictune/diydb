@@ -6,13 +6,20 @@ Goal: Support inserting rows, in a minumum way.
 I don't want to go deep into writes right now, but having at least minimal write ability may make it more clear where I need to go with the pager, and maybe other iterfaces too.
 
 Cleanups:
-- [X] in typed_row.rs and in serial_type.rs, separate basic deserialization (to only Blob, Text, Int and Null types) from Casting to non-fundamental types (Int to Real, Int to Bool, etc).  Thus, serial_type does not need to know about SqlType.
-- [ ] in typed_row.rs, rename build_row() to Row.from_serialized(c, r) -> Result<Row, RowCastingError>;
-- [ ] in typed_row.rs, move the serial type sizeof code into serial_type.rs.
+- [x] in typed_row.rs and in serial_type.rs, separate basic deserialization (to only Blob, Text, Int and Null types) from Casting to non-fundamental types (Int to Real, Int to Bool, etc).  Thus, serial_type does not need to know about SqlType.
+- [x] in typed_row.rs, move the serial type sizeof code into serial_type.rs.
+- [x] in typed_row.rs, rename build_row() to from_serialized() -> Result<Row, RowCastingError>;
+
+New Code:
+- [ ] in typed_row.rs, implement a full row writing routine (see sketch in uncommited typed_row.rs.writer).  Use it to fuzz test going both ways.
+- [ ] write function in serial_type.rs to determine the serial_type_code for a sql_value, for the purpose of determining its size, to see if it will fit.
+- [ ] sketch out the code that uses this in btree/cell.rs, as outlined in serial_type.rs.trait.
+
 - [ ] in record.rs, make a "row_builder" type, that takes an array of SQLValues, and builds the header and payload vectors, and then can copy that into some other slice ("as_bytes()").
 - [ ] in typed_row.rs, add a row.serialize_to(&mut byte_slice) -> Result<(), SerializingError> : this gives an error if the target byte_slice does not have room for the serialized code.  It uses record.rs.  
 
- to existing single-page tables which have room in their sole page for new cells.
+Writing to existing tables which have room in their last page for new cells (no btree growth yet).
+
 - extend serial_type.rs to work in the reverse.  Copying is okay.
   - fuzz testing!
 - extend pager to grant write access to a page.

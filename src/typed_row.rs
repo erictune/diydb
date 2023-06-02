@@ -27,7 +27,7 @@ pub enum RowCastingError {
     ArrayLenMismatch,
 }
 
-pub fn build_row(column_types: &Vec<SqlType>, record: &[u8]) -> Result<Row, RowCastingError> {
+pub fn from_serialized(column_types: &Vec<SqlType>, record: &[u8]) -> Result<Row, RowCastingError> {
     use crate::record::ValueIterator;
     let mut ret: Vec<SqlValue> = vec![];
     for (i, (serty, bytes)) in ValueIterator::new(record).enumerate() {
@@ -44,7 +44,7 @@ pub fn build_row(column_types: &Vec<SqlType>, record: &[u8]) -> Result<Row, RowC
 }
 
 #[test]
-fn test_build_row() {
+fn test_from_serialized() {
     use SqlValue::*;
     // literal 0 | literal 1 | float 3.1415 | "Ten" | NULL
     let test_record: &[u8] = &[
@@ -58,7 +58,7 @@ fn test_build_row() {
         SqlType::Text,
         SqlType::Int,
     ];
-    let tr = build_row(&column_types, &test_record).unwrap();
+    let tr = from_serialized(&column_types, &test_record).unwrap();
     assert_eq!(tr.items.len(), 5);
     assert_eq!(tr.items[0], Int(0));
     assert_eq!(tr.items[1], Int(1));
@@ -94,7 +94,7 @@ impl<'a> Iterator for RawRowCaster<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.it.next() {
             None => None,
-            Some(r) => Some(build_row(&self.column_types, r.1)),
+            Some(r) => Some(from_serialized(&self.column_types, r.1)),
         }
     }
 }
