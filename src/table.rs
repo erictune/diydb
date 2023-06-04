@@ -3,7 +3,7 @@
 use std::str::FromStr;
 use streaming_iterator::StreamingIterator;
 
-use crate::typed_row::{RawRowCaster, Row, RowCastingError};
+use crate::typed_row::Row;
 use crate::{pager, sql_type::SqlType};
 
 pub struct Table<'a> {
@@ -127,15 +127,18 @@ impl<'a> Table<'a> {
     }
 
     pub fn to_temp_table(&self) -> core::result::Result<crate::TempTable, Error> {
-        let r: Result<Vec<Row>, RowCastingError> =
-            RawRowCaster::new(self.column_types.clone(), &mut self.iter()).collect();
-        let r = match r {
-            Err(_) => return Err(Error::CastingError),
-            Ok(r) => r,
-        };
+        let mut rows: Vec<Row> = vec![];
+        let mut it = self.iter();
+        while let Some((_rowid, serialized_row)) = it.next() {
+            if let Ok(row) = crate::typed_row::from_serialized(&self.column_types, serialized_row) {
+                rows.push(row.clone());
+            } else {
+                return Err(Error::CastingError)
+            }
+        }
         Ok(crate::TempTable {
             // TODO: take() a limited number of rows when collect()ing them, and return error if they don't fit?
-            rows: r,
+            rows,
             column_names: self.column_names.clone(),
             column_types: self.column_types.clone(),
         })

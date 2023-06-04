@@ -20,22 +20,35 @@ pub struct Row {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum RowCastingError {
-    #[error("One or more rows were not castable due to, first one given.")]
-    OneOrMoreRowsNotCastable(#[from] crate::serial_type::Error),
+pub enum Error {
+    #[error("Deserialization error, column number {}, detail : {}", colnum, detail)]
+    Deserialization{
+        detail: crate::serial_type::Error,
+        colnum: usize,
+    },
+    #[error("Casting error, column number {}, detail : {}", colnum, detail)]
+    Casting{
+        detail: crate::serial_type::Error,
+        colnum: usize
+    },
     #[error("Type array and value array length mismatch.")]
     ArrayLenMismatch,
 }
 
-pub fn from_serialized(column_types: &Vec<SqlType>, record: &[u8]) -> Result<Row, RowCastingError> {
+pub fn from_serialized(column_types: &Vec<SqlType>, record: &[u8]) -> Result<Row, Error> {
     use crate::record::ValueIterator;
     let mut ret: Vec<SqlValue> = vec![];
-    for (i, (serty, bytes)) in ValueIterator::new(record).enumerate() {
-        if i > column_types.len() {
-            return Err(RowCastingError::ArrayLenMismatch);
+    for (colnum, (serty, bytes)) in ValueIterator::new(record).enumerate() {
+        if colnum > column_types.len() {
+            return Err(Error::ArrayLenMismatch);
         }
-        let v = crate::serial_type::to_sql_value(&serty, bytes).map_err(|e| RowCastingError::OneOrMoreRowsNotCastable(e))?;
-        let v = crate::serial_type::cast_to_schema_type(&v, column_types[i])?;  
+        let v = crate::serial_type::to_sql_value(
+            &serty,
+            bytes
+        ).map_err(|detail| Error::Deserialization{ colnum, detail })?;
+        let v = crate::serial_type::cast_to_schema_type(
+            &v, column_types[colnum]
+        ).map_err(|detail| Error::Casting{colnum, detail})?;  
         ret.push(v);
     }
     Ok(Row {
@@ -65,73 +78,4 @@ fn test_from_serialized() {
     assert_eq!(tr.items[2], Real(3.1415));
     assert_eq!(tr.items[3], Text(String::from("Ten")));
     assert_eq!(tr.items[4], Null());
-}
-
-/// provides iterator adapter to convert an iterator over raw table rows into an iterator over typed rows (Vec<SqlTypedValue>).
-/// Note that the type of the rows is based on the serial type of the record.  The caller still needs to check that the
-/// returned enum variant in the row matches the schema-specified value, if this matters to the caller.
-pub struct RawRowCaster<'a> {
-    column_types: Vec<SqlType>,
-    // I tried to make this generic over type T, to hide our internal implementation of
-    // a btree table iterator.  I have tried things like:
-    // `raw_row_iter() -> impl Iterator<Item = &RawRow>`
-    // and
-    // `new(it: T)` where `T: Iterator<Item = (i64, Vec<u8>)> >`.
-    // However, when I tried to do this, I got rust errors about
-    // assocaited type bounds being unstable.
-    // fn raw_row_iter(&self) -> &btree::table::Iterator { self.rows.iter() }
-    it: &'a mut crate::btree::table::Iterator<'a>,
-}
-
-impl<'a> RawRowCaster<'a> {
-    pub fn new(column_types: Vec<SqlType>, it: &'a mut crate::btree::table::Iterator<'a>) -> Self {
-        Self { column_types, it }
-    }
-}
-
-impl<'a> Iterator for RawRowCaster<'a> {
-    type Item = Result<Row, RowCastingError>;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.it.next() {
-            None => None,
-            Some(r) => Some(from_serialized(&self.column_types, r.1)),
-        }
-    }
-}
-
-#[cfg(test)]
-fn path_to_testdata(filename: &str) -> String {
-    std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
-        + "/resources/test/"
-        + filename
-}
-
-#[test]
-fn test_raw_row_caster() {
-    use SqlValue::*;
-    // literal 0 | literal 1 | float 3.1415 | "Ten" | NULL
-    let path = path_to_testdata("minimal.db");
-    let pager =
-        crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
-    // let tbl = Table::open_read(table_name)
-
-    let (pgnum, csql) = crate::get_creation_sql_and_root_pagenum(&pager, "a").unwrap();
-    let (_, _, column_types) = crate::pt_to_ast::parse_create_statement(&csql);
-    let column_types: Vec<SqlType> = column_types
-        .iter()
-        .map(|s| SqlType::from_str(s.as_str()).unwrap())
-        .collect();
-    // let ti = tbl.iter()
-    let mut ti = crate::new_table_iterator(&pager, pgnum);
-    let mut rrc = RawRowCaster::new(column_types, &mut ti);
-    {
-        let x = rrc.next();
-        assert!(x.is_some());
-        let x = x.unwrap();
-        assert!(x.is_ok());
-        let x = x.unwrap();
-        assert_eq!(x.items.len(), 1);
-        assert_eq!(x.items[0], Int(1));
-    }
-    assert!(rrc.next().is_none());
 }
