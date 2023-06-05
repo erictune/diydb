@@ -5,32 +5,34 @@ Current Projects Stack
 Goal: Support inserting rows, in a minumum way.
 I don't want to go deep into writes right now, but having at least minimal write ability may make it more clear where I need to go with the pager, and maybe other iterfaces too.
 
+## Details of next steps
+
 Cleanups:
 - [x] in typed_row.rs and in serial_type.rs, separate basic deserialization (to only Blob, Text, Int and Null types) from Casting to non-fundamental types (Int to Real, Int to Bool, etc).  Thus, serial_type does not need to know about SqlType.
 - [x] in typed_row.rs, move the serial type sizeof code into serial_type.rs.
-- [x] in typed_row.rs, rename build_row() to from_serialized() -> Result<Row, RowCastingError>;
+- [x] in typed_row.rs, rename build_row() to from_serialized() -> Result<Row, Error>;
 
 New Code:
-- [ ] in typed_row.rs, implement a full row writing routine (see sketch in uncommited typed_row.rs.writer).  Use it to fuzz test going both ways.
-- [ ] write function in serial_type.rs to determine the serial_type_code for a sql_value, for the purpose of determining its size, to see if it will fit.
-- [ ] sketch out the code that uses this in btree/cell.rs, as outlined in serial_type.rs.trait.
+- [x] in typed_row.rs, implement a full row writing routine.
+  - [ ] Use it to fuzz test going both ways.
+- [x] write function in serial_type.rs to determine the serial_type_code for a sql_value, for the purpose of determining its size, to see if it will fit.
+- [x] in record.rs, write a "to_serialied(v: Vec<SqlType>)", that takes an array of SQLValues, and builds the header and payload vectors, and then can copy that into some other slice.
+- [x] in typed_row.rs, add a row.serialize_to(&mut byte_slice) -> Result<(), SerializingError> : this gives an error if the target byte_slice does not have room for the serialized code.  It uses record.rs.  
 
-- [ ] in record.rs, make a "row_builder" type, that takes an array of SQLValues, and builds the header and payload vectors, and then can copy that into some other slice ("as_bytes()").
-- [ ] in typed_row.rs, add a row.serialize_to(&mut byte_slice) -> Result<(), SerializingError> : this gives an error if the target byte_slice does not have room for the serialized code.  It uses record.rs.  
-
+## Overall steps
 Writing to existing tables which have room in their last page for new cells (no btree growth yet).
 
-- extend serial_type.rs to work in the reverse.  Copying is okay.
-  - fuzz testing!
+- [x] extend serial_type.rs to work in the reverse.  Copying is okay.
+  - [ ] fuzz testing!
 - extend pager to grant write access to a page.
+  - read and write locks or flags in the pager?
+  - deny locking several pages at once, which would need a rollback log or WAL file.
 - extend src/btree/cell.rs to support writing an additional cell to a page, or error if there is no room.  adds `append` method.
 - extend src/btree/leaf.rs to support appending Cells too.  
 - extend src/btree/table.rs to support appending Cells too, and seeking last page.
 - defer tree rebalancing.
 - extend parser and AST to support `INSERT INTO TABLE VALUES(...)`.  This is an append operation on a btree opened to write.
 - add run_insert method like run_query.  There is no IR for insert operations, I guess.  You just do them. 
-- read and write locks or flags in the pager?
-- defer multi-page changes which would need a rollback log or WAL file.
 
 # Expressions
 1. [X] Introduce Expr with only Constant member.

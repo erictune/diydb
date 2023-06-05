@@ -261,7 +261,7 @@ fn test_to_sql_value_errors() {
 ///  # Arguments
 /// * `t` - A `sql_value::SqlValue`, with one of these variants: `Int`, `Text`, `Real`, `Blob`, `Null`.
 /// * `data` - A slice of bytes.
-//////
+///
 /// # Comparison to SQLite
 ///
 /// SQLite has "Storage Classes" [https://www.sqlite.org/datatype3.html#storage_classes_and_datatypes]
@@ -425,5 +425,126 @@ fn test_value_to_sql_typed_value_errors() {
     for (i, case) in cases.iter().enumerate() {
         println!("Testing case {}: convert serial type {} to SQL type {}, should error", i, &case.0, case.1);
         assert!(cast_to_schema_type(&case.0, case.1).is_err());
+    }
+}
+
+/// Convert a native value (SqlValue) into a SQL "serial type" format, consisting of a serial type code and bytes.
+///
+/// # Arguments
+/// * `v` - a sql_value::SqlValue.
+/// 
+/// # Precondition
+/// Zero in the range `into_bytes[0..into_bytes.len()]`, or values you are prepared to have overwritten.
+///
+/// # Returns
+/// On success, `Ok((slice, typecode, length))`
+/// where:
+///   - `slice` is the encoded bytes to be stored in the body of the row record.
+///   - `typecode` is the sqlite typecode to be stored in the header.
+/// On failure, `Err(Error::_)`.
+///
+/// # Details
+/// A `SqlValue::Null()` results in a NULL type code (0).
+///
+/// Yields values compatible with SQLite schema format 4 only.
+/// SQLites rules for when to convert from a Storage class (serial type) to the type affinity are complex.
+///
+/// We implement automatic conversion rules that allows common, writing SQLite-compatible values for common use cases, 
+/// but do not attempt to provide exact compatibility with SQLite.
+/// For example:
+///   - Unlike SQLite, Text("0") is not stored as zero bytes with serial code 8.  It is stored as any other small integer.
+///   - Unlike SQLite, Real("1.0") is not stored as 1 byte, 1_u8, with serial code 1. It is stored as any other real.
+
+/// The following table shows what happens if a value with a certain SQL type enum variant (Enum) is converted.
+/// Its Storage Class will be a shown in SerTy#.
+/// The "enum" column is written assuming `use sql_value::SqlValue::*;`
+///
+/// | SqlValue | SerTy# | bytes len() |         comments       |
+/// | -------- | ------ | ----------- | ---------------------- |
+/// |   Null   | 0      | 0           |                        |
+/// |   Int    | 1      | 1           |  if it fits in an i8.  |
+/// |   Int    | 2      | 2           |  if it fits in an i16. |
+/// |          | 3      |             |  24-bit repr not supported yet. |
+/// |   Int    | 4      | 4           |  if it fits in an i32. |
+/// |          | 5      |             |  48-bit repr not supported yet. |
+/// |   Int    | 6      | 8           |  if it fits in an i64. |
+/// |   Real   | 7      | 8           |                        |
+/// |   Int    | 8      | 0           |  if it is 0. |
+/// |   Int    | 9      | 0           |  if it is 1. |
+/// |   Text   | N≥12 & even |        |   |
+/// |   Blob   | N≥13 & odd  |        |   |
+///
+/// Code is not optimized for memory usage for large Blobs or Text.
+/// When we get to writes, we may need a new conversion table.
+///
+/// # Panics
+///
+/// Does not panic.
+pub fn to_serial_type<'a>(v: &'a SqlValue) -> Result<(Vec<u8>, i64, usize), Error> {
+    use SqlValue::*;
+    match v {
+        Null() => Ok((Vec::new(), 0, 0)),
+        Int(x) => {
+            match x {
+                0 => {
+                    Ok((Vec::new(), 8, 0))
+                }
+                1 => {
+                    Ok((Vec::new(), 9, 0))
+                }
+                -127..=128 => {
+                    Ok(((*x as u8).to_be_bytes().to_vec(), 1, 1))
+                }
+                -32_768..=32_767 => {
+                    Ok(((*x as u16).to_be_bytes().to_vec(), 2, 2))
+                }
+                // TODO: support 24, 32, 48 bits.
+                _ => {
+                    Ok(((*x as u64).to_be_bytes().to_vec(), 6, 8))
+                }
+            }
+        }
+        Real(x) => Ok((x.to_be_bytes().to_vec(), 7, 8)),
+        Text(x) => {
+            let b = x.as_bytes().to_vec();
+            let l = b.len();
+            Ok((b, (l as i64)*2 + 13, l))
+        }
+        // These could be supported, but aren't yet.
+        Blob(_) => Err(Error::Unimplemented),
+        Bool(_) => Err(Error::NotStorageClassType),
+    }
+}
+
+#[test]
+fn test_to_serial_type_simple() {
+    let (data, typecode, length) = to_serial_type(&SqlValue::Int(37)).unwrap();
+    assert_eq!(typecode, 1);
+    assert_eq!(data, &[37_u8; 1]);
+    assert_eq!(length, 1);
+
+}
+
+#[test]
+fn test_to_serial_type() {
+    //0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+    let cases: Vec<(SqlValue, Vec<u8>, i64)> = vec![
+        (SqlValue::Int(0), vec![], 8),
+        (SqlValue::Int(1), vec![], 9),
+        (SqlValue::Int(2), vec![2], 1),
+        (SqlValue::Int(-1), vec![0xff], 1),
+        (SqlValue::Int(-512), vec![0xfe, 0x00], 2),
+        (SqlValue::Int(0x7f_ff_ff_ff_ff_ff_ff_ff), vec![0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff], 6),
+        (SqlValue::Null(), vec![], 0),
+        (SqlValue::Text("Hi".to_string()), vec!['H' as u8, 'i' as u8], 17),
+    ];
+    let numcases = cases.len();
+    let mut casenum = 1;
+    for case in cases {
+        println!("Case {} of {}", casenum, numcases);
+        let (data, typecode, _) = to_serial_type(&case.0).unwrap();
+        assert_eq!(typecode, case.2);
+        assert_eq!(data.to_vec(), case.1);
+        casenum +=1;
     }
 }
