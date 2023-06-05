@@ -35,6 +35,38 @@
 //!
 //! However, simple database files only contain table btree pages.
 //! Freelist pages will be managed by the Pager once supported.
+//! 
+//! # Examples
+//! 
+//! You can open one or more pages readonly at once.
+//! 
+//! ```
+//! # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db");
+//! # use diydb::pager::Pager;;
+//! let pager = Pager::open(path.as_str()).unwrap();
+//! let p1 = pager.get_page_ro(1).unwrap();
+//! let p2 = pager.get_page_ro(2).unwrap();
+//! ```
+//! 
+// The following doc is here as a test, to ensure that borrow checking enforces the expected invariants.
+//! At present, you cannot hold one page for read and one page for write at the same time.  This doesn't work:
+//! ```compile_fail
+//! # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db").as_str();
+//! # use diydb::pager::Pager;;
+//! let pager = Pager::open(path.as_str()).unwrap();
+//! let p1 = pager.get_page_ro(1).unwrap();
+//! let p2 = pager.get_page_rw(2).unwrap();
+//!```
+//! 
+//! You also cannot hold two pages for write. This doesn't work:
+//! ```compile_fail
+//! # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db").as_str();
+//! # use diydb::pager::Pager;;
+//! let pager = Pager::open(path.as_str()).unwrap();
+//! let p1 = pager.get_page_rw(1).unwrap();
+//! let p2 = pager.get_page_rw(2).unwrap();
+//!```
+//! These limits will be fixed in the future.
 //!
 //! # Future work
 //! -   Clarify how temporary tables are handled:
@@ -50,6 +82,7 @@
 //! -   Support reading pages on demand.
 //! -   Support dropping unused pages when memory is low.
 //! -   When there are multiple pagers (multiple open files), coordinating to stay under a total memory limit.
+//! 
 
 use std::boxed::Box;
 use std::cell::RefCell;
@@ -69,6 +102,8 @@ pub enum Error {
     NoDefaultDB,
     #[error("Default database pager requested when multiple databases loaded.")]
     AmbiguousDefaultDB,
+    #[error("Too many pages open for write at once.")]
+    TooManyPagesOpenForWrite
 }
 
 // A `PagerSet` manages zero or more Pagers, one per open database.
@@ -126,6 +161,8 @@ pub struct Pager {
     // specific information?
     pages: Vec<Option<Vec<u8>>>,
     page_size: u32,
+    open_rw_page: Option<PageNum>,
+    num_open_rw_pages: usize,
 }
 
 // Page numbers are 1-based, to match how Sqlite numbers pages.  PageNum ensures people pass something that is meant to be a page number
@@ -176,6 +213,8 @@ impl Pager {
             f: Box::new(file),
             pages,
             page_size: h.pagesize,
+            open_rw_page: None,
+            num_open_rw_pages: 0,
         })
     }
 
@@ -226,6 +265,8 @@ impl Pager {
         }
     }
 
+    // TODO: need way to decrement count when page use is done.  Therefore caller needs to hold some object to count that.
+
     // I think this says that the self object, has lifetime 'b which must be longer than the lifetime of the returned reference
     // to the vector it contains.
     // That is currently true, since we don't get rid of or modify pages.
@@ -244,10 +285,24 @@ impl Pager {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn get_page_rw(self, _: PageNum) -> Result<Vec<u8>, Error> {
-        // TODO: support writing pages. This will need reader/writer locks.
-        unimplemented!("Writing not implemented")
+    // TODO: need way to decrement count when page use is done.  Therefore caller needs to hold some object to count that.
+    pub fn get_page_rw<'a, 'b: 'a>(&'b mut self, pn: PageNum) -> Result<&'a mut Vec<u8>, Error>  {
+        if self.num_open_rw_pages > 0 {
+            // At this time, we cannot atomically write multiple pages (we don't have rollbacks or a writeahead log).
+            // Therefore, it is not supported to open multiple pages in rw mode.
+            // Opening one page still allows for limited INSERT and UPDATE operations.
+            return Err(Error::TooManyPagesOpenForWrite);
+        }
+        self.open_rw_page = Some(pn);
+        self.num_open_rw_pages = 1;
+        if pn > MAX_PAGE_NUM {
+            return Err(Error::PageNumberBeyondLimits);
+        }
+        self.check_present(pn);
+        match &mut self.pages[pn - 1] {
+            Some(v) => Ok(v),
+            None => Err(Error::Internal),
+        }
     }
 
     pub fn get_page_size(&self) -> u32 {
@@ -269,14 +324,35 @@ fn test_open_db() {
 }
 
 #[test]
-fn test_get_page_ro() {
+fn test_get_page_rw() {
     let path = path_to_testdata("minimal.db");
-    let pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
-    assert!(
-        pager
-            .get_page_ro(1)
+    let mut pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
+    let p1 = pager.get_page_rw(1);
+    assert!(p1
             .expect("Should have gotten a page")
             .len()
             > 0
     );
 }
+
+#[test]
+fn test_get_two_page_ro() {
+    let path = path_to_testdata("minimal.db");
+    let pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
+    let p1 = pager.get_page_ro(1);
+    let p2 = pager.get_page_ro(2);
+    assert!(
+        p1
+            .expect("Should have gotten a page")
+            .len()
+            > 0
+    );
+    assert!(
+        p2
+        .expect("Should have gotten a page")
+        .len()
+        > 0
+    );
+}
+
+// Borrow check failure for multiple writers or read and write - tested in doc comments at the top.

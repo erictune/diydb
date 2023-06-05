@@ -24,9 +24,9 @@ Writing to existing tables which have room in their last page for new cells (no 
 
 - [x] extend serial_type.rs to work in the reverse.  Copying is okay.
   - [ ] fuzz testing!
-- extend pager to grant write access to a page.
-  - read and write locks or flags in the pager?
-  - deny locking several pages at once, which would need a rollback log or WAL file.
+- [x] extend pager to grant write access to a page.
+  - [x] ref counter for now, read and write locks later.
+  - [x] deny locking several pages at once, which would need a rollback log or WAL file.
 - extend src/btree/cell.rs to support writing an additional cell to a page, or error if there is no room.  adds `append` method.
 - extend src/btree/leaf.rs to support appending Cells too.  
 - extend src/btree/table.rs to support appending Cells too, and seeking last page.
