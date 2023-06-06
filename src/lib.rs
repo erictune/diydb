@@ -20,6 +20,7 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
+use anyhow::bail;
 use sql_type::SqlType;
 use sql_value::SqlValue;
 use table::Table;
@@ -186,6 +187,11 @@ pub fn run_query(ps: &pager::PagerSet, query: &str) -> anyhow::Result<()> {
     let tt = run_query_no_print(ps, query)?;
     crate::formatting::print_table_tt(&tt, false)?;
     Ok(())
+}
+
+pub fn run_insert(_ps: &pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
+    let _is: ast::InsertStatement = pt_to_ast::pt_insert_statement_to_ast(stmt)?;
+    bail!("Not implemented yet.")
 }
 
 pub fn run_query_no_print(ps: &pager::PagerSet, query: &str) -> anyhow::Result<crate::TempTable> {

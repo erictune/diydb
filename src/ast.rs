@@ -76,6 +76,11 @@ pub struct CreateStatement {
     pub coldefs: Vec<ColDef>, // Be more specific.
 }
 
+pub struct InsertStatement {
+    pub tablename: String,
+    pub values: Vec<Vec<Constant>>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     Int(i64),

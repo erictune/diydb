@@ -137,6 +137,61 @@ fn test_not_parse_invalid_create_statements() {
     }
 }
 
+#[test]
+fn test_parse_expr_list() {
+    let cases = vec![
+        "(1, 'two', 3.3)",
+    ];
+    for case in cases {
+        println!("Case: {}", case);
+        match SQLParser::parse(Rule::expr_list, case) {
+            Ok(_) => continue,
+            Err(e) => panic!("Error parsing [{}] : {}",  case, e),
+        }    
+    }
+}
+
+#[test]
+fn test_parse_expr_list_list() {
+    let cases = vec![
+        "(1, 'two', 3.3)",
+        "(1, 'two', 3.3), (4, 'five', 6.6)",
+    ];
+    for case in cases {
+        println!("Case: {}", case);
+        match SQLParser::parse(Rule::expr_list_list, case) {
+            Ok(_) => continue,
+            Err(e) => panic!("Error parsing [{}] : {}",  case, e),
+        }    
+    }
+}
+
+#[test]
+fn test_parse_insert_statements() {
+    let cases = vec![
+        "INSERT INTO FOO VALUES (1, 'two', 3.3)",
+        "insert into foo values (1, 'two', 3.3)",
+        "insert into foo values (1, 'two', 3.3), (4, 'five', 6.6)",
+    ];
+    for case in cases {
+        println!("Case: {}", case);
+        match SQLParser::parse(Rule::insert_stmt, case) {
+            Ok(_) => continue,
+            Err(e) => panic!("Error parsing [{}] : {}",  case, e),
+        }    
+    }
+}
+
+#[test]
+fn test_not_parse_invalid_insert_statements() {
+    let cases = vec![
+        "INSERT INTO FOO VALUES",
+    ];
+    for case in cases {
+        assert!(SQLParser::parse(Rule::insert_stmt, case).is_err());
+    }
+}
+
 #[test] 
 fn test_parse_select_with_expr() {
     let e = SQLParser::parse(Rule::select_stmt, "select 1 + 1");

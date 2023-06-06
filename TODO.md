@@ -5,12 +5,24 @@ Current Projects Stack
 Goal: Support inserting rows, in a minumum way.
 I don't want to go deep into writes right now, but having at least minimal write ability may make it more clear where I need to go with the pager, and maybe other iterfaces too.
 
-## Details of next steps
+Writing to existing tables which have room in their last page for new cells (no btree growth yet).
+Defer tree rebalancing; defer inserting cells in some order; defer length-changing update of existing cells.
 
 Cleanups:
 - [x] in typed_row.rs and in serial_type.rs, separate basic deserialization (to only Blob, Text, Int and Null types) from Casting to non-fundamental types (Int to Real, Int to Bool, etc).  Thus, serial_type does not need to know about SqlType.
 - [x] in typed_row.rs, move the serial type sizeof code into serial_type.rs.
 - [x] in typed_row.rs, rename build_row() to from_serialized() -> Result<Row, Error>;
+
+- [ ] eliminate seeks to enable next step.
+- [ ] Cleanup: see if I can wrap these three oft-used-together fields into one object.
+    - (pages_bytes: &/&mut Vec<u8>, non_btree_header_bytes: usize, page_size: u32)
+    - page type (header)
+    - maybe also page number.
+    - maybe in the future a lock.
+    - First experiment to see if the page_bytes can be wrapped in a new type.
+    - ... into one object that represents access to a page.
+    - and which, when it is freed, releases reference counts in the Pager.
+
 
 New Code:
 - [x] in typed_row.rs, implement a full row writing routine.
@@ -18,21 +30,20 @@ New Code:
 - [x] write function in serial_type.rs to determine the serial_type_code for a sql_value, for the purpose of determining its size, to see if it will fit.
 - [x] in record.rs, write a "to_serialied(v: Vec<SqlType>)", that takes an array of SQLValues, and builds the header and payload vectors, and then can copy that into some other slice.
 - [x] in typed_row.rs, add a row.serialize_to(&mut byte_slice) -> Result<(), SerializingError> : this gives an error if the target byte_slice does not have room for the serialized code.  It uses record.rs.  
-
-## Overall steps
-Writing to existing tables which have room in their last page for new cells (no btree growth yet).
-
 - [x] extend serial_type.rs to work in the reverse.  Copying is okay.
   - [ ] fuzz testing!
 - [x] extend pager to grant write access to a page.
   - [x] ref counter for now, read and write locks later.
   - [x] deny locking several pages at once, which would need a rollback log or WAL file.
-- extend src/btree/cell.rs to support writing an additional cell to a page, or error if there is no room.  adds `append` method.
-- extend src/btree/leaf.rs to support appending Cells too.  
-- extend src/btree/table.rs to support appending Cells too, and seeking last page.
-- defer tree rebalancing.
-- extend parser and AST to support `INSERT INTO TABLE VALUES(...)`.  This is an append operation on a btree opened to write.
-- add run_insert method like run_query.  There is no IR for insert operations, I guess.  You just do them. 
+
+- [IN_PROGRESS] add `append` method to src/btree/cell.rs to write an additional cell to a page, or error if there is no room.  
+- [ ] add `append` method to src/btree/leaf.rs to support appending Cells to a leaf page specifically.  
+- [ ] add `append` method to src/btree/table.rs to support appending Cells to the last item in a table.
+    - [ ] for now only support appending to pages that have a leaf page as the first page (single page tables).
+          To support multi-level trees, we'd need to support multiple rw locks on pages, which we can't do now due to the multiple borrow rule.
+- [x] extend parser and AST to support `INSERT INTO TABLE VALUES(...)`.  This is an append operation on a btree opened to write. This uses a Seek.
+- [ ] perhaps extend parser and AST to support `UPDATE ...`, which can be done as a Scan.   This is an append operation on a btree opened to write.
+- [ ] add run_insert/run_update methods like run_query.  There is no IR for insert operations, I guess.  You just do them?  UPDATEs use a Scan. 
 
 # Expressions
 1. [X] Introduce Expr with only Constant member.

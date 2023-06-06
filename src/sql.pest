@@ -33,13 +33,19 @@ bin_op = _{ add | subtract | multiply | divide }
     subtract = { "-" }
     multiply = { "*" }
     divide = { "/" }
+
 // atom and bin_op  rules will be the input to the PrattParser. It expects to receive atoms separated by operators.
+comma = _{ "," }
 expr = { atom ~ (bin_op ~ atom)* }
+expr_list = { "(" ~ expr ~ ( comma ~ expr )*  ~ ")" }
+expr_list_list = { expr_list  ~ ( comma ~ expr_list )* }
 
 // Reused bits in SQL statements.
 column_def = {column_name ~ type_name}
 column_defs = { column_def ~ ("," ~ column_def)* }
 
+
+// Create Statement
 // https://www.sqlite.org/syntax/create-table-stmt.html
 create = _{ ^"create" }
 table = _{ ^"table" }
@@ -49,6 +55,12 @@ text = { ^"string" | ^"text" }
 type_name = {int | text | real}
 create_stmt = {SOI ~ create ~ table ~ table_identifier ~ "(" ~ column_defs ~ ")" ~ EOI}
 
+// Insert Statement
+// https://www.sqlite.org/syntax/insert-stmt.html
+insert = _{ ^"insert" }
+into = _{ ^"into" }
+values = _{^"values"}
+insert_stmt = {SOI ~ insert ~ into ~ table_identifier ~ values ~ expr_list_list ~ EOI}
 
 // Select Statement.
 // https://www.sqlite.org/syntax/select-stmt.html

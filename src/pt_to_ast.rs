@@ -8,6 +8,7 @@ use anyhow::{Result, bail};
 use crate::ast;
 use crate::parser::Rule;
 use crate::parser::SQLParser;
+use crate::parser::parse_expr;
 use crate::pest::Parser;
 
 pub fn pt_create_statement_to_ast(c: &str) -> ast::CreateStatement {
@@ -114,6 +115,29 @@ fn test_parse_create_statement() {
     }
 }
 
+fn remove_single_quoting(s: String) -> String {
+    let s2 = s.replace("''", "");
+    if s2.len() > 2 {
+        s2[1..s2.len()-1].to_string()
+    } else {
+        s2
+    }
+}
+
+#[test]
+fn test_remove_single_quoting() {
+    let cases = [
+        ("''", ""),
+        ("'hi'", "hi"),
+        ("'h''i'", "hi"),
+        ("'h''''i'", "hi"),
+        ("'''", "'"),
+    ];
+    for case in cases {
+        assert_eq!(remove_single_quoting(case.0.to_string()), case.1.to_string());
+    }
+}
+
 pub fn parse_literal_from_rule(pair: pest::iterators::Pair<'_, Rule>) -> ast::Constant {
     match pair.as_rule() {
         Rule::null_literal => ast::Constant::Null(),
@@ -124,7 +148,7 @@ pub fn parse_literal_from_rule(pair: pest::iterators::Pair<'_, Rule>) -> ast::Co
             // Danger: floating point conversion.
             ast::Constant::Real(str::parse::<f64>(pair.as_str()).unwrap())
         }
-        Rule::single_quoted_string => ast::Constant::String(String::from(pair.as_str())),
+        Rule::single_quoted_string => ast::Constant::String(remove_single_quoting(String::from(pair.as_str()))),
         Rule::double_quoted_string => {
             panic!("Double quoted strings are not valid string literals in SQL.")
         }
@@ -140,18 +164,22 @@ pub fn parse_literal_from_rule(pair: pest::iterators::Pair<'_, Rule>) -> ast::Co
 #[test]
 fn test_parsing_literals() {
     let cases = vec![
-        ("1", "1"),
-        ("1.01", "1.01"),
-        ("'hi'", "'hi'"),
-        ("true", "TRUE"),
-        ("tRuE", "TRUE"),
-        ("TRUE", "TRUE"),
-        ("false", "FALSE"),
-        ("fAlSe", "FALSE"),
-        ("FALSE", "FALSE"),
-        ("null", "NULL"),
-        ("nUlL", "NULL"),
-        ("NULL", "NULL"),
+        ("1", ast::Constant::Int(1)),
+        ("1000000000000", ast::Constant::Int(1000000000000)),
+        ("-1000000000000", ast::Constant::Int(-1000000000000)),
+        ("1.01", ast::Constant::Real(1.01)),
+        ("123456789.987654321", ast::Constant::Real(123456789.987654321)),
+        ("'hi'", ast::Constant::String("hi".to_string())),
+        ("'h''i'", ast::Constant::String("hi".to_string())),
+        ("true", ast::Constant::Bool(true)),
+        ("tRuE", ast::Constant::Bool(true)),
+        ("TRUE", ast::Constant::Bool(true)),
+        ("false", ast::Constant::Bool(false)),
+        ("fAlSe", ast::Constant::Bool(false)),
+        ("FALSE", ast::Constant::Bool(false)),
+        ("null", ast::Constant::Null()),
+        ("nUlL", ast::Constant::Null()),
+        ("NULL", ast::Constant::Null()),
     ];
     for case in cases {
         let input = case.0;
@@ -160,9 +188,127 @@ fn test_parsing_literals() {
             .next()
             .unwrap();
         let ast = parse_literal_from_rule(literal);
-        let actual = format!("{}", ast);
-        let expected = case.1;
-        assert_eq!(actual, expected);
+        assert_eq!(ast, case.1);
+    }
+}
+
+pub fn parse_constant_expr_list(pair: pest::iterators::Pair<'_, Rule>) -> Result<Vec<ast::Constant>> {
+    let mut row: Vec<ast::Constant> = vec![];
+    for i in pair.into_inner() {
+        match i.as_rule() {
+            Rule::expr => {
+                let expr = parse_expr(i.into_inner());
+                match expr {
+                    ast::Expr::Constant(c) => row.push(c),
+                    // TODO: simplify constant expressions, e.g. "INSERT INTO t VALUES (1+1)"
+                    ast::Expr::BinOp{..} => bail!("Operators not supported in constant expression lists."),
+                }
+            }
+            _ => bail!("Unexpected syntax in expression list"),
+        }
+    }
+    Ok(row.clone())
+}
+
+#[test]
+fn test_parse_constant_expr_list() {
+    let cases = vec![
+        (
+            "(1, 'two', 3.3)", 
+            vec![ast::Constant::Int(1), ast::Constant::String("two".to_string()), ast::Constant::Real(3.3)]
+        ),
+    ];
+    for case in cases {
+        println!("Case: {}", case.0);
+        let mut pairs = SQLParser::parse(Rule::expr_list, case.0).unwrap();
+        let res = parse_constant_expr_list(pairs.next().unwrap());
+        match res {
+            Ok(row) => {
+                assert_eq!(row, case.1);
+            },
+            Err(e) => panic!("Error parsing [{}] : {}",  case.0, e),
+        }
+    }
+}
+
+pub fn parse_constant_expr_list_list(pair: pest::iterators::Pair<'_, Rule>) -> Result<Vec<Vec<ast::Constant>>> {
+    let mut rows: Vec<Vec<ast::Constant>> = vec![];
+    for i in pair.into_inner() {
+        match i.as_rule() {
+            Rule::expr_list => rows.push(parse_constant_expr_list(i)?),
+            _ => bail!("Unexpected syntax in expression list list.")
+        }
+    }
+    Ok(rows.clone())
+}
+
+#[test]
+fn test_parse_constant_expr_list_list() {
+    let cases = vec![
+        (
+            "(1, 'two', 3.3)",
+            vec![ 
+                vec![ast::Constant::Int(1), ast::Constant::String("two".to_string()), ast::Constant::Real(3.3)],
+            ],
+        ),
+        (
+            "(1, 'two', 3.3), (4, 'five', 6.6)",
+            vec![
+                vec![ast::Constant::Int(1), ast::Constant::String("two".to_string()), ast::Constant::Real(3.3)],
+                vec![ast::Constant::Int(4), ast::Constant::String("five".to_string()), ast::Constant::Real(6.6)],
+            ],
+        ),
+    ];
+    for case in cases {
+        println!("Case: {}", case.0);
+        let mut pairs = SQLParser::parse(Rule::expr_list_list, case.0).unwrap();
+        let res = parse_constant_expr_list_list(pairs.next().unwrap());
+        match res {
+            Ok(row) => {
+                assert_eq!(row, case.1);
+            },
+            Err(e) => panic!("Error parsing [{}] : {}",  case.0, e),
+        }
+    }
+}
+
+pub fn pt_insert_statement_to_ast(stmt: &str) -> Result<ast::InsertStatement> {
+    let insert_stmt = SQLParser::parse(Rule::insert_stmt, stmt)?
+        .next()
+        .unwrap();
+
+    // Confirm it is a select statement.
+    let tablename; 
+    let mut pairs = insert_stmt.into_inner();
+    if let Some(pair) = pairs.next() {
+        if let Rule::table_identifier = pair.as_rule() {
+            let tbl = pair.into_inner();
+            tablename = tbl.as_str().to_string();
+        } else { bail!("Missing table identifier in INSERT statement.") }
+    } else { bail!("Unexpected syntax in INSERT statement.") }
+
+    if let Some(pair) = pairs.next() {
+        if let Rule::expr_list_list = pair.as_rule() {
+            let values = parse_constant_expr_list_list(pair)?;
+            return Ok(ast::InsertStatement{ tablename, values });
+        }
+    }
+    bail!("Error parsing VALUES in INSERT statement.");
+}
+
+#[test]
+fn test_parse_insert_statements() {
+    let cases = vec![
+        "INSERT INTO FOO VALUES (1, 'two', 3.3)",
+        "insert into foo values (1, 'two', 3.3)",
+        "insert into foo values (1, 'two', 3.3), (4, 'five', 6.6)",
+    ];
+    for case in cases {
+        println!("Case: {}", case);
+        match SQLParser::parse(Rule::insert_stmt, case) {
+            Ok(_) => continue,
+            Err(e) => panic!("Error parsing [{}] : {}",  case, e),
+        }    
     }
 }
 
@@ -249,13 +395,13 @@ fn test_parse_select_statement() {
         ("select 1.01", (vec![], vec!["1.01"])),
         (
             "select 'hi'",
-            (vec![], vec!["'hi'"]), // TODO: this needs to return an expression in the select_items.
+            (vec![], vec!["hi"]), // TODO: this needs to return an expression in the select_items.
         ),
         ("select tRuE", (vec![], vec!["TRUE"])),
         ("select FALSe", (vec![], vec!["FALSE"])),
         (
             "select 123.456, 'seven', 8, 9, NULL",
-            (vec![], vec!["123.456", "'seven'", "8", "9", "NULL"]),
+            (vec![], vec!["123.456", "seven", "8", "9", "NULL"]),
         ),
     ];
 
