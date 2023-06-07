@@ -57,27 +57,47 @@ fn main() {
 }
 
 fn do_command(c: &mut Context, line: &str) {
-    match line {
-        l if l.to_uppercase().starts_with("SELECT") => {
-            if l.ends_with(";") {
-                do_select(c, &l[0..l.len()-1])
-            } else {
-                // Semicolon are considered statement separators in SQL, so they are apparently not required for
-                // API calls, or for places where SQL is stored, like the schema table.  But, they are used to end
-                // possibly multi-line statements in interactive mode, which this is.
-                println!("SQL statements must end with a semicolon.")
-            }
-        }
-        l if l == ".schema" => do_schema(c),
-        ".help" => do_help(c),
-        l if l.starts_with(".open") => {
-            if let Some((_, file_to_open)) = line.split_once(" ") {
+    if line.len() == 0 {
+        println!("Empty command.");
+        return;
+    }
+    // Dot commands.
+    if let Some('.') = line.chars().nth(0)  {
+        match line {
+            ".schema" => do_schema(c),
+            ".help" => do_help(c),
+            l if l.starts_with(".open") => {
+                if let Some((_, file_to_open)) = line.split_once(" ") {
                 do_open(c, file_to_open)
-            } else {
-                println!("Unspecified filename.");
+                } else {
+                    println!("Unspecified filename.");
+                }
             }
+            _ => println!("Unknown command (2): `{}`", line),
         }
-        _ => println!("Unknown command: `{}`", line),
+            return;
+    }
+    // SQL commands
+    let first_word = line.split_ascii_whitespace().next();
+    if first_word.is_none() {
+        println!("Unknown SQL command: `{}`", line);
+        return;
+    }
+    if !line.ends_with(";") {
+        // Semicolon are considered statement separators in SQL, so they are apparently not required for
+        // API calls, or for places where SQL is stored, like the schema table.  But, they are used to end
+        // possibly multi-line statements in interactive mode, which this is.
+        println!("SQL statements must end with a semicolon.");
+        return;
+    }
+    // Remove semicolon for parsing.
+    let line = &line[0..line.len()-1];
+    let first_word = first_word.unwrap().to_uppercase();
+    match first_word.as_str() {
+        "SELECT" => {
+            do_select(c, line)
+        }
+        _ => println!("Unknown SQL command: `{}`", line),
     }
 }
 
