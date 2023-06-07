@@ -13,7 +13,7 @@ Cleanups:
 - [x] in typed_row.rs, move the serial type sizeof code into serial_type.rs.
 - [x] in typed_row.rs, rename build_row() to from_serialized() -> Result<Row, Error>;
 - [x] add null to SqlType, as SQLite has null as a type.  
-  - [ ] consolidate methods on SqlType and SqlValue from ir_interpreter to those files.
+  - [x] consolidate methods on SqlType and SqlValue from ir_interpreter to those files.
 - [ ] eliminate Cursor seeks to enable next step.
 - [ ] Cleanup: see if I can wrap these three oft-used-together fields into one object.
     - (pages_bytes: &/&mut Vec<u8>, non_btree_header_bytes: usize, page_size: u32)

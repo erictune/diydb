@@ -49,3 +49,14 @@ impl FromStr for SqlType {
         }
     }
 }
+
+use crate::ast;
+pub fn from_ast_constant(c: &ast::Constant) -> SqlType {
+    match c {
+        ast::Constant::Int(_) => SqlType::Int,
+        ast::Constant::String(_) => SqlType::Text,
+        ast::Constant::Real(_) => SqlType::Real,
+        ast::Constant::Bool(_) => SqlType::Int,
+        ast::Constant::Null() => SqlType::Null,
+    }
+}

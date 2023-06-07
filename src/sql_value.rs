@@ -25,3 +25,18 @@ impl std::fmt::Display for SqlValue {
         }
     }
 }
+
+use crate::ast;
+pub fn from_ast_constant(c: &ast::Constant) -> SqlValue {
+    match c {
+        ast::Constant::Int(i) => SqlValue::Int(*i),
+        ast::Constant::String(s) => SqlValue::Text(s.clone()),
+        ast::Constant::Real(f) => SqlValue::Real(*f),
+        // TODO: sqlite does not have bool as fundamental type, so maybe we should not either.
+        ast::Constant::Bool(b) => SqlValue::Int(match b {
+            true => 1,
+            false => 0,
+        }),
+        ast::Constant::Null() => SqlValue::Null(),
+    }
+}

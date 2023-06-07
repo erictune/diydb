@@ -2,38 +2,14 @@
 
 use anyhow::{Context, Result};
 
-use crate::ast;
 use crate::ir;
 use crate::pager;
 use crate::project;
-use crate::sql_type::SqlType;
-use crate::sql_value::SqlValue;
+use crate::sql_type;
+use crate::sql_value;
 use crate::table::Table;
 use crate::typed_row::Row;
 use crate::TempTable;
-
-fn ast_constant_to_sql_value(c: &ast::Constant) -> SqlValue {
-    match c {
-        ast::Constant::Int(i) => SqlValue::Int(*i),
-        ast::Constant::String(s) => SqlValue::Text(s.clone()),
-        ast::Constant::Real(f) => SqlValue::Real(*f),
-        ast::Constant::Bool(b) => SqlValue::Int(match b {
-            true => 1,
-            false => 0,
-        }),
-        ast::Constant::Null() => SqlValue::Null(),
-    }
-}
-
-fn ast_constant_to_sql_type(c: &ast::Constant) -> SqlType {
-    match c {
-        ast::Constant::Int(_) => SqlType::Int,
-        ast::Constant::String(_) => SqlType::Text,
-        ast::Constant::Real(_) => SqlType::Real,
-        ast::Constant::Bool(_) => SqlType::Int,
-        ast::Constant::Null() => SqlType::Null, 
-    }
-}
 
 /// Run an IR representation of a query, returning a TempTable with the results of the query.
 pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> {
@@ -73,10 +49,10 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
         ir::Block::ConstantRow(cr) => {
             return Ok(TempTable {
                 rows: vec![Row {
-                    items: cr.row.iter().map(ast_constant_to_sql_value).collect(),
+                    items: cr.row.iter().map(sql_value::from_ast_constant).collect(),
                 }],
                 column_names: (0..cr.row.len()).map(|i| format!("_f{i}")).collect(),
-                column_types: cr.row.iter().map(ast_constant_to_sql_type).collect(),
+                column_types: cr.row.iter().map(sql_type::from_ast_constant).collect(),
             });
         }
         ir::Block::Scan(s) => {
