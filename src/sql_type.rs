@@ -3,24 +3,28 @@ use std::str::FromStr;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-/// These are the SQL Column types that we support.
-/// These are believed to match the basic types that SQLite supports for `CREATE TABLE ... STRICT;` format.
-/// In particular, `BOOL` is not a distinct type.
-/// SQLite supports type name aliases like `INTEGER` for `INT`.  Those are not supported here.
+/// These are the basic types that a SQL value can have.
+/// They correspond to the possible return values of `typeof()` in sqlite3.
+/// Notes:
+///   - In sqlite, `typeof(true)` is `integer`.
+///   - SQLite supports type name aliases like `varchar` for `text` in create statements, but does not
+///     values have the canonical type.
 pub enum SqlType {
     Int,
     Text,
     Blob,
     Real,
+    Null,
 }
 
 impl std::fmt::Display for SqlType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SqlType::Int => "INT".fmt(f),
-            SqlType::Text => "TEXT".fmt(f),
-            SqlType::Blob => "BLOB".fmt(f),
-            SqlType::Real => "REAL".fmt(f),
+            SqlType::Int => "integer".fmt(f),
+            SqlType::Text => "text".fmt(f),
+            SqlType::Blob => "blob".fmt(f),
+            SqlType::Real => "real".fmt(f),
+            SqlType::Null => "null".fmt(f),
         }
     }
 }
@@ -35,11 +39,12 @@ impl FromStr for SqlType {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_uppercase().as_str() {
-            "INT" | "INTEGER" => Ok(SqlType::Int),
-            "TEXT" | "STRING" => Ok(SqlType::Text),
-            "BLOB" => Ok(SqlType::Blob),
-            "REAL" => Ok(SqlType::Real),
+        match s.to_lowercase().as_str() {
+            "int" | "integer" => Ok(SqlType::Int),
+            "text" | "string" => Ok(SqlType::Text),
+            "blob" => Ok(SqlType::Blob),
+            "real" => Ok(SqlType::Real),
+            "null" => Ok(SqlType::Null),
             x => Err(Error::ParseSqlTypeError(String::from(x))),
         }
     }

@@ -31,7 +31,7 @@ fn ast_constant_to_sql_type(c: &ast::Constant) -> SqlType {
         ast::Constant::String(_) => SqlType::Text,
         ast::Constant::Real(_) => SqlType::Real,
         ast::Constant::Bool(_) => SqlType::Int,
-        ast::Constant::Null() => SqlType::Int, // Not clear what to do in this case.  Need Unknown type?
+        ast::Constant::Null() => SqlType::Null, 
     }
 }
 

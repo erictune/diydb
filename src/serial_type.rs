@@ -321,43 +321,34 @@ pub fn cast_to_schema_type(
                 SQT::Int => Ok(Int(*i)),
                 SQT::Real => Ok(Real(*i as f64)),
                 SQT::Text => Ok(Text(format!("{}", i))),
-                SQT::Blob => Err(Error::Type {
-                    from: SQT::Int,
-                    to: SQT::Blob,
-                }),
+                SQT::Blob | SQT::Null => Err(Error::Type { from: SQT::Int, to: t }),
             }
         }
         Real(f) => {
             match t {
-                SQT::Int => Err(Error::Type {
-                    from: SQT::Real,
-                    to: SQT::Int,
-                }),
                 SQT::Real => Ok(Real(*f)),
-                SQT::Text => Err(Error::Type {
-                    from: SQT::Real,
-                    to: SQT::Text,
-                }),
-                SQT::Blob => Err(Error::Type {
-                    from: SQT::Real,
-                    to: SQT::Blob,
-                }),
+                SQT::Int |
+                SQT::Text | 
+                SQT::Blob | 
+                SQT::Null => Err(Error::Type { from: SQT::Real, to: t }),
             }
         }
         Blob(b) => {
             match t {
-                SQT::Int => Err(Error::Type{from: SQT::Blob, to: SQT::Int}),
-                SQT::Real => Err(Error::Type{from: SQT::Blob, to: SQT::Real}),
-                SQT::Text => Err(Error::Type{from: SQT::Blob, to: SQT::Text}),
                 SQT::Blob => Ok(Blob(b.clone())), 
+                SQT::Int |
+                SQT::Real |
+                SQT::Text |
+                SQT::Null =>  Err(Error::Type { from: SQT::Blob, to: t }),
             }
         }
         Text(s) => {
             match t {
-                SQT::Int => Err(Error::Type{from: SQT::Text, to: SQT::Int}),
-                SQT::Real => Err(Error::Type{from: SQT::Text, to: SQT::Real}),
+                SQT::Int |
+                SQT::Real |
+                SQT::Blob |
+                SQT::Null => Err(Error::Type{from: SQT::Text, to: t}),
                 SQT::Text => Ok(Text(s.clone())),
-                SQT::Blob => Err(Error::Type{from: SQT::Text, to: SQT::Blob}),
             }
         }
         Bool(_) => Err(Error::NotStorageClassType)
