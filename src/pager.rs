@@ -355,4 +355,4 @@ fn test_get_two_page_ro() {
     );
 }
 
-// Borrow check failure for multiple writers or read and write - tested in doc comments at the top.
+// Testing: Borrow check fails for multiple writers or read and write as expected.  This is tested in doc comments at the top of the file.

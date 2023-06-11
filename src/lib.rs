@@ -159,18 +159,6 @@ pub fn get_creation_sql_and_root_pagenum(
     None
 }
 
-pub fn page_and_offset_for_pagenum(pgr: &pager::Pager, pgnum: usize) -> (&Vec<u8>, pager::PageNum) {
-    let page: &Vec<u8> = match pgr.get_page_ro(pgnum) {
-        Ok(p) => p,
-        Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
-    };
-    let btree_start_offset = match pgnum {
-        1 => 100,
-        _ => 0,
-    };
-    (page, btree_start_offset)
-}
-
 pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Iterator {
     crate::btree::table::Iterator::new(pgnum, pgr)
 }

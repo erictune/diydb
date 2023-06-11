@@ -1,6 +1,11 @@
 Current Projects Stack
 ----------------------
+
+# Side Side Project: RWLock pagers and pages.
+- Want non-mut ref to PagerSet to produce non-mut Pager, to produce mut Pages. using an RWLock.
+
 # Side Project: Minimal Writing
+** This is in git stash right now**
 
 Goal: Support inserting rows, in a minumum way.
 I don't want to go deep into writes right now, but having at least minimal write ability may make it more clear where I need to go with the pager, and maybe other iterfaces too.
@@ -24,6 +29,9 @@ Cleanups:
     - ... into one object that represents access to a page.
     - and which, when it is freed, releases reference counts in the Pager.
 
+- [ ] Split Table into  ReadBtreeTable and in WriteBtreeTable, while looking for ways to reduce duplicated code. I don't like having the mut in it when just writing.  And passing in the pager as mutable into several places is going to prevent concurrency.  Not going to be able to give mutable pagers to multiple threads and have them all get (different) pages because of the mutability limitation.  Realize that `mut` doesn't really mean writable.  It means exclusive access.  So, rwlock can be used on immutable pager to return mutable page.
+
+- [ ] Is there a trait that ReadBtreeTable, WriteBtreeTable, and TempTable should all implement, called TableMeta (name, column defs), and default implementations of helper methods?  
 
 New Code:
 - [x] in typed_row.rs, implement a full row writing routine.
@@ -43,8 +51,17 @@ New Code:
     - [ ] for now only support appending to pages that have a leaf page as the first page (single page tables).
           To support multi-level trees, we'd need to support multiple rw locks on pages, which we can't do now due to the multiple borrow rule.
 - [x] extend parser and AST to support `INSERT INTO TABLE VALUES(...)`.  This is an append operation on a btree opened to write. This uses a Seek.
-- [ ] perhaps extend parser and AST to support `UPDATE ...`, which can be done as a Scan.   This is an append operation on a btree opened to write.
-- [ ] add run_insert/run_update methods like run_query.  There is no IR for insert operations, I guess.  You just do them?  UPDATEs use a Scan. 
+- defer support for `UPDATE ...`.  This is  done as a Scan.  It will be better with WHERE support and modifying records.
+- [x] add insert support to main.rs
+- [x]  in lib::run_insert(), open the first page of the table, using a helper.  Get the table schema.  Check that the ast::InsertStmt::values
+      match the target table types.  
+- [x] check that there is a sole page.  
+-  append to that page.
+  - [ ] Finish append code in btree/cell.rs.  It is a bit of mess right now.  But look at expanding get_free_space_range() into also doing the append, and get rid of existing append().
+  - [ ] 
+- [ ] commit the page to disk, releasing the hold on the page.
+- Before committing all that code, think about how to split Table into ROTable and RWTable, with &mut only for RWTable.
+
 
 # Expressions
 1. [X] Introduce Expr with only Constant member.
@@ -63,6 +80,11 @@ New Code:
   - build project function from Take() and BinOp().
   - This adds support for queries like "select 1 + a from t" and "select a + b + c + d + e".
   - detect type mismatch between column type and binop.
+
+4. [ ] support UnaryOps.
+  - typeof(value)
+  - logical not
+  - sum() aggregation.
 
 # Completed Project - parse and execute queries with basic project step
 Build steel thread of parsing and execution.
@@ -171,11 +193,19 @@ Quick Cleanups for when you don't have a lot of time:
 - [X] Improve the CLI to allow opening named files.
 - [ ] file system-level lock db file when opening it.
 - [ ] Make a Pager::Page object that has is_present(), purpose(), start_offset(), use_read() and use_write() methods.
-    - This is a precursor to supporting locking, and writes.
-- [ ] Make a Pager::PageRef object that represents a read or write lock on a page and allows borrowing the page contents
-    - use_read() and use_write() methods on Pager::Page can return the Pager::PageRef which the caller puts on their stack.
-      Pager::PageRef will wrap the RwLock::LockResult.
-- [ ] Make a Table::read_lock() and table_writelock() methods that lock the table from being redefined, and locks the schema table
+    - First experiment to see if the page_bytes can be wrapped in a newtype.
+    - Then, implement Drop for the newtype to write the page back?
+    - This is a precursor to supporting writeback-when-done-with-write, and pageout-after-done-read.
+    - [ ] Pre-req - eliminate Cursor seeks in btree code: use direct array access.  this will help to enable next step.
+    - [ ] Put these objects into the Page (ReadPage/WritePage).
+        - the actual pages_bytes: &/&mut Vec<u8>
+        - the value of non_btree_header_bytes: usize
+        - the page_size: u32
+        - the page number, for error messages.
+        - accessors to page header including:
+          - page_size: u32
+        - ReadGuard/WriteGuard for locks (future).
+- [ ] Make a Table::read_lock() and Table::write_lock() methods that lock the table from being redefined, and locks the schema table
   row from being modified.
 - [ ] Replace panics that are likely to happen during interactive with Results<>.
 - [ ] Try to Box the File in pager.rs in a temporary box, and then use it, then move it to the Box in the constructed struct,
