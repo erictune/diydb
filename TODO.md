@@ -2,6 +2,8 @@ Current Projects Stack
 ----------------------
 
 # Side Project - Insert into TempTable
+  - [x] Refactor TempTable to own file.
+  - [x] Define TableMeta trait.
   - Add append method to Temp Table.
   - Add query support for Temp Tables.
     - In ir_interpreter::run_ir, detect if a temptable or a table is being used, and call open_read on the correct variant.

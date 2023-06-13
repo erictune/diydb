@@ -7,6 +7,7 @@ use crate::pager;
 use crate::project;
 use crate::sql_type;
 use crate::sql_value;
+use crate::table_traits::TableMeta;
 use crate::table::Table;
 use crate::typed_row::Row;
 use crate::TempTable;

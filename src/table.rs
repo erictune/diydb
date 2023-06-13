@@ -3,6 +3,7 @@
 use std::str::FromStr;
 use streaming_iterator::StreamingIterator;
 
+use crate::table_traits::TableMeta;
 use crate::typed_row::Row;
 use crate::{pager, sql_type::SqlType};
 
@@ -69,14 +70,17 @@ impl<'p> StreamingIterator for TableStreamingIterator<'p> {
     }
 }
 
-impl<'a> Table<'a> {
-    pub fn column_names(&self) -> Vec<String> {
+impl<'a> TableMeta for Table<'a> {
+    fn column_names(&self) -> Vec<String> {
         self.column_names.clone()
     }
 
-    pub fn column_types(&self) -> Vec<SqlType> {
+    fn column_types(&self) -> Vec<SqlType> {
         self.column_types.clone()
     }
+}
+
+impl<'a> Table<'a> {
 
     /// creates a Table for unspecified (read vs write).
     /// Note: Most use cases should use open_read(), not new()

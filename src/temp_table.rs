@@ -13,6 +13,7 @@
 //! The assumption here is that the caller is an interactive user who wants a limited number of rows (thousands).
 //! For non-interactive bulk use, perhaps this needs to be revisted.
 
+use crate::table_traits::TableMeta;
 use crate::typed_row::Row;
 use crate::sql_type::SqlType;
 use streaming_iterator::StreamingIterator;
@@ -25,16 +26,19 @@ pub struct TempTable {
     pub column_types: Vec<SqlType>,
 }
 
+impl TableMeta for TempTable{
+    fn column_names(&self) -> Vec<String> {
+        self.column_names.clone()
+    }
+    fn column_types(&self) -> Vec<SqlType> {
+        self.column_types.clone()
+    }
+}
+
 impl TempTable {
     pub fn streaming_iterator(&self) -> TempTableStreamingIterator {
         // Could not get streaming_iterator::convert or streaming_iterator::convert_ref to work here.
         TempTableStreamingIterator::new(self.rows.iter())
-    }
-    pub fn column_names(&self) -> Vec<String> {
-        self.column_names.clone()
-    }
-    pub fn column_types(&self) -> Vec<SqlType> {
-        self.column_types.clone()
     }
 
     /// Printings out tables nicely.

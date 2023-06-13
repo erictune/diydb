@@ -13,6 +13,7 @@ mod record;
 mod serial_type;
 pub mod sql_type;
 pub mod sql_value;
+mod table_traits;
 mod table;
 mod temp_table;
 pub mod typed_row;
