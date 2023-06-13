@@ -1,11 +1,65 @@
 Current Projects Stack
 ----------------------
 
-# Side Side Project: RWLock pagers and pages.
-- Want non-mut ref to PagerSet to produce non-mut Pager, to produce mut Pages. using an RWLock.
+# Side Project - Insert into TempTable
+  - Add append method to Temp Table.
+  - Add query support for Temp Tables.
+    - In ir_interpreter::run_ir, detect if a temptable or a table is being used, and call open_read on the correct variant.
+    - build_project needs to take an 'impl TableMeta', or use enum.  If using enum, consider "enum_dispatch" crate.
 
+  - Support Create Temp Table (schema) which makes a temporary table in a separate temporary schema table.
+    - the schema lookup needs lookaside for temp db schemas.
+  - That closes out the outstanding "INSERT" work, and allows future extension of SQL mutation capabilities to be tested against temp tables.
+  - Note that SQLite might not do it this way - it might use a pager for temp tables.
+
+# Idea - Move Page Ownership from PagerSet/Pager into Table
+  - Make Table objects lifetime be as long as the DB has been opened.
+  - When you open a Db, a Db object is created.
+  - The Db Object has a list of its Tables and Indexes and range of Pages and the file handle and file lock.
+  - Tables (and Indexes) have a Btree in them.
+  - Btree object owns its set of pages, which have numbers in them.
+  - When a Btree object wants to read in a page with a known page number, it allocates memory (size = 1 page) which it owns,
+    then it asks the Db object, which it has a readonly reference to, to read in page number P into its memory, which the Db can borrow
+    for the duration of the load call. 
+  - In future, when there is concurrency, a query thread (e.g. Scan iterator) can get read access to a Page by RWLocking the page it wants to read.
+  - Expansion of the Table's pages only happens when someone has exclusive access to the table itself, which probably needs an RWlock of its own, at the
+    DB level.
+  - A Table need not have any pages present in it at first.  They get demand loaded.
+  - A Pager and PagerSet are not passed around visibly, but a Context (with the list of Dbs, needs to pass into each function.)
+  - When you try to scan or append a table, this is a member function, so hopefully the lifetimes are easier to reason about - the method lives less long
+    than the table.  If ScanAndProjectAndClone() is a method of the Table (but what about iterators?) then the lifetime might be easier to reason about?
+  - Limiting number of pages in core can be done separately, by requesting space allocation from a global quota counter.  LRU can be done
+    using a central page LRU counter that is bumped every time a page gets accessed.
+
+# Idea - TreeMap for TempTable
+  - Support rowid as a map (rowid, row).
+  - Perhaps someday have a KVStore trait that both the TempTable (using rust maps) and the page-based btree both implement.
+
+# Idea - TableMeta trait
+  - col types, col names, tablename
+  - to be implemented by SqliteBtreeTable and TempTable.
+
+# Idea - enum dispatch
+  - enum_dispatch crate
+  - use for different table types (which implement trait TableMeta)
+  - use for different streamable block types (which implement trait RowStream).
+  - use for different inserables (which implement AppendRow).
+
+# Side Side Project: RWLock pagers and pages.
+Want non-mut ref to PagerSet to produce non-mut Pager, to produce mut Pages. using an RWLock.
+  - **Have stash with partway successful version of this**
+  - Think about making ReadOnly be a modal flag to PagerSet, which controls how the db file is opened, and causes runtime Errs when 
+     trying to get pages for mutation, but not producing multiple types of Pagers form a PagerSet, or multiple types of Pages from a Pager.
+  - Consider two approaches: 
+    1. One where there is a PagerReader and PageWriter which wrap a ReadGuard and a WriteGuard respectively;
+    2. another where the caller calls get_page_ro(), which returns an ReadGuard to a &page, and get_page_rw() which returns a WriteGuard
+       to a &mut Page.  Thus, the called hold the *Guard on their stack, and there is only one Page type, and it has methods on both &self and &mut self, the latter not working when you only have an immutable reference.
+  - Another way to attack the problem is to tackle making a Page type before trying to make the locking work, and return that &Page instead of &Vec.
+    More helper functions can be put into Page to clean up callers (while being cautious to not put non-page concepts in to Page, such as Btree,Cell, etc).
+  - Additionally, it could help things to flatten the btree iterators into fewer layers.
+  
 # Side Project: Minimal Writing
-** This is in git stash right now**
+**This is in git stash right now**
 
 Goal: Support inserting rows, in a minumum way.
 I don't want to go deep into writes right now, but having at least minimal write ability may make it more clear where I need to go with the pager, and maybe other iterfaces too.

@@ -2,7 +2,6 @@ mod ast;
 mod ast_to_ir;
 mod btree;
 mod dbheader;
-mod formatting;
 mod ir;
 mod ir_interpreter;
 mod optimize_ast;
@@ -15,6 +14,7 @@ mod serial_type;
 pub mod sql_type;
 pub mod sql_value;
 mod table;
+mod temp_table;
 pub mod typed_row;
 extern crate pest;
 #[macro_use]
@@ -24,6 +24,7 @@ use anyhow::bail;
 use sql_type::SqlType;
 use sql_value::SqlValue;
 use table::Table;
+use temp_table::TempTable;
 use typed_row::Row;
 
 use streaming_iterator::StreamingIterator;
@@ -39,85 +40,6 @@ const SCHEMA_TABLE_COL_TYPES: [SqlType; 5] = [SqlType::Text, SqlType::Text, SqlT
 const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
 const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
 const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
-
-/// TempTable collects query results into a temporary in-memory table of limited size.
-///
-/// # Design Rationale
-/// In internal code, the database avoids making copies for efficiency, since queries can process many more rows than they
-/// returns (JOINs, WHEREs without indexes, etc).
-/// But when a query is complete, the results are copied.  That way, the callers does not have to deal with a reference lifetimes,
-/// and we can release any the page locks as soon as possible.
-/// The assumption here is that the caller is an interactive user who wants a limited number of rows (thousands).
-/// For non-interactive bulk use, perhaps this needs to be revisted.
-#[derive(Debug)]
-pub struct TempTable {
-    pub rows: Vec<Row>,
-    column_names: Vec<String>,
-    column_types: Vec<SqlType>,
-}
-impl TempTable {
-    pub fn streaming_iterator(&self) -> TempTableStreamingIterator {
-        // Could not get streaming_iterator::convert or streaming_iterator::convert_ref to work here.
-        TempTableStreamingIterator::new(self.rows.iter())
-    }
-    pub fn column_names(&self) -> Vec<String> {
-        self.column_names.clone()
-    }
-    pub fn column_types(&self) -> Vec<SqlType> {
-        self.column_types.clone()
-    }
-}
-
-/// iterates over the rows of a TempTable .
-/// The lifetime is bound by the lifetime of the TempTable.
-pub struct TempTableStreamingIterator<'a> {
-    it: std::slice::Iter<'a, Row>,
-    item: Option<Row>,
-}
-impl<'a> TempTableStreamingIterator<'a> {
-    fn new(it: std::slice::Iter<'a, Row>) -> TempTableStreamingIterator<'a> {
-        TempTableStreamingIterator { it, item: None }
-    }
-}
-
-impl<'a> StreamingIterator for TempTableStreamingIterator<'a> {
-    type Item = Row;
-
-    #[inline]
-    fn advance(&mut self) {
-        self.item = self.it.next().map(|r| Row{ items: r.items.clone(), })
-    }
-
-    #[inline]
-    fn get(&self) -> Option<&Row> {
-        self.item.as_ref()
-    }
-}
-
-#[test]
-fn test_temp_table() {
-    use sql_value::SqlValue;
-    let tbl = TempTable {
-        rows: vec![Row {
-            items: vec![SqlValue::Int(1)],
-        }],
-        column_names: vec!["b".to_string()],
-        column_types: vec![SqlType::Int],
-    };
-    assert_eq!(tbl.column_names(), vec![String::from("b")]);
-    assert_eq!(tbl.column_types(), vec![SqlType::Int]);
-    let mut it = tbl.streaming_iterator();
-    //let mut it = &mut cvt as &dyn streaming_iterator::StreamingIterator<Item = &Row>;
-    it.advance();
-    assert_eq!(
-        it.get(),
-        Some(&Row {
-            items: vec![SqlValue::Int(1)]
-        })
-    );
-    it.advance();
-    assert_eq!(it.get(), None);
-}
 
 /// Get the root page number for, and the SQL CREATE statement used to create `table_name`.
 pub fn get_creation_sql_and_root_pagenum(
@@ -167,13 +89,13 @@ pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Ite
 pub fn print_schema(pager: &pager::Pager) -> anyhow::Result<()> {
     let tbl = Table::open_read(pager, SCHEMA_TABLE_NAME)?;
     let tt: TempTable = tbl.to_temp_table()?;
-    formatting::print_table_tt(&tt, false)?;
+    tt.print(false)?;
     Ok(())
 }
 
 pub fn run_query(ps: &pager::PagerSet, query: &str) -> anyhow::Result<()> {
     let tt = run_query_no_print(ps, query)?;
-    crate::formatting::print_table_tt(&tt, false)?;
+    tt.print(false)?;
     Ok(())
 }
 
@@ -182,7 +104,7 @@ pub fn run_insert(_ps: &pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
     bail!("Not implemented yet.")
 }
 
-pub fn run_query_no_print(ps: &pager::PagerSet, query: &str) -> anyhow::Result<crate::TempTable> {
+pub fn run_query_no_print(ps: &pager::PagerSet, query: &str) -> anyhow::Result<TempTable> {
     // Convert parse tree to AST.
     let mut ss: ast::SelectStatement = pt_to_ast::pt_select_statement_to_ast(query)?;
     // Optimize the AST (in place).
@@ -190,6 +112,6 @@ pub fn run_query_no_print(ps: &pager::PagerSet, query: &str) -> anyhow::Result<c
     // Convert the AST to IR.
     let ir: ir::Block = ast_to_ir::ast_select_statement_to_ir(&ss)?;
     // Execute the IR.
-    let tt: crate::TempTable = ir_interpreter::run_ir(ps, &ir)?;
+    let tt: TempTable = ir_interpreter::run_ir(ps, &ir)?;
     Ok(tt)
 }
