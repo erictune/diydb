@@ -1,18 +1,27 @@
 Current Projects Stack
 ----------------------
 
-# Side Project - Insert into TempTable
+# Sub-Project of Implementing Writes - Insert into TempTable
   - [x] Refactor TempTable to own file.
   - [x] Define TableMeta trait.
-  - Add append method to Temp Table.
-  - Add query support for Temp Tables.
-    - In ir_interpreter::run_ir, detect if a temptable or a table is being used, and call open_read on the correct variant.
-    - build_project needs to take an 'impl TableMeta', or use enum.  If using enum, consider "enum_dispatch" crate.
+  - [x] Add append method to Temp Table.
+  - [x] Support SELECT on temp table in run_ir.
+  - [x] test inserting values into a TempTable using "INSERT".
 
-  - Support Create Temp Table (schema) which makes a temporary table in a separate temporary schema table.
-    - the schema lookup needs lookaside for temp db schemas.
-  - That closes out the outstanding "INSERT" work, and allows future extension of SQL mutation capabilities to be tested against temp tables.
-  - Note that SQLite might not do it this way - it might use a pager for temp tables.
+  # Next Sub-project - Create Temp Tables
+  - [ ] put a schema table (temptable) in the pagerset
+  - [ ] allow lookups of tables to use the PagerSet, and to look for temp tables.
+  - [ ] in `CREATE`, add parsing of db names, and treat "temp" db name specially; also detect "TEMP" (which forces the db name to be temp);
+  # Other Sub-project
+  - Support and test "strict".
+  - [ ] parse from CREATE
+  - [ ] make it part of TableMeta
+  - [ ] use strict checks (see temp_table.rs.with_validate)
+
+# Idea - TreeMap for TempTable
+  - Support rowid as a map (rowid, row).
+  - Perhaps someday have a KVStore trait that both the TempTable (using rust maps) and the page-based btree both implement.
+
 
 # Idea - Move Page Ownership from PagerSet/Pager into Table
   - Make Table objects lifetime be as long as the DB has been opened.
@@ -33,14 +42,6 @@ Current Projects Stack
   - Limiting number of pages in core can be done separately, by requesting space allocation from a global quota counter.  LRU can be done
     using a central page LRU counter that is bumped every time a page gets accessed.
 
-# Idea - TreeMap for TempTable
-  - Support rowid as a map (rowid, row).
-  - Perhaps someday have a KVStore trait that both the TempTable (using rust maps) and the page-based btree both implement.
-
-# Idea - TableMeta trait
-  - col types, col names, tablename
-  - to be implemented by SqliteBtreeTable and TempTable.
-
 # Idea - enum dispatch
   - enum_dispatch crate
   - use for different table types (which implement trait TableMeta)
@@ -48,6 +49,7 @@ Current Projects Stack
   - use for different inserables (which implement AppendRow).
 
 # Side Side Project: RWLock pagers and pages.
+This allows finishing "Minimal Writing"
 Want non-mut ref to PagerSet to produce non-mut Pager, to produce mut Pages. using an RWLock.
   - **Have stash with partway successful version of this**
   - Think about making ReadOnly be a modal flag to PagerSet, which controls how the db file is opened, and causes runtime Errs when 

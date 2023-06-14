@@ -97,6 +97,9 @@ fn do_command(c: &mut Context, line: &str) {
         "SELECT" => {
             do_select(c, line)
         }
+        "INSERT" => {
+            do_insert(c, line)
+        }
         _ => println!("Unknown SQL command: `{}`", line),
     }
 }
@@ -111,6 +114,7 @@ fn do_help(_: &mut Context) {
 .open               to open a persistent database.
 .schema             to list the tables and their definitions.
 SELECT ...          to do a query.
+INSERT ...          to insert values into a table.
 "
     );
 }
@@ -139,5 +143,11 @@ fn do_schema(c: &mut Context) {
 fn do_select(c: &mut Context, l: &str) {
     if let Err(e) = diydb::run_query(&c.pagerset, l) {
         println!("Error running query: {}", e);
+    }
+}
+
+fn do_insert(c: &mut Context, l: &str) {
+    if let Err(e) = diydb::run_insert(&mut c.pagerset, l) {
+        println!("Error running statement: {}", e);
     }
 }

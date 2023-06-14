@@ -266,3 +266,31 @@ fn test_run_selects() {
         assert_eq!(actual.rows, case.1);
     }
 }
+
+#[test]
+fn test_insert_on_temptable() {
+    use diydb::sql_value::SqlValue::*;
+    let mut ps = diydb::pager::PagerSet::new();
+    // This is relying on automatic creation of a temptable.  TODO: implement CREATE and use that here.
+    let tt = diydb::run_query_no_print(&mut ps, "select * from temp").unwrap();
+    assert_eq!(tt.rows.len(), 0);
+    // Should be able to insert a row.
+    diydb::run_insert(&mut ps, "insert into temp values (42)").expect("Should have inserted without errors");
+    // After Insert, there are two rows.
+    let tt = diydb::run_query_no_print(&mut ps, "select * from temp").unwrap();
+    assert_eq!(tt.rows.len(), 1);
+    assert_eq!(tt.rows[0].items.len(), 1);
+    assert_eq!(tt.rows[0].items[0], Int(42));
+    // Should be able to insert another row.
+    diydb::run_insert(&mut ps, "insert into temp values (102)").expect("Should have inserted without errors");
+    // After Insert, there are two rows.
+    let tt = diydb::run_query_no_print(&mut ps, "select * from temp").unwrap();
+    assert_eq!(tt.rows.len(), 2);
+    assert_eq!(tt.rows[0].items.len(), 1);
+    assert_eq!(tt.rows[0].items[0], Int(42));
+    assert_eq!(tt.rows[1].items.len(), 1);
+    assert_eq!(tt.rows[1].items[0], Int(102));
+}
+// TODO: insert to multiple column temp tables.
+// TODO: insert multiple rows at a time.
+// TODO: test all those things on persistent SQLite tables when supported.

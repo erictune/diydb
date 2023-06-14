@@ -9,7 +9,7 @@ use crate::{pager, sql_type::SqlType};
 
 pub struct Table<'a> {
     pager: &'a pager::Pager,
-    _table_name: String,
+    table_name: String,
     root_pagenum: pager::PageNum,
     column_names: Vec<String>,
     column_types: Vec<SqlType>,
@@ -78,6 +78,10 @@ impl<'a> TableMeta for Table<'a> {
     fn column_types(&self) -> Vec<SqlType> {
         self.column_types.clone()
     }
+    
+    fn table_name(&self) -> String {
+        self.table_name.clone()
+    }
 }
 
 impl<'a> Table<'a> {
@@ -93,7 +97,7 @@ impl<'a> Table<'a> {
     ) -> Table<'a> {
         Table {
             pager,
-            _table_name: table_name,
+            table_name,
             root_pagenum,
             column_names,
             column_types,

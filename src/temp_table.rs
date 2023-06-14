@@ -16,10 +16,20 @@
 use crate::table_traits::TableMeta;
 use crate::typed_row::Row;
 use crate::sql_type::SqlType;
+use crate::sql_value::SqlValue;
 use streaming_iterator::StreamingIterator;
 
+#[derive(thiserror::Error, Debug, Clone)]
+pub enum Error {
+    #[error("Something went wrong appending.")]
+    AppendError,
+    #[error("Table {} has {} columns but {} values were supplied", name, table_n_col, row_num_cols)]
+    ColumnCountError{ name: String, table_n_col: usize, row_num_cols: usize},
+    #[error("Cannot insert value {} with type {} into column {} with type {}", value, value_type, column_name, column_type)]
+    TypeMismatch{ value: SqlValue, value_type: SqlType, column_name: String, column_type: SqlType },
+}  
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TempTable {
     pub rows: Vec<Row>,
     pub column_names: Vec<String>,
@@ -33,12 +43,22 @@ impl TableMeta for TempTable{
     fn column_types(&self) -> Vec<SqlType> {
         self.column_types.clone()
     }
+    fn table_name(&self) -> String {
+        String::from("?unnamed?")
+    }
 }
 
 impl TempTable {
     pub fn streaming_iterator(&self) -> TempTableStreamingIterator {
         // Could not get streaming_iterator::convert or streaming_iterator::convert_ref to work here.
         TempTableStreamingIterator::new(self.rows.iter())
+    }
+
+    /// inserts a value in a table using the next unused rowid.
+    pub fn append_row(&mut self, row: &Vec<SqlValue>) -> Result<(), Error> {
+        // TODO: store a rowid for consistency with regular Tables.
+        self.rows.push(Row{ items: row.clone() });
+        Ok(())
     }
 
     /// Printings out tables nicely.

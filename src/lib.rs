@@ -100,9 +100,32 @@ pub fn run_query(ps: &pager::PagerSet, query: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_insert(_ps: &pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
-    let _is: ast::InsertStatement = pt_to_ast::pt_insert_statement_to_ast(stmt)?;
-    bail!("Not implemented yet.")
+fn is_temporary_table(tablename: &str) -> bool {
+    // TODO: do this properly using parsing the db name separate from the table name, and 
+    // check checking if the DB is called "temp".
+    println!("{} {}", tablename, "temp");
+    tablename == "temp"
+}
+
+pub fn run_insert(ps: &mut pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
+    let is: ast::InsertStatement = pt_to_ast::pt_insert_statement_to_ast(stmt)?;
+    // TODO: use helper functions or "impl Trait" argument types to reduce how much code is duplicated
+    // across these two match arms.
+    match is_temporary_table(is.tablename.as_str()) {
+        true /* temporary table */ => {
+            let tbl = ps.get_temp_table_mut()?;
+            for row in is.values {
+                // Convert row from AST constants to SQL values.
+                let row: Vec<SqlValue> = row.iter().map(sql_value::from_ast_constant).collect();
+                tbl.append_row(&row)?;
+            }
+            // Writing to disk not needed for temp tables.
+        }
+        false /* Persistent, SQLite table */ => {
+            bail!("Inserting into persistent (SQLite-format) tables is not supported yet.  Try a temporary table.");
+        }
+    }
+    Ok(())
 }
 
 pub fn run_query_no_print(ps: &pager::PagerSet, query: &str) -> anyhow::Result<TempTable> {

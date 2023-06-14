@@ -282,8 +282,7 @@ pub fn pt_insert_statement_to_ast(stmt: &str) -> Result<ast::InsertStatement> {
     let mut pairs = insert_stmt.into_inner();
     if let Some(pair) = pairs.next() {
         if let Rule::table_identifier = pair.as_rule() {
-            let tbl = pair.into_inner();
-            tablename = tbl.as_str().to_string();
+            tablename = pair.as_str().to_string();
         } else { bail!("Missing table identifier in INSERT statement.") }
     } else { bail!("Unexpected syntax in INSERT statement.") }
 

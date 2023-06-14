@@ -88,6 +88,11 @@ use std::boxed::Box;
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom};
 
+// Split the "list of Tables" and "memory manager" responsibilities of PagerSet/Pager.
+use crate::temp_table::TempTable;
+use crate::sql_type::SqlType;
+
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Pager: Page number greater than maximum supported page number.")]
@@ -109,6 +114,7 @@ pub enum Error {
 // A `PagerSet` manages zero or more Pagers, one per open database.
 pub struct PagerSet {
     pagers: Vec<Pager>,
+    temp_table: crate::temp_table::TempTable, // TODO: support multiple temp tables. 
 }
 
 // 'a: lifetime of self
@@ -119,7 +125,15 @@ where
 {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        PagerSet { pagers: vec![] }
+        PagerSet { 
+            pagers: vec![],
+            temp_table: TempTable{
+                rows: vec![],
+                column_names: vec![String::from("a")],
+                column_types: vec![SqlType::Int]
+            }
+        }
+
     }
     pub fn default_pager(&'a self) -> Result<&'b Pager, Error> {
         match self.pagers.len() {
@@ -138,6 +152,13 @@ where
     pub fn opendb(&'a mut self, path: &str) -> Result<(), Error> {
         self.pagers.push(Pager::open(path)?);
         Ok(())
+    }
+    pub fn get_temp_table(&'a self, /* TODO: lookup by name, create new ones. */) -> Result<&'b crate::temp_table::TempTable, Error> {
+        Ok(&self.temp_table)
+    }
+
+    pub fn get_temp_table_mut(&'a mut self, /* TODO: lookup by name, create new ones. */) -> Result<&'b mut crate::temp_table::TempTable, Error> {
+        Ok(&mut self.temp_table)
     }
 }
 
