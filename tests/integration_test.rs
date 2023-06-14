@@ -268,23 +268,24 @@ fn test_run_selects() {
 }
 
 #[test]
-fn test_insert_on_temptable() {
+fn test_create_insert_select_on_temptable() {
     use diydb::sql_value::SqlValue::*;
     let mut ps = diydb::pager::PagerSet::new();
+    diydb::run_create(&mut ps, "create temp table t (i int)").unwrap();
     // This is relying on automatic creation of a temptable.  TODO: implement CREATE and use that here.
-    let tt = diydb::run_query_no_print(&mut ps, "select * from temp").unwrap();
+    let tt = diydb::run_query_no_print(&mut ps, "select * from temp.t").unwrap();
     assert_eq!(tt.rows.len(), 0);
     // Should be able to insert a row.
-    diydb::run_insert(&mut ps, "insert into temp values (42)").expect("Should have inserted without errors");
+    diydb::run_insert(&mut ps, "insert into temp.t values (42)").expect("Should have inserted without errors");
     // After Insert, there are two rows.
-    let tt = diydb::run_query_no_print(&mut ps, "select * from temp").unwrap();
+    let tt = diydb::run_query_no_print(&mut ps, "select * from temp.t").unwrap();
     assert_eq!(tt.rows.len(), 1);
     assert_eq!(tt.rows[0].items.len(), 1);
     assert_eq!(tt.rows[0].items[0], Int(42));
     // Should be able to insert another row.
-    diydb::run_insert(&mut ps, "insert into temp values (102)").expect("Should have inserted without errors");
+    diydb::run_insert(&mut ps, "insert into temp.t values (102)").expect("Should have inserted without errors");
     // After Insert, there are two rows.
-    let tt = diydb::run_query_no_print(&mut ps, "select * from temp").unwrap();
+    let tt = diydb::run_query_no_print(&mut ps, "select * from temp.t").unwrap();
     assert_eq!(tt.rows.len(), 2);
     assert_eq!(tt.rows[0].items.len(), 1);
     assert_eq!(tt.rows[0].items[0], Int(42));

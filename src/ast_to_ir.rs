@@ -37,8 +37,10 @@ pub fn ast_select_statement_to_ir(ss: &ast::SelectStatement) -> Result<ir::Block
     // At this point, the select has a "from" clause.  In a degenerate case, it might not
     // be referenced by the select or where or other clauses, but we still have to "scan" to return
     // one result row for every input row.
+    let from = ss.from.as_ref().unwrap();
     let scan = ir::Scan {
-        tablename: ss.from.as_ref().unwrap().tablename.clone(),
+        databasename: from.databasename.clone(),
+        tablename: from.tablename.clone(),
     };
     let mut outcols: Vec<ast::SelItem> = vec![];
     for item in &ss.select.items[..] {
@@ -104,6 +106,7 @@ fn test_ast_select_statement_to_ir() {
                     })],
                 },
                 from: Some(ast::FromClause {
+                    databasename: String::from("db"),
                     tablename: String::from("t"),
                 }),
             },
@@ -112,6 +115,7 @@ fn test_ast_select_statement_to_ir() {
                     name: String::from("a"),
                 })],
                 input: std::boxed::Box::new(ir::Block::Scan(ir::Scan {
+                    databasename: String::from("db"),
                     tablename: String::from("t"),
                 })),
             })),
@@ -123,10 +127,12 @@ fn test_ast_select_statement_to_ir() {
                     items: vec![ast::SelItem::Star],
                 },
                 from: Some(ast::FromClause {
+                    databasename: String::from("db"),
                     tablename: String::from("t"),
                 }),
             },
             expected: Ok(ir::Block::Scan(ir::Scan {
+                databasename: String::from("db"),
                 tablename: String::from("t"),
             })),
         },
@@ -137,12 +143,14 @@ fn test_ast_select_statement_to_ir() {
                     items: vec![ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(1)))],
                 },
                 from: Some(ast::FromClause {
+                    databasename: String::from("db"),
                     tablename: String::from("t"),
                 }),
             },
             expected: Ok(ir::Block::Project(ir::Project {
                 outcols: vec![ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(1)))],
                 input: std::boxed::Box::new(ir::Block::Scan(ir::Scan {
+                    databasename: String::from("db"),
                     tablename: String::from("t"),
                 })),
             })),
@@ -161,6 +169,7 @@ fn test_ast_select_statement_to_ir() {
                 },
                 from: Some(ast::FromClause {
                     tablename: String::from("t"),
+                    databasename: String::from("db"),
                 }),
             },
             expected: Ok(ir::Block::Project(ir::Project {
@@ -172,6 +181,7 @@ fn test_ast_select_statement_to_ir() {
                     ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(3))),
                 ],
                 input: std::boxed::Box::new(ir::Block::Scan(ir::Scan {
+                    databasename: String::from("db"),
                     tablename: String::from("t"),
                 })),
             })),

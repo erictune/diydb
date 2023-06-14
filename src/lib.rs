@@ -22,13 +22,14 @@ extern crate pest;
 extern crate pest_derive;
 
 use anyhow::bail;
+use std::str::FromStr;
+use streaming_iterator::StreamingIterator;
+
 use sql_type::SqlType;
 use sql_value::SqlValue;
 use table::Table;
 use temp_table::TempTable;
 use typed_row::Row;
-
-use streaming_iterator::StreamingIterator;
 
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
@@ -100,20 +101,13 @@ pub fn run_query(ps: &pager::PagerSet, query: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn is_temporary_table(tablename: &str) -> bool {
-    // TODO: do this properly using parsing the db name separate from the table name, and 
-    // check checking if the DB is called "temp".
-    println!("{} {}", tablename, "temp");
-    tablename == "temp"
-}
-
 pub fn run_insert(ps: &mut pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
     let is: ast::InsertStatement = pt_to_ast::pt_insert_statement_to_ast(stmt)?;
     // TODO: use helper functions or "impl Trait" argument types to reduce how much code is duplicated
     // across these two match arms.
-    match is_temporary_table(is.tablename.as_str()) {
+    match is.databasename == "temp" {
         true /* temporary table */ => {
-            let tbl = ps.get_temp_table_mut()?;
+            let tbl = ps.get_temp_table_mut(&is.tablename)?;
             for row in is.values {
                 // Convert row from AST constants to SQL values.
                 let row: Vec<SqlValue> = row.iter().map(sql_value::from_ast_constant).collect();
@@ -127,6 +121,26 @@ pub fn run_insert(ps: &mut pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+pub fn run_create(ps: &mut pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
+    let cs: ast::CreateStatement = pt_to_ast::pt_create_statement_to_ast(stmt);
+    // TODO: use helper functions or "impl Trait" argument types to reduce how much code is duplicated
+    // across these two match arms.
+    match cs.databasename == "temp" {
+        true /* temporary table */ => {            
+            ps.new_temp_table(
+                cs.tablename,
+                cs.coldefs.iter().map(|x| x.colname.name.clone()).collect(),
+                cs.coldefs.iter().map(|x| sql_type::SqlType::from_str(x.coltype.as_str()).unwrap()).collect(),
+            )?;
+        }
+        false /* Persistent, SQLite table */ => {
+            bail!("Creation of persistent (SQLite-format) tables is not supported yet.  Try 'CREATE TEMP TABLE ...;' instead.");
+        }
+    }
+    Ok(())
+}
+
 
 pub fn run_query_no_print(ps: &pager::PagerSet, query: &str) -> anyhow::Result<TempTable> {
     // Convert parse tree to AST.

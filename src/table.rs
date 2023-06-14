@@ -147,6 +147,7 @@ impl<'a> Table<'a> {
         Ok(crate::TempTable {
             // TODO: take() a limited number of rows when collect()ing them, and return error if they don't fit?
             rows,
+            tablename: self.table_name.clone(),
             column_names: self.column_names.clone(),
             column_types: self.column_types.clone(),
         })

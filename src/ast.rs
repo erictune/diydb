@@ -35,6 +35,7 @@ impl std::fmt::Display for SelItem {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FromClause {
+    pub databasename: String,
     pub tablename: String,
 }
 
@@ -72,11 +73,13 @@ pub struct ColDef {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateStatement {
+    pub databasename: String, // "temp" or "main" currently supported values.
     pub tablename: String,    // Create clause - be more specific.
     pub coldefs: Vec<ColDef>, // Be more specific.
 }
 
 pub struct InsertStatement {
+    pub databasename: String, // "temp" or "main" currently supported values.
     pub tablename: String,
     pub values: Vec<Vec<Constant>>,
 }

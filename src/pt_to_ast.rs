@@ -19,13 +19,26 @@ pub fn pt_create_statement_to_ast(c: &str) -> ast::CreateStatement {
         .unwrap();
 
     let mut coldefs: Vec<ast::ColDef> = vec![];
-
+    let mut databasename: String = String::from("main");
     let mut tablename = String::from("");
     // Confirm it is a create statement.
     for c in create_stmt.into_inner() {
         match c.as_rule() {
-            Rule::table_identifier => {
-                tablename = String::from(c.as_str());
+            Rule::temp => {
+                databasename = String::from("temp");
+            }
+            Rule::table_identifier_with_optional_db => {
+                let t = c.into_inner().collect_vec();
+                match t.len() {
+                    1 => {
+                        tablename = String::from(t[0].as_str());
+                    }
+                    2 => {
+                        databasename = String::from(t[0].as_str());
+                        tablename = String::from(t[1].as_str());
+                    }
+                    _ => unreachable!(),
+                }
             }
             Rule::column_defs => {
                 for column_def in c.into_inner() {
@@ -50,7 +63,7 @@ pub fn pt_create_statement_to_ast(c: &str) -> ast::CreateStatement {
             _ => unreachable!(),
         }
     }
-    ast::CreateStatement { tablename, coldefs }
+    ast::CreateStatement { databasename, tablename, coldefs }
 }
 
 #[test]
@@ -58,6 +71,7 @@ fn test_pt_create_statement_to_ast() {
     let input = "CREATE TABLE t (a int)";
     let actual = pt_create_statement_to_ast(input);
     let expected = ast::CreateStatement {
+        databasename: String::from("main"),
         tablename: "t".to_string(),
         coldefs: vec![ast::ColDef {
             colname: ast::ColName {
@@ -68,6 +82,23 @@ fn test_pt_create_statement_to_ast() {
     };
     assert_eq!(actual, expected);
 }
+#[test]
+fn test_pt_create_statement_to_ast_with_temp() {
+    let input = "CREATE TEMP TABLE t (a int)";
+    let actual = pt_create_statement_to_ast(input);
+    let expected = ast::CreateStatement {
+        databasename: String::from("temp"),
+        tablename: "t".to_string(),
+        coldefs: vec![ast::ColDef {
+            colname: ast::ColName {
+                name: "a".to_string(),
+            },
+            coltype: "int".to_string(),
+        }],
+    };
+    assert_eq!(actual, expected);
+}
+
 // Select(SelectItems(Constant(1), ColName(x)), From(TableName("t")))
 pub fn ast_create_statement_to_tuple(
     c: ast::CreateStatement,
@@ -277,19 +308,30 @@ pub fn pt_insert_statement_to_ast(stmt: &str) -> Result<ast::InsertStatement> {
         .next()
         .unwrap();
 
-    // Confirm it is a select statement.
+    // Confirm it is an insert statement.
     let tablename; 
+    let mut databasename = "main".to_owned();
     let mut pairs = insert_stmt.into_inner();
     if let Some(pair) = pairs.next() {
-        if let Rule::table_identifier = pair.as_rule() {
-            tablename = pair.as_str().to_string();
+        if let Rule::table_identifier_with_optional_db = pair.as_rule() {
+            let t: Vec<_> = pair.into_inner().collect();
+            match t.len() {
+                1 => {
+                    tablename = String::from(t[0].as_str());
+                }
+                2 => {
+                    databasename = String::from(t[0].as_str());
+                    tablename = String::from(t[1].as_str());
+                }
+                _ => unreachable!(),
+            }
         } else { bail!("Missing table identifier in INSERT statement.") }
     } else { bail!("Unexpected syntax in INSERT statement.") }
 
     if let Some(pair) = pairs.next() {
         if let Rule::expr_list_list = pair.as_rule() {
             let values = parse_constant_expr_list_list(pair)?;
-            return Ok(ast::InsertStatement{ tablename, values });
+            return Ok(ast::InsertStatement{ databasename, tablename, values });
         }
     }
     bail!("Error parsing VALUES in INSERT statement.");
@@ -324,11 +366,25 @@ pub fn pt_select_statement_to_ast(query: &str) -> Result<ast::SelectStatement> {
     // Confirm it is a select statement.
     for s in select_stmt.into_inner() {
         match s.as_rule() {
-            Rule::table_identifier => {
-                if ast.from.is_none() {
-                    ast.from = Some(ast::FromClause {
-                        tablename: String::from(s.as_str()),
-                    });
+            Rule::table_identifier_with_optional_db => {    
+                if ast.from.is_none() {    
+                    let t: Vec<_> = s.into_inner().collect();
+                    ast.from = Some(
+                        match t.len() {
+                            1 => {
+                                ast::FromClause {
+                                    databasename: "main".to_owned(),
+                                    tablename: String::from(t[0].as_str()),
+                                }
+                            }
+                            2 => {
+                                ast::FromClause {
+                                    databasename: String::from(t[0].as_str()),
+                                    tablename: String::from(t[1].as_str()),
+                                }
+                            }
+                            _ => unreachable!(),
+                        });    
                 } else {
                     bail!("Too many tables in from.")
                 }

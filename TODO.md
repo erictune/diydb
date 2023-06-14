@@ -1,18 +1,12 @@
 Current Projects Stack
 ----------------------
 
-# Sub-Project of Implementing Writes - Insert into TempTable
-  - [x] Refactor TempTable to own file.
-  - [x] Define TableMeta trait.
-  - [x] Add append method to Temp Table.
-  - [x] Support SELECT on temp table in run_ir.
-  - [x] test inserting values into a TempTable using "INSERT".
+# Mini-Project - CREATE TEMP table
+  - [x] put a schema table (temptable) in the pagerset
+  - [x] allow lookups of tables to use the PagerSet, and to look for temp tables.
+  - [x] in `CREATE`, etc, add parsing of db names, and treat "temp" db name specially; also detect "TEMP" (which forces the db name to be temp);
 
-  # Next Sub-project - Create Temp Tables
-  - [ ] put a schema table (temptable) in the pagerset
-  - [ ] allow lookups of tables to use the PagerSet, and to look for temp tables.
-  - [ ] in `CREATE`, add parsing of db names, and treat "temp" db name specially; also detect "TEMP" (which forces the db name to be temp);
-  # Other Sub-project
+# Mini-Project - STRICT
   - Support and test "strict".
   - [ ] parse from CREATE
   - [ ] make it part of TableMeta
@@ -22,8 +16,7 @@ Current Projects Stack
   - Support rowid as a map (rowid, row).
   - Perhaps someday have a KVStore trait that both the TempTable (using rust maps) and the page-based btree both implement.
 
-
-# Idea - Move Page Ownership from PagerSet/Pager into Table
+# Big Idea - Move Page Ownership from PagerSet/Pager into Table
   - Make Table objects lifetime be as long as the DB has been opened.
   - When you open a Db, a Db object is created.
   - The Db Object has a list of its Tables and Indexes and range of Pages and the file handle and file lock.
@@ -65,8 +58,8 @@ Want non-mut ref to PagerSet to produce non-mut Pager, to produce mut Pages. usi
 # Side Project: Minimal Writing
 **This is in git stash right now**
 
-Goal: Support inserting rows, in a minumum way.
-I don't want to go deep into writes right now, but having at least minimal write ability may make it more clear where I need to go with the pager, and maybe other iterfaces too.
+Goal: Support inserting rows into Sqlite tables and writing the changed page back to disk.  Do it in a minumum way.
+I don't want to go too deep into writes right now, but having at least minimal write ability may make it more clear where I need to go with the pager, and maybe other iterfaces too.
 
 Writing to existing tables which have room in their last page for new cells (no btree growth yet).
 Defer tree rebalancing; defer inserting cells in some order; defer length-changing update of existing cells.
@@ -144,7 +137,10 @@ New Code:
   - logical not
   - sum() aggregation.
 
-# Completed Project - parse and execute queries with basic project step
+Recent Completed Projects
+-------------------------
+
+# parse and execute queries with basic project step
 Build steel thread of parsing and execution.
 - [x] Parse to Parse tree using pest.rs.
   - e.g. Start with `select 1, x from t;` and generate `Pairs<Rule>`
@@ -171,6 +167,13 @@ Build steel thread of parsing and execution.
     - [x] refer to source columns by index rather than by name to avoid lookup.
     - [x] Expand each star to the list of all columns in the schema.
 
+# Insert into TempTable
+  - [x] Refactor TempTable to own file.
+  - [x] Define TableMeta trait.
+  - [x] Add append method to Temp Table.
+  - [x] Support SELECT on temp table in run_ir.
+  - [x] test inserting values into a TempTable using "INSERT".
+
 
 Future Projects
 ----------------
@@ -183,6 +186,11 @@ Future Projects
   - build_where() similar to build_project().
   - build_where() to detect type mismatch in expressions.
   
+## Nested Select
+- `SELECT a, b FROM (SELECT 1 as a, "two" as b, 3 as c)` becoming `Project(TempTable)`
+
+## `GROUP BY`
+
 ## Finish Projection.
 - [ ] Use alternative name provided with "AS" in projects.
 - [ ] Expression trees evaluated at runtime.
@@ -190,15 +198,6 @@ Future Projects
 - [ ] push any functions on longer values (Strings, Blobs?) down to the lowest project to reduce  amount of data copied.
 - [ ] Implement Table locking at query time that prevents schema update and table delete.
 - [ ] Implement Page locking at Scan time that releases done-with leaf pages (and used interior pages) held as long as needed.
-
-## Nested Select
-- `SELECT a, b FROM (SELECT 1 as a, "two" as b, 3 as c)` becoming `Project(TempTable)`
-
-## Temp table
-- `CREATE TEMP table t as (SELECT 1 as a, "two" as b, 3 as c); SELECT a, b FROM t`
-- No locking/ACID needed for in-memory.
-
-- `GROUP BY`
 
 ## `JOIN`
 
@@ -269,7 +268,7 @@ Quick Cleanups for when you don't have a lot of time:
 - [ ] Try to Box the File in pager.rs in a temporary box, and then use it, then move it to the Box in the constructed struct,
   so that we can run the header check in open().
 
-## Staticification
+## Idea - Staticification
 
 Use of the lazy_static module and macro could allow the pagerset to be declared as static,
 which might reduce the complexity of dealing with lifetimes of data held in the pager.

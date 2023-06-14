@@ -140,6 +140,7 @@ fn test_simplify_ast_select_statement() {
                     items: vec![ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(2)))],
                 },
                 from: Some(ast::FromClause {
+                    databasename: String::from("db"),
                     tablename: String::from("t"),
                 }),
             },
@@ -148,6 +149,7 @@ fn test_simplify_ast_select_statement() {
                     items: vec![ast::SelItem::Expr(ast::Expr::Constant(ast::Constant::Int(2)))],
                 },
                 from: Some(ast::FromClause {
+                    databasename: String::from("db"),
                     tablename: String::from("t"),
                 }),
             },

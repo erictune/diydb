@@ -32,6 +32,7 @@ pub enum Error {
 #[derive(Debug, Clone)]
 pub struct TempTable {
     pub rows: Vec<Row>,
+    pub tablename: String,
     pub column_names: Vec<String>,
     pub column_types: Vec<SqlType>,
 }
@@ -44,7 +45,7 @@ impl TableMeta for TempTable{
         self.column_types.clone()
     }
     fn table_name(&self) -> String {
-        String::from("?unnamed?")
+        self.tablename.clone()
     }
 }
 
@@ -132,6 +133,7 @@ fn test_temp_table() {
         rows: vec![Row {
             items: vec![SqlValue::Int(1)],
         }],
+        tablename: "test".to_string(),
         column_names: vec!["b".to_string()],
         column_types: vec![SqlType::Int],
     };

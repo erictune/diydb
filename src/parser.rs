@@ -116,6 +116,8 @@ fn test_parse_create_statements() {
         "create table foo (a int,  b int, c int, dee real)",
         "CREATE TABLE t (a int, b integer, c text, d string, e real)",
         "creaTe TaBle superlongname (superduperlongname integer)",
+        "CREATE TEMPORARY TABLE FOO (A INT, B INT)",
+        "CREATE TEMP TABLE FOO (A INT, B INT)",
     ];
     for case in cases {
         println!("Case: {}", case);
@@ -131,6 +133,7 @@ fn test_not_parse_invalid_create_statements() {
         "create table foo ()",
         "create table foo (,,,,,)",
         "SELECT * from T",
+        "CREATE T TABLE FOO (A INT, B INT)",
     ];
     for case in cases {
         assert!(SQLParser::parse(Rule::create_stmt, case).is_err());

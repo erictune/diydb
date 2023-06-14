@@ -64,6 +64,7 @@ pub struct ConstantRow {
 /// `Scan` represents a one-pass scan over all the rows of a table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scan {
+    pub databasename: String,
     pub tablename: String,
 }
 

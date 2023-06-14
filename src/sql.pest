@@ -19,7 +19,11 @@ bool_literal = _{ true_literal | false_literal }
 single_quoted_string = @{ "'" ~ ( "''" | (!"'" ~ ANY) )* ~ "'" }
 double_quoted_string = @{ "\"" ~ ( "\"\"" | (!"'\"" ~ ANY) )* ~ "'\"" }
 literal = _{ numeric_literal | null_literal | bool_literal | single_quoted_string  }
+dot = _{ "." }
+db_identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")*  }
 table_identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+table_identifier_with_optional_db = { (db_identifier ~ dot)? ~ table_identifier }
+
 // TODO: allow qualification with table name or alias.
 // TODO: allow double quoted strings as column names.
 column_name = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
@@ -49,18 +53,19 @@ column_defs = { column_def ~ ("," ~ column_def)* }
 // https://www.sqlite.org/syntax/create-table-stmt.html
 create = _{ ^"create" }
 table = _{ ^"table" }
+temp = { | ^"temporary" | ^"temp"  }
 int = { ^"integer"  | ^"int"}
 real = { ^"real" }
 text = { ^"string" | ^"text" }
 type_name = {int | text | real}
-create_stmt = {SOI ~ create ~ table ~ table_identifier ~ "(" ~ column_defs ~ ")" ~ EOI}
+create_stmt = {SOI ~ create ~ temp? ~ table ~ table_identifier_with_optional_db ~ "(" ~ column_defs ~ ")" ~ EOI}
 
 // Insert Statement
 // https://www.sqlite.org/syntax/insert-stmt.html
 insert = _{ ^"insert" }
 into = _{ ^"into" }
 values = _{^"values"}
-insert_stmt = {SOI ~ insert ~ into ~ table_identifier ~ values ~ expr_list_list ~ EOI}
+insert_stmt = {SOI ~ insert ~ into ~ table_identifier_with_optional_db ~ values ~ expr_list_list ~ EOI}
 
 // Select Statement.
 // https://www.sqlite.org/syntax/select-stmt.html
@@ -70,4 +75,4 @@ from = _{ ^"from" }
 select_item = { expr | column_name | star  }   // TODO: support expressions on columns in select
 select_items = { select_item ~ ("," ~ select_item)* }
 from_items = {from ~ table_identifier}
-select_stmt = {SOI ~ select ~ select_items ~ (from ~ table_identifier)? ~ EOI}
+select_stmt = {SOI ~ select ~ select_items ~ (from ~ table_identifier_with_optional_db)? ~ EOI}

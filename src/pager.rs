@@ -108,13 +108,16 @@ pub enum Error {
     #[error("Default database pager requested when multiple databases loaded.")]
     AmbiguousDefaultDB,
     #[error("Too many pages open for write at once.")]
-    TooManyPagesOpenForWrite
+    TooManyPagesOpenForWrite,
+    #[error("Table name not found.")]
+    TableNameNotFound
+
 }
 
 // A `PagerSet` manages zero or more Pagers, one per open database.
 pub struct PagerSet {
     pagers: Vec<Pager>,
-    temp_table: crate::temp_table::TempTable, // TODO: support multiple temp tables. 
+    temp_tables: Vec<crate::temp_table::TempTable>, 
 }
 
 // 'a: lifetime of self
@@ -126,15 +129,22 @@ where
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         PagerSet { 
-            pagers: vec![],
-            temp_table: TempTable{
-                rows: vec![],
-                column_names: vec![String::from("a")],
-                column_types: vec![SqlType::Int]
-            }
+            pagers: vec![],      // TODO: provide table lookup by name, wrapping the persisted schema table.
+            temp_tables: vec![], // TODO: key by name.
         }
-
     }
+    pub fn new_temp_table(&'a mut self, tablename: String, column_names: Vec<String>, column_types: Vec<SqlType>) -> Result<(), Error> {
+        self.temp_tables.push(
+            TempTable {
+                rows: vec![],
+                tablename,
+                column_names: column_names,
+                column_types: column_types,
+            }
+        );
+        Ok(())
+    }
+
     pub fn default_pager(&'a self) -> Result<&'b Pager, Error> {
         match self.pagers.len() {
             0 => Err(Error::NoDefaultDB),
@@ -153,12 +163,22 @@ where
         self.pagers.push(Pager::open(path)?);
         Ok(())
     }
-    pub fn get_temp_table(&'a self, /* TODO: lookup by name, create new ones. */) -> Result<&'b crate::temp_table::TempTable, Error> {
-        Ok(&self.temp_table)
+    pub fn get_temp_table(&'a self, tablename: &String) -> Result<&'b crate::temp_table::TempTable, Error> {
+        for i in 0..self.temp_tables.len() {
+            if self.temp_tables[i].tablename == *tablename {
+                return Ok(&self.temp_tables[i]);
+            }
+        }
+        Err(Error::TableNameNotFound)
     }
 
-    pub fn get_temp_table_mut(&'a mut self, /* TODO: lookup by name, create new ones. */) -> Result<&'b mut crate::temp_table::TempTable, Error> {
-        Ok(&mut self.temp_table)
+    pub fn get_temp_table_mut(&'a mut self, tablename: &String) -> Result<&'b  mut crate::temp_table::TempTable, Error> {
+        for i in 0..self.temp_tables.len() {
+            if self.temp_tables[i].tablename == *tablename {
+                return Ok(&mut self.temp_tables[i]);
+            }
+        }
+        Err(Error::TableNameNotFound)
     }
 }
 

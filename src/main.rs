@@ -66,6 +66,14 @@ fn do_command(c: &mut Context, line: &str) {
         match line {
             ".schema" => do_schema(c),
             ".help" => do_help(c),
+            l if l.starts_with(".help") => {
+                if let Some((_, command_for_help)) = line.split_once(" ") {
+                    do_detailed_help(c, command_for_help)
+                    } else {
+                        println!("Specify a single word after .help for help on that command.");
+                    }
+    
+            }
             l if l.starts_with(".open") => {
                 if let Some((_, file_to_open)) = line.split_once(" ") {
                 do_open(c, file_to_open)
@@ -100,6 +108,9 @@ fn do_command(c: &mut Context, line: &str) {
         "INSERT" => {
             do_insert(c, line)
         }
+        "CREATE" => {
+            do_create(c, line)
+        }
         _ => println!("Unknown SQL command: `{}`", line),
     }
 }
@@ -111,12 +122,40 @@ struct Context {
 fn do_help(_: &mut Context) {
     println!(
         "
+.help               to get this list.
+.help [command]     to get more help on a command.
 .open               to open a persistent database.
 .schema             to list the tables and their definitions.
 SELECT ...          to do a query.
 INSERT ...          to insert values into a table.
+CREATE ...          to create a table.
 "
     );
+}
+
+
+fn do_detailed_help(_: &mut Context, word: &str) {
+    let helptext = match word {
+        ".help" =>      "\
+Type `.help` with no argument to see all commands; Type `.help [argument]` (with a single argument) to get detailed help on that command.",
+        ".open" =>      "\
+Use to open a persistent database.  There is always a temporary database called 'temp' available.  Just CREATE a table in it.",
+        ".schema" =>    "Use to list the tables in all databases and their definitions.",
+        "SELECT" =>     "\
+Enter a SQL query beginning with 'SELECT' and ending with a semicolon.
+The supported subset of SQL includes: 
+  SELECT * FROM mytable;
+  SELECT 1 + 1;
+  SELECT a, b, c, 2 * 3 FROM  temp.numbers;
+WHERE, AS, GROUP BY, and JOIN are not supported.",
+        "INSERT" =>      "Use to insert values into a table.",
+        "CREATE" =>      "Use to create a table.  Example: CREATE TEMP TABLE t (x real, y real);",
+        _ => {
+            println!("Unknown command: '{}'", word); 
+            return;
+        }
+    };
+    println!("Help for command '{}'\n{}", word, helptext);
 }
 
 fn do_open(c: &mut Context, path: &str) {
@@ -148,6 +187,12 @@ fn do_select(c: &mut Context, l: &str) {
 
 fn do_insert(c: &mut Context, l: &str) {
     if let Err(e) = diydb::run_insert(&mut c.pagerset, l) {
+        println!("Error running statement: {}", e);
+    }
+}
+
+fn do_create(c: &mut Context, l: &str) {
+    if let Err(e) = diydb::run_create(&mut c.pagerset, l) {
         println!("Error running statement: {}", e);
     }
 }
