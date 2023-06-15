@@ -268,7 +268,17 @@ fn test_run_selects() {
 }
 
 #[test]
-fn test_create_insert_select_on_temptable() {
+fn test_create_a_temptable() {
+    let mut ps = diydb::pager::PagerSet::new();
+    diydb::run_create(&mut ps, "create temp table t (i int)").unwrap();
+    // This is relying on automatic creation of a temptable.  TODO: implement CREATE and use that here.
+    let tt = diydb::run_query_no_print(&mut ps, "select * from temp.t").unwrap();
+    assert_eq!(tt.rows.len(), 0);
+}
+// TODO: be able to create persistent tables.
+
+#[test]
+fn test_insert_into_temptable_adds_a_row() {
     use diydb::sql_value::SqlValue::*;
     let mut ps = diydb::pager::PagerSet::new();
     diydb::run_create(&mut ps, "create temp table t (i int)").unwrap();
@@ -295,3 +305,13 @@ fn test_create_insert_select_on_temptable() {
 // TODO: insert to multiple column temp tables.
 // TODO: insert multiple rows at a time.
 // TODO: test all those things on persistent SQLite tables when supported.
+
+#[test]
+fn test_insert_select_on_temptable_strict_works() {
+    let mut ps = diydb::pager::PagerSet::new();
+    diydb::run_create(&mut ps, "create temp table t (i int, j int) strict").expect("Should have setup test scenario.");
+    diydb::run_insert(&mut ps, "insert into temp.t values (42, 27)").expect("Should have inserted without errors");
+    diydb::run_insert(&mut ps, "insert into temp.t values (42, 'hello')").expect_err("Should have gotten error inserting string to int column");
+    diydb::run_insert(&mut ps, "insert into temp.t values (42)").expect_err("Should have gotten error inserting short row");
+    diydb::run_insert(&mut ps, "insert into temp.t values (42, 43, 44)").expect_err("Should have gotten error inserting long row");
+}

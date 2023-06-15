@@ -54,11 +54,12 @@ column_defs = { column_def ~ ("," ~ column_def)* }
 create = _{ ^"create" }
 table = _{ ^"table" }
 temp = { | ^"temporary" | ^"temp"  }
+strict = { ^"strict" }
 int = { ^"integer"  | ^"int"}
 real = { ^"real" }
 text = { ^"string" | ^"text" }
 type_name = {int | text | real}
-create_stmt = {SOI ~ create ~ temp? ~ table ~ table_identifier_with_optional_db ~ "(" ~ column_defs ~ ")" ~ EOI}
+create_stmt = {SOI ~ create ~ temp? ~ table ~ table_identifier_with_optional_db ~ "(" ~ column_defs ~ ")" ~ (strict)? ~EOI}
 
 // Insert Statement
 // https://www.sqlite.org/syntax/insert-stmt.html

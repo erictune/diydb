@@ -17,27 +17,26 @@ use crate::table_traits::TableMeta;
 use crate::typed_row::Row;
 use crate::sql_type::SqlType;
 use crate::sql_value::SqlValue;
-use streaming_iterator::StreamingIterator;
 
-#[derive(thiserror::Error, Debug, Clone)]
-pub enum Error {
-    #[error("Something went wrong appending.")]
-    AppendError,
-    #[error("Table {} has {} columns but {} values were supplied", name, table_n_col, row_num_cols)]
-    ColumnCountError{ name: String, table_n_col: usize, row_num_cols: usize},
-    #[error("Cannot insert value {} with type {} into column {} with type {}", value, value_type, column_name, column_type)]
-    TypeMismatch{ value: SqlValue, value_type: SqlType, column_name: String, column_type: SqlType },
-}  
+use streaming_iterator::StreamingIterator;
 
 #[derive(Debug, Clone)]
 pub struct TempTable {
     pub rows: Vec<Row>,
-    pub tablename: String,
+    pub table_name: String,
     pub column_names: Vec<String>,
     pub column_types: Vec<SqlType>,
+    pub strict: bool,
 }
 
-impl TableMeta for TempTable{
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Something went wrong appending: {0}")]
+    AppendValidationError(#[from] crate::typed_row::Error),
+}  
+
+
+impl TableMeta for TempTable {
     fn column_names(&self) -> Vec<String> {
         self.column_names.clone()
     }
@@ -45,7 +44,10 @@ impl TableMeta for TempTable{
         self.column_types.clone()
     }
     fn table_name(&self) -> String {
-        self.tablename.clone()
+        self.table_name.clone()
+    }
+    fn strict(&self) -> bool {
+        self.strict
     }
 }
 
@@ -57,6 +59,7 @@ impl TempTable {
 
     /// inserts a value in a table using the next unused rowid.
     pub fn append_row(&mut self, row: &Vec<SqlValue>) -> Result<(), Error> {
+        crate::typed_row::validate_row_for_table(self, row).map_err(|e| Error::AppendValidationError(e))?;
         // TODO: store a rowid for consistency with regular Tables.
         self.rows.push(Row{ items: row.clone() });
         Ok(())
@@ -133,9 +136,10 @@ fn test_temp_table() {
         rows: vec![Row {
             items: vec![SqlValue::Int(1)],
         }],
-        tablename: "test".to_string(),
+        table_name: "test".to_string(),
         column_names: vec!["b".to_string()],
         column_types: vec![SqlType::Int],
+        strict: true,
     };
     assert_eq!(tbl.column_names(), vec![String::from("b")]);
     assert_eq!(tbl.column_types(), vec![SqlType::Int]);
@@ -151,4 +155,3 @@ fn test_temp_table() {
     it.advance();
     assert_eq!(it.get(), None);
 }
-

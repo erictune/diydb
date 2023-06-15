@@ -1,20 +1,22 @@
 Current Projects Stack
 ----------------------
 
-# Mini-Project - CREATE TEMP table
-  - [x] put a schema table (temptable) in the pagerset
-  - [x] allow lookups of tables to use the PagerSet, and to look for temp tables.
-  - [x] in `CREATE`, etc, add parsing of db names, and treat "temp" db name specially; also detect "TEMP" (which forces the db name to be temp);
-
 # Mini-Project - STRICT
   - Support and test "strict".
-  - [ ] parse from CREATE
-  - [ ] make it part of TableMeta
-  - [ ] use strict checks (see temp_table.rs.with_validate)
+  - [x] parse from CREATE
+  - [x] make it part of TableMeta
+  - [x] use strict checks
 
-# Idea - TreeMap for TempTable
+# Idea - TreeMap for TempTable and map interface for Table
   - Support rowid as a map (rowid, row).
-  - Perhaps someday have a KVStore trait that both the TempTable (using rust maps) and the page-based btree both implement.
+  - Iterators for Table and TempTable to return both.
+
+  # Idea - RowStream trait
+  - in table_traits.rs, define RowStream trait for a object that supports the streaming_iterator() method, returning a stream of
+  rows.
+  - in ir_interpreter, treat table objects as a 
+    `Box<dyn RowStream + TableMeta>`, instead of having an explicit match.
+  - if that doesn't work, make an EitherTable object, using enum_dispatch to generate it.  
 
 # Big Idea - Move Page Ownership from PagerSet/Pager into Table
   - Make Table objects lifetime be as long as the DB has been opened.
@@ -139,6 +141,11 @@ New Code:
 
 Recent Completed Projects
 -------------------------
+
+# CREATE TEMP table
+  - [x] put a schema table (temptable) in the pagerset
+  - [x] allow lookups of tables to use the PagerSet, and to look for temp tables.
+  - [x] in `CREATE`, etc, add parsing of db names, and treat "temp" db name specially; also detect "TEMP" (which forces the db name to be temp);
 
 # parse and execute queries with basic project step
 Build steel thread of parsing and execution.

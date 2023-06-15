@@ -21,6 +21,7 @@ pub fn pt_create_statement_to_ast(c: &str) -> ast::CreateStatement {
     let mut coldefs: Vec<ast::ColDef> = vec![];
     let mut databasename: String = String::from("main");
     let mut tablename = String::from("");
+    let mut strict: bool = false;
     // Confirm it is a create statement.
     for c in create_stmt.into_inner() {
         match c.as_rule() {
@@ -59,90 +60,106 @@ pub fn pt_create_statement_to_ast(c: &str) -> ast::CreateStatement {
                     }
                 }
             }
+            Rule::strict => strict = true,
             Rule::EOI => (),
             _ => unreachable!(),
         }
     }
-    ast::CreateStatement { databasename, tablename, coldefs }
+    ast::CreateStatement { databasename, tablename, coldefs, strict }
 }
 
 #[test]
 fn test_pt_create_statement_to_ast() {
-    let input = "CREATE TABLE t (a int)";
-    let actual = pt_create_statement_to_ast(input);
-    let expected = ast::CreateStatement {
-        databasename: String::from("main"),
-        tablename: "t".to_string(),
-        coldefs: vec![ast::ColDef {
-            colname: ast::ColName {
-                name: "a".to_string(),
-            },
-            coltype: "int".to_string(),
-        }],
-    };
-    assert_eq!(actual, expected);
-}
-#[test]
-fn test_pt_create_statement_to_ast_with_temp() {
-    let input = "CREATE TEMP TABLE t (a int)";
-    let actual = pt_create_statement_to_ast(input);
-    let expected = ast::CreateStatement {
-        databasename: String::from("temp"),
-        tablename: "t".to_string(),
-        coldefs: vec![ast::ColDef {
-            colname: ast::ColName {
-                name: "a".to_string(),
-            },
-            coltype: "int".to_string(),
-        }],
-    };
-    assert_eq!(actual, expected);
-}
-
-// Select(SelectItems(Constant(1), ColName(x)), From(TableName("t")))
-pub fn ast_create_statement_to_tuple(
-    c: ast::CreateStatement,
-) -> (String, Vec<String>, Vec<String>) {
-    (
-        c.tablename,
-        c.coldefs.iter().map(|x| x.colname.name.clone()).collect(),
-        c.coldefs.iter().map(|x| x.coltype.clone()).collect(),
-    )
-}
-
-pub fn parse_create_statement(c: &str) -> (String, Vec<String>, Vec<String>) {
-    let ast: ast::CreateStatement = pt_create_statement_to_ast(c);
-    // TODO: would there ever be any optimizations or type checks to do on a create statement?
-    ast_create_statement_to_tuple(ast)
-}
-
-#[test]
-fn test_parse_create_statement() {
     let cases = vec![
         (
-            "CREATE TABLE t (a int, b integer, c text, d string, e real)",
-            (
-                "t",
-                vec!["a", "b", "c", "d", "e"],
-                vec!["int", "integer", "text", "string", "real"],
-            ),
+            "CREATE TABLE t (a int)", 
+            ast::CreateStatement {
+                databasename: String::from("main"),
+                tablename: "t".to_string(),
+                coldefs: vec![ast::ColDef {
+                    colname: ast::ColName {
+                        name: "a".to_string(),
+                    },
+                    coltype: "int".to_string(),
+                }],
+                strict: false,
+            },
         ),
         (
-            "CREATE TABLE Tbl_Two(a int,b int)",
-            ("Tbl_Two", vec!["a", "b"], vec!["int", "int"]),
+            "CREATE TEMP TABLE t (a int)", 
+            ast::CreateStatement {
+                databasename: String::from("temp"),
+                tablename: "t".to_string(),
+                coldefs: vec![ast::ColDef {
+                    colname: ast::ColName {
+                        name: "a".to_string(),
+                    },
+                    coltype: "int".to_string(),
+                }],
+                strict: false,
+            },
+        ),
+        (
+            "CREATE TABLE mydb.tbl (a int)", 
+            ast::CreateStatement {
+                databasename: String::from("mydb"),
+                tablename: "tbl".to_string(),
+                coldefs: vec![ast::ColDef {
+                    colname: ast::ColName {
+                        name: "a".to_string(),
+                    },
+                    coltype: "int".to_string(),
+                }],
+                strict: false,
+            },
+        ),
+        (
+            "CREATE TABLE t (a int) STRICT", 
+            ast::CreateStatement {
+                databasename: String::from("main"),
+                tablename: "t".to_string(),
+                coldefs: vec![ast::ColDef {
+                    colname: ast::ColName {
+                        name: "a".to_string(),
+                    },
+                    coltype: "int".to_string(),
+                }],
+                strict: true,
+            },
+        ),
+        (
+            "CREATE TABLE mysuperdupertable (a int, b text, c real) STRICT", 
+            ast::CreateStatement {
+                databasename: String::from("main"),
+                tablename: "mysuperdupertable".to_string(),
+                coldefs: vec![
+                    ast::ColDef {
+                        colname: ast::ColName {
+                            name: "a".to_string(),
+                        },
+                        coltype: "int".to_string(),
+                    },
+                    ast::ColDef {
+                        colname: ast::ColName {
+                            name: "b".to_string(),
+                        },
+                        coltype: "text".to_string(),
+                    },
+                    ast::ColDef {
+                        colname: ast::ColName {
+                            name: "c".to_string(),
+                        },
+                        coltype: "real".to_string(),
+                    }],
+                strict: true,
+            },
         ),
     ];
     for case in cases {
-        let input = case.0;
-        println!("Input: {}", input);
-        let ast: ast::CreateStatement = pt_create_statement_to_ast(input);
-        let actual = ast_create_statement_to_tuple(ast);
-        let expected = (
-            String::from(case.1 .0),
-            case.1 .1.iter().map(|x| String::from(*x)).collect(),
-            case.1 .2.iter().map(|x| String::from(*x)).collect(),
-        );
-        assert_eq!(actual, expected);
+        println!("Case: {}", case.0);
+        let actual = pt_create_statement_to_ast(case.0);
+        let expected = case.1;
+        assert_eq!(actual, expected);    
     }
 }
 

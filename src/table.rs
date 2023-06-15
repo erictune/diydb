@@ -1,11 +1,15 @@
 //! represents access to a file-backed SQLite database table.
+//! 
+//! Currently, only reading is supported.
+//! A subset of the SQLite file format is supported.
 
 use std::str::FromStr;
-use streaming_iterator::StreamingIterator;
 
 use crate::table_traits::TableMeta;
 use crate::typed_row::Row;
-use crate::{pager, sql_type::SqlType};
+use crate::pager;
+use crate::sql_type::SqlType;
+use streaming_iterator::StreamingIterator;
 
 pub struct Table<'a> {
     pager: &'a pager::Pager,
@@ -13,6 +17,7 @@ pub struct Table<'a> {
     root_pagenum: pager::PageNum,
     column_names: Vec<String>,
     column_types: Vec<SqlType>,
+    strict: bool,
 }
 
 #[derive(thiserror::Error, Debug, Clone)]
@@ -74,13 +79,14 @@ impl<'a> TableMeta for Table<'a> {
     fn column_names(&self) -> Vec<String> {
         self.column_names.clone()
     }
-
     fn column_types(&self) -> Vec<SqlType> {
         self.column_types.clone()
     }
-    
     fn table_name(&self) -> String {
         self.table_name.clone()
+    }
+    fn strict(&self) -> bool {
+        self.strict
     }
 }
 
@@ -94,6 +100,7 @@ impl<'a> Table<'a> {
         root_pagenum: pager::PageNum,
         column_names: Vec<String>,
         column_types: Vec<SqlType>,
+        strict: bool
     ) -> Table<'a> {
         Table {
             pager,
@@ -101,6 +108,7 @@ impl<'a> Table<'a> {
             root_pagenum,
             column_names,
             column_types,
+            strict
         }
     }
     
@@ -111,17 +119,14 @@ impl<'a> Table<'a> {
                 Some(x) => x,
                 None => return Err(Error::TableNameNotFoundInDb(String::from(table_name))),
             };
-        let (_, column_names, column_types) =
-            crate::pt_to_ast::parse_create_statement(&create_statement);
+        let cs = crate::pt_to_ast::pt_create_statement_to_ast(&create_statement);
         Ok(Table::new(
             pager,
-            String::from(table_name),
+            cs.tablename,
             root_pagenum,
-            column_names,
-            column_types
-                .iter()
-                .map(|s| SqlType::from_str(s.as_str()).unwrap())
-                .collect(),
+            cs.coldefs.iter().map(|x| x.colname.name.clone()).collect(),
+            cs.coldefs.iter().map(|x| SqlType::from_str(x.coltype.as_str()).unwrap()).collect(),
+            cs.strict,
         ))    
     }
 
@@ -147,9 +152,10 @@ impl<'a> Table<'a> {
         Ok(crate::TempTable {
             // TODO: take() a limited number of rows when collect()ing them, and return error if they don't fit?
             rows,
-            tablename: self.table_name.clone(),
+            table_name: self.table_name.clone(),
             column_names: self.column_names.clone(),
             column_types: self.column_types.clone(),
+            strict: self.strict(),
         })
     }
 }

@@ -60,3 +60,15 @@ pub fn from_ast_constant(c: &ast::Constant) -> SqlType {
         ast::Constant::Null() => SqlType::Null,
     }
 }
+
+use crate::sql_value::SqlValue;
+pub fn from_sql_value(c: &SqlValue) -> SqlType {
+    match c {
+        SqlValue::Int(_) => SqlType::Int,
+        SqlValue::Text(_) => SqlType::Text,
+        SqlValue::Real(_) => SqlType::Real,
+        SqlValue::Bool(_) => SqlType::Int,
+        SqlValue::Null() => SqlType::Null,
+        SqlValue::Blob(_) => SqlType::Blob,
+    }
+}

@@ -57,6 +57,7 @@ pub fn get_creation_sql_and_root_pagenum(
             SCHEMA_BTREE_ROOT_PAGENUM,
             SCHEMA_TABLE_COL_NAMES.iter().map(|x| x.to_string()).collect(),
             Vec::from(SCHEMA_TABLE_COL_TYPES),
+            true,
         );   
         let mut it = schema_table.streaming_iterator();
         while let Some(row) = it.next() {
@@ -132,6 +133,7 @@ pub fn run_create(ps: &mut pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
                 cs.tablename,
                 cs.coldefs.iter().map(|x| x.colname.name.clone()).collect(),
                 cs.coldefs.iter().map(|x| sql_type::SqlType::from_str(x.coltype.as_str()).unwrap()).collect(),
+                cs.strict,
             )?;
         }
         false /* Persistent, SQLite table */ => {

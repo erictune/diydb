@@ -91,6 +91,7 @@ use std::io::{Read, Seek, SeekFrom};
 // Split the "list of Tables" and "memory manager" responsibilities of PagerSet/Pager.
 use crate::temp_table::TempTable;
 use crate::sql_type::SqlType;
+use crate::table_traits::TableMeta;
 
 
 #[derive(thiserror::Error, Debug)]
@@ -133,13 +134,14 @@ where
             temp_tables: vec![], // TODO: key by name.
         }
     }
-    pub fn new_temp_table(&'a mut self, tablename: String, column_names: Vec<String>, column_types: Vec<SqlType>) -> Result<(), Error> {
+    pub fn new_temp_table(&'a mut self, table_name: String, column_names: Vec<String>, column_types: Vec<SqlType>, strict: bool) -> Result<(), Error> {
         self.temp_tables.push(
             TempTable {
                 rows: vec![],
-                tablename,
-                column_names: column_names,
-                column_types: column_types,
+                table_name,
+                column_names,
+                column_types,
+                strict,
             }
         );
         Ok(())
@@ -165,7 +167,7 @@ where
     }
     pub fn get_temp_table(&'a self, tablename: &String) -> Result<&'b crate::temp_table::TempTable, Error> {
         for i in 0..self.temp_tables.len() {
-            if self.temp_tables[i].tablename == *tablename {
+            if self.temp_tables[i].table_name() == *tablename {
                 return Ok(&self.temp_tables[i]);
             }
         }
@@ -174,7 +176,7 @@ where
 
     pub fn get_temp_table_mut(&'a mut self, tablename: &String) -> Result<&'b  mut crate::temp_table::TempTable, Error> {
         for i in 0..self.temp_tables.len() {
-            if self.temp_tables[i].tablename == *tablename {
+            if self.temp_tables[i].table_name() == *tablename {
                 return Ok(&mut self.temp_tables[i]);
             }
         }

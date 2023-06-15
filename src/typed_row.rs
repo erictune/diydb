@@ -10,6 +10,8 @@
 // TODO: It might be better to treat casting errors differently from errors in the underlying iterator.
 use crate::sql_type::SqlType;
 use crate::sql_value::SqlValue;
+use crate::table_traits::TableMeta;
+
 #[allow(unused_imports)] // Needed fot trait FromStr
 use std::str::FromStr;
 
@@ -42,7 +44,10 @@ pub enum Error {
     HeaderTooBig,
     #[error("Not enough space in target to hold serialized data.")]
     NotEnoughSpace,
-
+    #[error("Table {} has {} columns but {} values were supplied", name, table_n_col, row_num_cols)]
+    ColumnCountError{ name: String, table_n_col: usize, row_num_cols: usize},
+    #[error("Cannot insert value {} with type {} into column {} with type {}", value, value_type, column_name, column_type)]
+    TypeMismatch{ value: SqlValue, value_type: SqlType, column_name: String, column_type: SqlType },
 }
 
 // TODO: if this took a Row, and Row held the RowID, then the error messages could provide the rowid where the error occured.
@@ -230,4 +235,41 @@ fn test_to_serialized_errors() {
         let result = to_serialized(&Row{ items: case.0}, &mut buf);
         assert!(result.is_err());
     }
+}
+
+
+/// true if type `source` can go into a column of type `dest` in strict mode.
+///
+/// This isn't exactly the same as SQLite, which allows the string `'1'` to be put into a strict type `int` or `real` column.
+fn type_can_go_in_type(source: SqlType, dest: SqlType) -> bool  {
+    match (source, dest) {
+        (SqlType::Int, SqlType::Int) |
+        (SqlType::Int, SqlType::Real) |
+        (SqlType::Real, SqlType::Real) |
+        (SqlType::Text, SqlType::Text) |
+        (SqlType::Null, _) |
+        (SqlType::Blob, SqlType::Blob) => true,
+        _ => false,
+    }
+}
+
+/// OK(()) if type `row` can go into `tbl`, considering strict mode.
+///
+/// This isn't exactly the same as SQLite, which allows the string `'1'` to be put into a strict type `int` or `real` column.
+
+pub fn validate_row_for_table(tbl: &impl TableMeta, row: &Vec<SqlValue>) -> Result<(), Error> {
+    // Ensure the row's types match the table's column types.
+    if row.len() != tbl.column_types().len() {
+        return Err(Error::ColumnCountError{name: tbl.table_name(), table_n_col: tbl.column_types().len(), row_num_cols: row.len()});                  
+    }    
+    if tbl.strict() {
+        for i in 0..row.len() {
+            let source_type = crate::sql_type::from_sql_value(&row[i]);
+            let dest_type = tbl.column_types()[i];
+            if !type_can_go_in_type(source_type, dest_type) {
+                return Err(Error::TypeMismatch{value: row[i].clone(), value_type: source_type, column_name: tbl.column_names()[i].clone(), column_type: dest_type});
+            }
+        }
+    }
+    Ok(())
 }

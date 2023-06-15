@@ -118,6 +118,7 @@ fn test_parse_create_statements() {
         "creaTe TaBle superlongname (superduperlongname integer)",
         "CREATE TEMPORARY TABLE FOO (A INT, B INT)",
         "CREATE TEMP TABLE FOO (A INT, B INT)",
+        "create table foo (a int) sTriCt",
     ];
     for case in cases {
         println!("Case: {}", case);

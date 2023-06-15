@@ -74,9 +74,10 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
             };
             Ok(TempTable {
                 rows,
-                tablename: String::from("?unnamed?"),
+                table_name: String::from("?unnamed?"),
                 column_names,
                 column_types,
+                strict: false,  // SQLite defaults to non-strict, so result tables (without an explicit CREATE) shall be non-strict.
             })
         }
         ir::Block::ConstantRow(cr) => {
@@ -84,9 +85,10 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
                 rows: vec![Row {
                     items: cr.row.iter().map(sql_value::from_ast_constant).collect(),
                 }],
-                tablename: String::from("?unnamed?"),
+                table_name: String::from("?unnamed?"),
                 column_names: (0..cr.row.len()).map(|i| format!("_f{i}")).collect(),
                 column_types: cr.row.iter().map(sql_type::from_ast_constant).collect(),
+                strict: false,  // SQLite defaults to non-strict, so result tables (without an explicit CREATE) shall be non-strict.
             });
         }
         ir::Block::Scan(s) => {

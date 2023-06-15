@@ -76,6 +76,7 @@ pub struct CreateStatement {
     pub databasename: String, // "temp" or "main" currently supported values.
     pub tablename: String,    // Create clause - be more specific.
     pub coldefs: Vec<ColDef>, // Be more specific.
+    pub strict: bool,
 }
 
 pub struct InsertStatement {
