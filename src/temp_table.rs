@@ -101,6 +101,15 @@ impl TempTable {
         Ok(())
     }
 
+    pub fn creation_sql(&self) -> String {
+        use itertools::Itertools;
+        format!(
+            "CREATE TABLE temp.{} ({}){};",
+            self.table_name,
+            std::iter::zip(self.column_names.iter(), self.column_types.iter()).map(|(n, t)| format!("{} {}", n, t)).join(","),
+            match self.strict() { true => " STRICT", false => ""}
+        )
+    }
 }
 
 /// iterates over the rows of a TempTable .
@@ -143,6 +152,8 @@ fn test_temp_table() {
     };
     assert_eq!(tbl.column_names(), vec![String::from("b")]);
     assert_eq!(tbl.column_types(), vec![SqlType::Int]);
+    assert_eq!(tbl.creation_sql(), "CREATE TABLE temp.test (b int) STRICT;");
+
     let mut it = tbl.streaming_iterator();
     //let mut it = &mut cvt as &dyn streaming_iterator::StreamingIterator<Item = &Row>;
     it.advance();

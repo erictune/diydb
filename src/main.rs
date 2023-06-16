@@ -168,14 +168,8 @@ fn do_open(c: &mut Context, path: &str) {
 }
 
 fn do_schema(c: &mut Context) {
-    println!("Printing schema table for default database...");
-    match c.pagerset.default_pager() {
-        Ok(p) => {
-            if let Err(e) = diydb::print_schema(p) {
-                println!("Error printing schemas: {}", e);
-            }
-        }
-        Err(e) => println!("Error accessing default database (maybe none loaded?) : {e}"),
+    if let Err(e) = diydb::print_schema(&c.pagerset) {
+        println!("Error printing schemas: {}", e);
     }
 }
 

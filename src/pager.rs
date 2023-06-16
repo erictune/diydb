@@ -37,7 +37,10 @@ pub enum Error {
     #[error("Too many pages open for write at once.")]
     TooManyPagesOpenForWrite,
     #[error("Table name not found.")]
-    TableNameNotFound
+    TableNameNotFound,
+    #[error("Error opening stored table.")]
+    OpeningStoredTable,
+
 }
 
 /// A `PagerSet` manages zero or one open persistent databases and one temporary database.
@@ -129,7 +132,32 @@ where
         }
         Err(Error::TableNameNotFound)
     }
-}
+
+    pub fn temp_schema(&self) -> Result<String, Error> {
+        let mut result= String::new();
+        for tt in self.temp_tables.iter() {
+            result.push_str(&format!("{}", tt.creation_sql()));
+        }
+        Ok(result)
+    }
+
+    pub fn main_loaded(&self) -> bool {
+        self.pagers.len() > 0
+    }
+    pub fn main_schema(&self) -> Result<String, Error> {
+        use crate::SCHEMA_TABLE_NAME;
+        use crate::SCHEMA_TABLE_SQL_COLIDX;
+        let mut result= String::new();
+        let tt = StoredTable::open_read(self.default_pager()?, SCHEMA_TABLE_NAME)
+            .map_err(|_| Error::OpeningStoredTable)?
+            .to_temp_table()
+            .map_err(|_| Error::OpeningStoredTable)?;
+        for row in tt.rows {
+            result.push_str(&format!("{};", row.items[SCHEMA_TABLE_SQL_COLIDX]));
+        }
+        Ok(result)
+    }
+} 
 
 /// A `Pager` manages the file locking and the memory use for one open database file.
 /// 

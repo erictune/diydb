@@ -89,10 +89,12 @@ pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Ite
 }
 
 /// Print the Schema table to standard output.
-pub fn print_schema(pager: &pager::Pager) -> anyhow::Result<()> {
-    let tbl = StoredTable::open_read(pager, SCHEMA_TABLE_NAME)?;
-    let tt: TempTable = tbl.to_temp_table()?;
-    tt.print(false)?;
+pub fn print_schema(ps: &pager::PagerSet) -> anyhow::Result<()> {
+    // Print temp database and main database if open; we only support these two kinds of dbs.
+    println!("{}", ps.temp_schema()?);
+    if ps.main_loaded() {
+        println!("{}", ps.main_schema()?);
+    }
     Ok(())
 }
 
