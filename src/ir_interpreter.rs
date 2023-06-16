@@ -10,7 +10,7 @@ use crate::project;
 use crate::sql_type;
 use crate::sql_value;
 use crate::table_traits::TableMeta;
-use crate::table::Table;
+use crate::stored_table::StoredTable;
 use crate::typed_row::Row;
 use crate::TempTable;
 
@@ -61,7 +61,7 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
                 }
                 false => {
                     // TODO: this should be a reference to a Table held by the DB, not a Table created here on the stack.
-                    let tbl: Table<'_> = Table::open_read(ps.default_pager()?, child.tablename.as_str())?;
+                    let tbl: StoredTable<'_> = StoredTable::open_read(ps.default_pager()?, child.tablename.as_str())?;
                     let base_it = tbl.streaming_iterator();
                     project_any_table_into_temp_table(&tbl, base_it, &p.outcols)
                 }
@@ -84,7 +84,7 @@ pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> 
                 false => {
                 // TODO: lock the table in the pager when opening the table for read.
                 // TODO: if we previously loaded the schema speculatively during IR optimization, verify unchanged now, e.g. with hash.
-                Table::open_read(ps.default_pager()?, s.tablename.as_str())?
+                StoredTable::open_read(ps.default_pager()?, s.tablename.as_str())?
                     .to_temp_table()
                     .map_err(|e| anyhow::anyhow!(e))
                 }

@@ -11,7 +11,7 @@ use crate::pager;
 use crate::sql_type::SqlType;
 use streaming_iterator::StreamingIterator;
 
-pub struct Table<'a> {
+pub struct StoredTable<'a> {
     pager: &'a pager::Pager,
     table_name: String,
     root_pagenum: pager::PageNum,
@@ -75,7 +75,7 @@ impl<'p> StreamingIterator for TableStreamingIterator<'p> {
     }
 }
 
-impl<'a> TableMeta for Table<'a> {
+impl<'a> TableMeta for StoredTable<'a> {
     fn column_names(&self) -> Vec<String> {
         self.column_names.clone()
     }
@@ -90,7 +90,7 @@ impl<'a> TableMeta for Table<'a> {
     }
 }
 
-impl<'a> Table<'a> {
+impl<'a> StoredTable<'a> {
 
     /// creates a Table for unspecified (read vs write).
     /// Note: Most use cases should use open_read(), not new()
@@ -101,8 +101,8 @@ impl<'a> Table<'a> {
         column_names: Vec<String>,
         column_types: Vec<SqlType>,
         strict: bool
-    ) -> Table<'a> {
-        Table {
+    ) -> StoredTable<'a> {
+        StoredTable {
             pager,
             table_name,
             root_pagenum,
@@ -113,14 +113,14 @@ impl<'a> Table<'a> {
     }
     
     // opens a table for reading.
-    pub fn open_read(pager: &'a pager::Pager, table_name: &str) -> Result<Table<'a>, Error> {
+    pub fn open_read(pager: &'a pager::Pager, table_name: &str) -> Result<StoredTable<'a>, Error> {
         let (root_pagenum, create_statement) =
             match crate::get_creation_sql_and_root_pagenum(pager, table_name) {
                 Some(x) => x,
                 None => return Err(Error::TableNameNotFoundInDb(String::from(table_name))),
             };
         let cs = crate::pt_to_ast::pt_create_statement_to_ast(&create_statement);
-        Ok(Table::new(
+        Ok(StoredTable::new(
             pager,
             cs.tablename,
             root_pagenum,
@@ -174,7 +174,7 @@ fn test_table() {
     let path = path_to_testdata("minimal.db");
     let pager =
         crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
-    let tbl = Table::open_read(&pager, "a").expect("Should have opened db.");
+    let tbl = StoredTable::open_read(&pager, "a").expect("Should have opened db.");
     assert_eq!(tbl.column_names(), vec![String::from("b")]);
     assert_eq!(tbl.column_types(), vec![SqlType::Int]);
     let mut it = tbl.streaming_iterator();

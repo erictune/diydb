@@ -14,7 +14,7 @@ mod serial_type;
 pub mod sql_type;
 pub mod sql_value;
 mod table_traits;
-mod table;
+mod stored_table;
 mod temp_table;
 pub mod typed_row;
 extern crate pest;
@@ -27,7 +27,7 @@ use streaming_iterator::StreamingIterator;
 
 use sql_type::SqlType;
 use sql_value::SqlValue;
-use table::Table;
+use stored_table::StoredTable;
 use temp_table::TempTable;
 use typed_row::Row;
 
@@ -51,7 +51,7 @@ pub fn get_creation_sql_and_root_pagenum(
     if table_name == SCHEMA_TABLE_NAME {
         return Some((SCHEMA_BTREE_ROOT_PAGENUM, String::from(SCHEMA_SCHEMA)));
     } else {
-        let schema_table = Table::new(
+        let schema_table = StoredTable::new(
             pgr,
             String::from(SCHEMA_TABLE_NAME),
             SCHEMA_BTREE_ROOT_PAGENUM,
@@ -90,7 +90,7 @@ pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Ite
 
 /// Print the Schema table to standard output.
 pub fn print_schema(pager: &pager::Pager) -> anyhow::Result<()> {
-    let tbl = Table::open_read(pager, SCHEMA_TABLE_NAME)?;
+    let tbl = StoredTable::open_read(pager, SCHEMA_TABLE_NAME)?;
     let tt: TempTable = tbl.to_temp_table()?;
     tt.print(false)?;
     Ok(())
