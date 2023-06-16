@@ -1,22 +1,9 @@
 Current Projects Stack
 ----------------------
 
-# Mini-Project - STRICT
-  - Support and test "strict".
-  - [x] parse from CREATE
-  - [x] make it part of TableMeta
-  - [x] use strict checks
-
 # Idea - TreeMap for TempTable and map interface for Table
   - Support rowid as a map (rowid, row).
   - Iterators for Table and TempTable to return both.
-
-  # Idea - RowStream trait
-  - in table_traits.rs, define RowStream trait for a object that supports the streaming_iterator() method, returning a stream of
-  rows.
-  - in ir_interpreter, treat table objects as a 
-    `Box<dyn RowStream + TableMeta>`, instead of having an explicit match.
-  - if that doesn't work, make an EitherTable object, using enum_dispatch to generate it.  
 
 # Big Idea - Move Page Ownership from PagerSet/Pager into Table
   - Make Table objects lifetime be as long as the DB has been opened.
@@ -141,6 +128,13 @@ New Code:
 
 Recent Completed Projects
 -------------------------
+
+# Mini-Project - STRICT
+  - Support and test "strict".
+  - [x] parse from CREATE
+  - [x] make it part of TableMeta
+  - [x] use strict checks
+
 
 # CREATE TEMP table
   - [x] put a schema table (temptable) in the pagerset

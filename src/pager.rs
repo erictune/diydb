@@ -1,98 +1,24 @@
+//! Defines `PagerSet` and `Pager` types, used to managed databases and pages.
 //! manages pages from a sqlite3 file as defined at https://www.sqlite.org/fileformat.html
-//!
-//! `Pager` manages the pages from a single attached database.
-//! `PagerSet` holds the `Pager`s for zero, one, or many databases.
-//!
-//! When there are zero databases open, SELECTs without FROM are still possible.
-//! Routines that only deal with a single database, such as `crate::btree::*`, are provided with a `Pager`.
-//! The few parts of the code that deal with potentially several databases (e.g. `main`, `do_query`) use a `PagerSet`, and
-//! lend the pagers out to table-specific subroutines that need them.
-//!
-//! Currently, a Pager only supports single-threaded read-only access a database file. It reads all the pages into memory at once.
-//!
-//! A full implementation of a Pager would support concurrent read and write accesses, with demand paging and multiple files,
-//! with the necessary reference counting and locking.
-//!
-//! A Pager is responsible for opening and locking a database file at the OS level.  A Pager owns the data in each page,
-//! and allows callers to access it for reading without copying.
-//!
-//! There are a number of page types in a SQLite database: Summarizing the SQLite documentation:
-//!
-//! > -   The complete state of an SQLite database is usually contained in a single file on disk called the "main database file".
-//! >    The main database file consists of one or more pages.*
-//! > -   Every page in the main database has a single use which is one of the following:
-//! >    -   The lock-byte page
-//! >    -   A freelist page
-//! >    -   A freelist trunk page
-//! >    -   A freelist leaf page
-//! >    -   A b-tree page
-//! >        -   A table b-tree interior page
-//! >        -   A table b-tree leaf page
-//! >        -   An index b-tree interior page
-//! >        -   An index b-tree leaf page
-//! >    -   A payload overflow page
-//! >    -   A pointer map page
-//!
-//! However, simple database files only contain table btree pages.
-//! Freelist pages will be managed by the Pager once supported.
 //! 
-//! # Examples
-//! 
-//! You can open one or more pages readonly at once.
-//! 
-//! ```
-//! # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db");
-//! # use diydb::pager::Pager;;
-//! let pager = Pager::open(path.as_str()).unwrap();
-//! let p1 = pager.get_page_ro(1).unwrap();
-//! let p2 = pager.get_page_ro(2).unwrap();
-//! ```
-//! 
-// The following doc is here as a test, to ensure that borrow checking enforces the expected invariants.
-//! At present, you cannot hold one page for read and one page for write at the same time.  This doesn't work:
-//! ```compile_fail
-//! # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db").as_str();
-//! # use diydb::pager::Pager;;
-//! let pager = Pager::open(path.as_str()).unwrap();
-//! let p1 = pager.get_page_ro(1).unwrap();
-//! let p2 = pager.get_page_rw(2).unwrap();
-//!```
-//! 
-//! You also cannot hold two pages for write. This doesn't work:
-//! ```compile_fail
-//! # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db").as_str();
-//! # use diydb::pager::Pager;;
-//! let pager = Pager::open(path.as_str()).unwrap();
-//! let p1 = pager.get_page_rw(1).unwrap();
-//! let p2 = pager.get_page_rw(2).unwrap();
-//!```
-//! These limits will be fixed in the future.
-//!
-//! # Future work
-//! -   Clarify how temporary tables are handled:
-//!     - Short-lived temporary tables (For a single Tx or Connection) - don't need to be paged, can use internal
-//!       vector implementation, but have limited memory, so don't need a Pager.
-//!     - Long-lived in-memory non-persisted tables - May use page-based structure, but no backing file.
-//!       May be arbitraryily large.  Should use pagerset.
-//! SELECTS from temporary in-memory table, which do not use a Pager.
-//! -   Use OS locking to lock the opened database file.
-//! -   Support accessing pages for modification by locking the entire Pager.
-//! -   Support concurrent access for read and write via table or page-level locking.
-//! -   Support adding pages to the database.
-//! -   Support reading pages on demand.
-//! -   Support dropping unused pages when memory is low.
-//! -   When there are multiple pagers (multiple open files), coordinating to stay under a total memory limit.
-//! 
+
+// TODO:
+//  - Use OS locking to lock the opened database file.
+//  - Support accessing pages for modification by locking the entire Pager.
+//  - Support concurrent access for read and write via table or page-level locking.
+//  - Support adding pages to the database.
+//  - Support reading pages on demand.
+//  - Support dropping unused pages when memory is low.
+//  - When there are multiple pagers (multiple open files), coordinating to stay under a total memory limit.
 
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom};
 
-// Split the "list of Tables" and "memory manager" responsibilities of PagerSet/Pager.
 use crate::temp_table::TempTable;
+use crate::stored_table::StoredTable;
 use crate::sql_type::SqlType;
 use crate::table_traits::TableMeta;
-
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -112,9 +38,30 @@ pub enum Error {
     TooManyPagesOpenForWrite,
     #[error("Table name not found.")]
     TableNameNotFound
-
 }
 
+/// A `PagerSet` manages zero or one open persistent databases and one temporary database.
+///
+/// At present, only two databases can be loaded: `temp`, which is always loaded and empty at the start of execution,
+/// and `main` which corresponds to the current open database file, regardless of filename.
+/// 
+/// The `temp` database is a collection of tables of type `TempTable`.  These have a lifetime limited to the duration of the execution
+/// of the program.
+/// 
+/// The `main` database is a collection of tables of `StoredTable`. These come from an on-disk database.
+/// 
+/// The `main` database and tables are currently accessed via a `Pager`
+/// `Pager` manages the pages from a single database.
+///
+/// `SELECT`s without `FROM` are still possible even with no tables.
+/// 
+/// StoredTables are a wrapper around a btree.  btrees (`crate::btree::*`), use a `Pager`.
+///
+/// # TODOs
+///   - After introducing a connection concept, consider whether TempTables are global to the server, or local to a Connection.
+///
+/// However, simple database files only contain table btree pages.
+/// Freelist pages will be managed by the Pager once supported.
 // A `PagerSet` manages zero or more Pagers, one per open database.
 pub struct PagerSet {
     pagers: Vec<Pager>,
@@ -185,6 +132,62 @@ where
 }
 
 /// A `Pager` manages the file locking and the memory use for one open database file.
+/// 
+/// Currently, a Pager only supports single-threaded read-only access a database file. It reads all the pages into memory at once.
+///
+/// A full implementation of a Pager would support concurrent read and write accesses, with demand paging and multiple files,
+/// with the necessary reference counting and locking.
+///
+/// A Pager is responsible for opening and locking a database file at the OS level.  A Pager owns the data in each page,
+/// and allows callers to access it for reading without copying.
+///
+/// There are a number of page types in a SQLite database: Summarizing the SQLite documentation:
+/// > The complete state of an SQLite database is usually contained in a single file on disk called the "main database file".
+/// >    The main database file consists of one or more pages.*
+/// > -   Every page in the main database has a single use which is one of the following:
+/// >    -   The lock-byte page
+/// >    -   A freelist page
+/// >    -   A freelist trunk page
+/// >    -   A freelist leaf page
+/// >    -   A b-tree page
+/// >        -   A table b-tree interior page
+/// >        -   A table b-tree leaf page
+/// >        -   An index b-tree interior page
+/// >        -   An index b-tree leaf page
+/// >    -   A payload overflow page
+/// >    -   A pointer map page
+/// 
+/// # Examples
+/// 
+/// You can open one or more pages readonly at once.
+/// 
+/// ```
+/// # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db");
+/// # use diydb::pager::Pager;;
+/// let pager = Pager::open(path.as_str()).unwrap();
+/// let p1 = pager.get_page_ro(1).unwrap();
+/// let p2 = pager.get_page_ro(2).unwrap();
+/// ```
+/// 
+// The following doc is here as a test, to ensure that borrow checking enforces the expected invariants.
+/// At present, you cannot hold one page for read and one page for write at the same time.  This doesn't work:
+/// ```compile_fail
+/// # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db").as_str();
+/// # use diydb::pager::Pager;;
+/// let pager = Pager::open(path.as_str()).unwrap();
+/// let p1 = pager.get_page_ro(1).unwrap();
+/// let p2 = pager.get_page_rw(2).unwrap();
+/// ```
+///  
+///  You also cannot hold two pages for write. This doesn't work:
+///  ```compile_fail
+///  # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db").as_str();
+///  # use diydb::pager::Pager;;
+///  let pager = Pager::open(path.as_str()).unwrap();
+///  let p1 = pager.get_page_rw(1).unwrap();
+///  let p2 = pager.get_page_rw(2).unwrap();
+/// ```
+///  These limits will be fixed in the future.
 pub struct Pager {
     f: Box<RefCell<std::fs::File>>,
     // TODO: pages could return a RefCell so that pages can be paged in on demand.
