@@ -46,22 +46,22 @@ const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 
 // DbServerState holds the context of running database engine: hold the open persistent and temporary databases.
 pub struct DbServerState {
-    pub pager_set: crate::pager::PagerSet,  // Try to make this not private.
+    pub stored_db: Option<crate::pager::Pager>,  // Try to make this private.
     pub temp_db: crate::temp_db::TempDb,
-
 }
 
 impl DbServerState {
     pub fn new() -> DbServerState {
         DbServerState { 
-            pager_set: crate::pager::PagerSet::new(),
+            stored_db: None,
             temp_db: crate::temp_db::TempDb::new(),
         }
     }
 }
 // Open a database file, and hold it in the DbServerState.
 pub fn open_db(server_state: &mut DbServerState, path: &str) -> anyhow::Result<()> {
-    server_state.pager_set.opendb(path)?;
+    if server_state.stored_db.is_some() { bail!("Database file already open.  Close the old one first.  Close might be supported in the future.")}
+    server_state.stored_db = Some(crate::pager::Pager::open(path)?);
     Ok(())
 }
 
@@ -114,9 +114,8 @@ pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Ite
 pub fn print_schema(server_state: &DbServerState) -> anyhow::Result<()> {
     // Print temp database and main database if open; we only support these two kinds of dbs.
     println!("{}", server_state.temp_db.temp_schema()?);
-    let ps = &server_state.pager_set;
-    if ps.main_loaded() {
-        println!("{}", ps.main_schema()?);
+    if server_state.stored_db.is_some() {
+        println!("{}", server_state.stored_db.as_ref().unwrap().main_schema()?);
     }
     Ok(())
 }

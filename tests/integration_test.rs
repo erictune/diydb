@@ -44,7 +44,7 @@ fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
 
 fn server_state_with_open_db_for_run_query_tests(path: &str) -> diydb::DbServerState {
     let mut ss = diydb::DbServerState::new();
-    ss.pager_set.opendb(path)
+    diydb::open_db(&mut ss, path)
         .expect(format!("Should have opened {}.", path).as_str());
     ss.into()
 }

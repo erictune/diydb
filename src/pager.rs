@@ -1,4 +1,4 @@
-//! Defines `PagerSet` and `Pager` types, used to managed databases and pages.
+//! Defines the `Pager` type, which holds one open disk-based database.  It
 //! manages pages from a sqlite3 file as defined at https://www.sqlite.org/fileformat.html
 //! 
 
@@ -29,8 +29,6 @@ pub enum Error {
     DbHdr(#[from] crate::dbheader::Error),
     #[error("Default database pager requested when no databases loaded.")]
     NoDefaultDB,
-    #[error("Default database pager requested when multiple databases loaded.")]
-    AmbiguousDefaultDB,
     #[error("Too many pages open for write at once.")]
     TooManyPagesOpenForWrite,
     #[error("Table name not found.")]
@@ -39,69 +37,6 @@ pub enum Error {
     OpeningStoredTable,
 
 }
-
-/// A `PagerSet` manages zero or one open persistent databases.
-///
-/// At present, only one database can be loaded: `main`, which corresponds to the current open database file, regardless of filename.
-/// 
-/// The `main` database is a collection of tables of `StoredTable`. These come from an on-disk database.
-/// 
-/// The `main` database and tables are currently accessed via a `Pager`
-/// `Pager` manages the pages from a single database.
-///
-pub struct PagerSet {
-    pagers: Vec<Pager>,
-}
-
-// 'a: lifetime of self
-// 'b: lifetime of a returned Pager
-impl<'a, 'b> PagerSet
-where
-    'a: 'b,
-{
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        PagerSet { 
-            pagers: vec![],      // TODO: provide table lookup by name, wrapping the persisted schema table.
-        }
-    }
-
-    pub fn default_pager(&'a self) -> Result<&'b Pager, Error> {
-        match self.pagers.len() {
-            0 => Err(Error::NoDefaultDB),
-            1 => Ok(&self.pagers[0]),
-            _ => Err(Error::AmbiguousDefaultDB),
-        }
-    }
-    pub fn default_pager_mut(&'a mut self) -> Result<&'b mut Pager, Error> {
-        match self.pagers.len() {
-            0 => Err(Error::NoDefaultDB),
-            1 => Ok(&mut self.pagers[0]),
-            _ => Err(Error::AmbiguousDefaultDB),
-        }
-    }
-    pub fn opendb(&'a mut self, path: &str) -> Result<(), Error> {
-        self.pagers.push(Pager::open(path)?);
-        Ok(())
-    }
-
-    pub fn main_loaded(&self) -> bool {
-        self.pagers.len() > 0
-    }
-    pub fn main_schema(&self) -> Result<String, Error> {
-        use crate::SCHEMA_TABLE_NAME;
-        use crate::SCHEMA_TABLE_SQL_COLIDX;
-        let mut result= String::new();
-        let tt = StoredTable::open_read(self.default_pager()?, SCHEMA_TABLE_NAME)
-            .map_err(|_| Error::OpeningStoredTable)?
-            .to_temp_table()
-            .map_err(|_| Error::OpeningStoredTable)?;
-        for row in tt.rows {
-            result.push_str(&format!("{};", row.items[SCHEMA_TABLE_SQL_COLIDX]));
-        }
-        Ok(result)
-    }
-} 
 
 /// A `Pager` manages the file locking and the memory use for one open database file.
 /// 
@@ -329,6 +264,21 @@ impl Pager {
     pub fn get_page_size(&self) -> u32 {
         self.page_size
     }
+
+    pub fn main_schema(&self) -> Result<String, Error> {
+        use crate::SCHEMA_TABLE_NAME;
+        use crate::SCHEMA_TABLE_SQL_COLIDX;
+        let mut result= String::new();
+        let tt = StoredTable::open_read(self, SCHEMA_TABLE_NAME)
+            .map_err(|_| Error::OpeningStoredTable)?
+            .to_temp_table()
+            .map_err(|_| Error::OpeningStoredTable)?;
+        for row in tt.rows {
+            result.push_str(&format!("{};", row.items[SCHEMA_TABLE_SQL_COLIDX]));
+        }
+        Ok(result)
+    }
+
 }
 
 #[cfg(test)]
