@@ -3,7 +3,7 @@ use std::io::Cursor;
 
 use super::cell;
 use super::RowId;
-use crate::pager::PageNum;
+use crate::stored_db::PageNum;
 
 /// Iterator over the values and child pointers of a btree interior page.
 /// Intended for searching for a specific value or range.
@@ -105,7 +105,7 @@ impl<'a> core::iter::Iterator for ScanIterator<'a> {
                 let left_child_pagenum = c
                     .read_u32::<BigEndian>()
                     .expect("Should have read left child page number.");
-                Some(left_child_pagenum as crate::pager::PageNum)
+                Some(left_child_pagenum as crate::stored_db::PageNum)
             }
         }
     }
@@ -120,7 +120,7 @@ fn path_to_testdata(filename: &str) -> String {
 
 #[cfg(test)]
 fn new_table_interior_cell_iterator_for_page(
-    pgr: &crate::pager::Pager,
+    pgr: &crate::stored_db::StoredDb,
     pgnum: usize,
 ) -> crate::btree::interior::ScanIterator {
     use crate::btree;
@@ -166,7 +166,7 @@ fn test_interior_iterator_on_multipage_db() {
     // Page 6: third leaf page (GJB to JJJ ; 692-1000)
     let path = path_to_testdata("multipage.db");
     let pager =
-        crate::pager::Pager::open(path.as_str()).expect("Should have opened pager for db {path}.");
+        crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened pager for db {path}.");
     let x = crate::get_creation_sql_and_root_pagenum(&pager, "thousandrows");
     let pgnum = x.unwrap().0;
     assert_eq!(pgnum, 3);

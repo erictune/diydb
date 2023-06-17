@@ -2,7 +2,7 @@
 //! It hides the fact that btrees span several pages.
 
 use super::{cell, interior, leaf, PageType, RowId};
-use crate::pager::PageNum;
+use crate::stored_db::PageNum;
 
 enum EitherIter<'z> {
     Leaf(super::leaf::Iterator<'z>),
@@ -26,8 +26,8 @@ impl<'z> EitherIter<'z> {
 }
 
 pub struct Iterator<'p> {
-    root_page: crate::pager::PageNum,
-    pager: &'p crate::pager::Pager,
+    root_page: crate::stored_db::PageNum,
+    pager: &'p crate::stored_db::StoredDb,
     stack: Vec<EitherIter<'p>>, // The lifetime of the references in the inner iterators is good as long as the pager is, since the pager holds the pages.
     page_size: u32,
 }
@@ -45,7 +45,7 @@ impl<'p> Iterator<'p> {
     ///
     /// * `root_page` - The root page of the btree.  Borrowed for the lifetime of the iterator.  
     /// * `pager`     - A pager for the file that holds this btree.  
-    pub fn new(root_page: crate::pager::PageNum, pager: &'p crate::pager::Pager) -> Iterator<'p> {
+    pub fn new(root_page: crate::stored_db::PageNum, pager: &'p crate::stored_db::StoredDb) -> Iterator<'p> {
         // We will traverse the tree during the constructor to get a list of pages we need access to
         // during the iteration (excluding overflow pages).  This approach avoids having a stack of
         // iterators which are multiple borrows against  approach avoids having page references
@@ -165,7 +165,7 @@ fn path_to_testdata(filename: &str) -> String {
 fn test_table_iterator_on_minimal_db() {
     let path = path_to_testdata("minimal.db");
     let mut pager =
-        crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
+        crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
     let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "a");
     let mut ri = crate::new_table_iterator(&pager, x.unwrap().0);
     let first_item = ri.next().clone();
@@ -182,7 +182,7 @@ fn test_table_iterator_on_three_level_db() {
     // row 1000000: 1000000
     let path = path_to_testdata("threelevel.db");
     let pager =
-        crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
+        crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
     let x = crate::get_creation_sql_and_root_pagenum(&pager, "t");
     let pgnum = x.unwrap().0;
 

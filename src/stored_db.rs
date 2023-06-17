@@ -1,5 +1,7 @@
-//! Defines the `Pager` type, which holds one open disk-based database.  It
-//! manages pages from a sqlite3 file as defined at https://www.sqlite.org/fileformat.html
+//! Defines `StoredDb` type, which represents one disk-backed database file.
+//! 
+//! Manages the file access to one sqlite3 file.
+//! The sqlite3 file format is defined at https://www.sqlite.org/fileformat.html
 //! 
 
 // TODO:
@@ -38,14 +40,14 @@ pub enum Error {
 
 }
 
-/// A `Pager` manages the file locking and the memory use for one open database file.
+/// A `StoredDb` manages the file locking and the memory use for one open database file.
 /// 
-/// Currently, a Pager only supports single-threaded read-only access a database file. It reads all the pages into memory at once.
+/// Currently, a StoredDb only supports single-threaded read-only access a database file. It reads all the pages into memory at once.
 ///
-/// A full implementation of a Pager would support concurrent read and write accesses, with demand paging and multiple files,
+/// A full implementation of a StoredDb would support concurrent read and write accesses, with demand paging and multiple files,
 /// with the necessary reference counting and locking.
 ///
-/// A Pager is responsible for opening and locking a database file at the OS level.  A Pager owns the data in each page,
+/// A StoredDb is responsible for opening and locking a database file at the OS level.  A StoredDb owns the data in each page,
 /// and allows callers to access it for reading without copying.
 ///
 /// There are a number of page types in a SQLite database: Summarizing the SQLite documentation:
@@ -73,33 +75,35 @@ pub enum Error {
 /// 
 /// ```
 /// # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db");
-/// # use diydb::pager::Pager;;
-/// let pager = Pager::open(path.as_str()).unwrap();
-/// let p1 = pager.get_page_ro(1).unwrap();
-/// let p2 = pager.get_page_ro(2).unwrap();
+/// # use diydb::stored_db::StoredDb;
+/// let sdb = StoredDb::open(path.as_str()).unwrap();
+/// let p1 = sdb.get_page_ro(1).unwrap();
+/// let p2 = sdb.get_page_ro(2).unwrap();
 /// ```
 /// 
 // The following doc is here as a test, to ensure that borrow checking enforces the expected invariants.
 /// At present, you cannot hold one page for read and one page for write at the same time.  This doesn't work:
 /// ```compile_fail
-/// # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db").as_str();
-/// # use diydb::pager::Pager;;
-/// let pager = Pager::open(path.as_str()).unwrap();
-/// let p1 = pager.get_page_ro(1).unwrap();
-/// let p2 = pager.get_page_rw(2).unwrap();
+/// # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db");
+/// # use diydb::stored_db::StoredDb;
+/// let sdb = StoredDb::open(path.as_str()).unwrap();
+/// let p1 = sdb.get_page_ro(1).unwrap();
+/// let p2 = sdb.get_page_rw(2).unwrap();
 /// ```
 ///  
 ///  You also cannot hold two pages for write. This doesn't work:
 ///  ```compile_fail
-///  # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db").as_str();
-///  # use diydb::pager::Pager;;
-///  let pager = Pager::open(path.as_str()).unwrap();
-///  let p1 = pager.get_page_rw(1).unwrap();
-///  let p2 = pager.get_page_rw(2).unwrap();
+/// # let path = (std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set") + "/resources/test/" + "minimal.db");
+/// # use diydb::stored_db::StoredDb;
+/// let sdb = StoredDb::open(path.as_str()).unwrap();
+/// let p1 = sdb.get_page_rw(1).unwrap();
+/// let p2 = sdb.get_page_rw(2).unwrap();
 /// ```
 ///  These limits will be fixed in the future.
-pub struct Pager {
+pub struct StoredDb {
+    // This would be per DB.
     f: Box<RefCell<std::fs::File>>,
+
     // TODO: pages could return a RefCell so that pages can be paged in on demand.
     // Then have `check_present()` call `make_present()` where needed.
     // When implementing that, some things to consider are:
@@ -115,9 +119,14 @@ pub struct Pager {
     //     pages need locking for presence?
     // Do I need a way to deal with failure other than panicing (which is what RefCell does?)  Like waiting, or logging
     // specific information?
+
+    // This can be per-table - a table has its btree pages, and any overflow pages.  When there is freelist support, that would be at the Db level.
     pages: Vec<Option<Vec<u8>>>,
+    // This goes into the StoredDB.
     page_size: u32,
+    // This could be per table, though there might need to be special consideration for the first page when the header changes.
     open_rw_page: Option<PageNum>,
+    // This could be per table, though there might need to be special consideration for the first page when the headers changes.
     num_open_rw_pages: usize,
 }
 
@@ -128,7 +137,7 @@ pub type PageNum = usize;
 // TODO: support databases with more on-disk pages, limiting memory usage by paging out unused pages.
 const MAX_PAGE_NUM: PageNum = 10_000; // 10_000 * 4k page ~= 40MB
 
-impl Pager {
+impl StoredDb {
     /// opens a database file and verfies it is a SQLite db file, and reads in an unspecified number of pages of the database.
     ///
     /// Additional pages may be read in as needed later.
@@ -165,7 +174,7 @@ impl Pager {
                 .map_err(Error::Io)?;
             pages[pn - 1] = Some(v);
         }
-        Ok(Pager {
+        Ok(StoredDb {
             f: Box::new(file),
             pages,
             page_size: h.pagesize,
@@ -291,13 +300,13 @@ fn path_to_testdata(filename: &str) -> String {
 #[test]
 fn test_open_db() {
     let path = path_to_testdata("minimal.db");
-    let _pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
+    let _pager = StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
 }
 
 #[test]
 fn test_get_page_rw() {
     let path = path_to_testdata("minimal.db");
-    let mut pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
+    let mut pager = StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
     let p1 = pager.get_page_rw(1);
     assert!(p1
             .expect("Should have gotten a page")
@@ -309,7 +318,7 @@ fn test_get_page_rw() {
 #[test]
 fn test_get_two_page_ro() {
     let path = path_to_testdata("minimal.db");
-    let pager = Pager::open(path.as_str()).expect("Should have opened db with pager.");
+    let pager = StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
     let p1 = pager.get_page_ro(1);
     let p2 = pager.get_page_ro(2);
     assert!(

@@ -8,7 +8,7 @@ fn path_to_testdata(filename: &str) -> String {
 fn test_get_creation_sql_and_root_pagenum_using_minimal_db() {
     let path = path_to_testdata("minimal.db");
     let pager =
-        diydb::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
+        diydb::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
     let x = diydb::get_creation_sql_and_root_pagenum(&pager, "a");
     assert!(x.is_some());
     let (pgnum, csql) = x.unwrap();
@@ -23,7 +23,7 @@ fn test_get_creation_sql_and_root_pagenum_using_minimal_db() {
 fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
     let path = path_to_testdata("schema_table.db");
     let pager =
-        diydb::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
+        diydb::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
     let expected_tables = vec![
         ("t1", 2, "create table t1 (a int)"),
         ("t2", 3, "create table t2 (a int, b int)"),

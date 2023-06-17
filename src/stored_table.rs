@@ -7,14 +7,14 @@ use std::str::FromStr;
 
 use crate::table_traits::TableMeta;
 use crate::typed_row::Row;
-use crate::pager;
+use crate::stored_db;
 use crate::sql_type::SqlType;
 use streaming_iterator::StreamingIterator;
 
 pub struct StoredTable<'a> {
-    pager: &'a pager::Pager,
+    pager: &'a stored_db::StoredDb,
     table_name: String,
-    root_pagenum: pager::PageNum,
+    root_pagenum: stored_db::PageNum,
     column_names: Vec<String>,
     column_types: Vec<SqlType>,
     strict: bool,
@@ -95,9 +95,9 @@ impl<'a> StoredTable<'a> {
     /// creates a Table for unspecified (read vs write).
     /// Note: Most use cases should use open_read(), not new()
     pub fn new(
-        pager: &'a pager::Pager,
+        pager: &'a stored_db::StoredDb,
         table_name: String,
-        root_pagenum: pager::PageNum,
+        root_pagenum: stored_db::PageNum,
         column_names: Vec<String>,
         column_types: Vec<SqlType>,
         strict: bool
@@ -113,7 +113,7 @@ impl<'a> StoredTable<'a> {
     }
     
     // opens a table for reading.
-    pub fn open_read(pager: &'a pager::Pager, table_name: &str) -> Result<StoredTable<'a>, Error> {
+    pub fn open_read(pager: &'a stored_db::StoredDb, table_name: &str) -> Result<StoredTable<'a>, Error> {
         let (root_pagenum, create_statement) =
             match crate::get_creation_sql_and_root_pagenum(pager, table_name) {
                 Some(x) => x,
@@ -173,7 +173,7 @@ fn test_table() {
     use crate::sql_value::SqlValue;
     let path = path_to_testdata("minimal.db");
     let pager =
-        crate::pager::Pager::open(path.as_str()).expect("Should have opened db with pager.");
+        crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
     let tbl = StoredTable::open_read(&pager, "a").expect("Should have opened db.");
     assert_eq!(tbl.column_names(), vec![String::from("b")]);
     assert_eq!(tbl.column_types(), vec![SqlType::Int]);

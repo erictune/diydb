@@ -5,7 +5,7 @@ mod dbheader;
 mod ir;
 mod ir_interpreter;
 mod optimize_ast;
-pub mod pager;
+pub mod stored_db;
 pub mod parser;
 mod project;
 mod pt_to_ast;
@@ -35,7 +35,7 @@ use typed_row::Row;
 // Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
 // It has references to the root pages of other btrees.
 const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
-const SCHEMA_BTREE_ROOT_PAGENUM: pager::PageNum = 1;
+const SCHEMA_BTREE_ROOT_PAGENUM: stored_db::PageNum = 1;
 const SCHEMA_SCHEMA: &str =
     "CREATE TABLE sqlite_schema (type text, name text, tbl_name text, rootpage integer, sql text)";
 const SCHEMA_TABLE_COL_NAMES: [&str; 5] = ["type", "name", "tbl_name", "rootpage", "sql"];
@@ -46,7 +46,7 @@ const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 
 // DbServerState holds the context of running database engine: hold the open persistent and temporary databases.
 pub struct DbServerState {
-    pub stored_db: Option<crate::pager::Pager>,  // Try to make this private.
+    pub stored_db: Option<crate::stored_db::StoredDb>,  // Try to make this private.
     pub temp_db: crate::temp_db::TempDb,
 }
 
@@ -61,15 +61,15 @@ impl DbServerState {
 // Open a database file, and hold it in the DbServerState.
 pub fn open_db(server_state: &mut DbServerState, path: &str) -> anyhow::Result<()> {
     if server_state.stored_db.is_some() { bail!("Database file already open.  Close the old one first.  Close might be supported in the future.")}
-    server_state.stored_db = Some(crate::pager::Pager::open(path)?);
+    server_state.stored_db = Some(crate::stored_db::StoredDb::open(path)?);
     Ok(())
 }
 
 /// Get the root page number for, and the SQL CREATE statement used to create `table_name`.
 pub fn get_creation_sql_and_root_pagenum(
-    pgr: &pager::Pager,
+    pgr: &stored_db::StoredDb,
     table_name: &str,
-) -> Option<(pager::PageNum, String)> {
+) -> Option<(stored_db::PageNum, String)> {
     if table_name == SCHEMA_TABLE_NAME {
         return Some((SCHEMA_BTREE_ROOT_PAGENUM, String::from(SCHEMA_SCHEMA)));
     } else {
@@ -92,7 +92,7 @@ pub fn get_creation_sql_and_root_pagenum(
             }
             // TODO: refactor code below to "get row element as type x or return nicely formatted Error", which can be used elsewhere too.
             let root_pagenum = match &row.items[SCHEMA_TABLE_ROOTPAGE_COLIDX] {
-                SqlValue::Int(i) => *i as pager::PageNum,
+                SqlValue::Int(i) => *i as stored_db::PageNum,
                 // TODO: return Result rather than panicing.
                 _ => panic!("Type mismatch in schema table column {}, expected Int", SCHEMA_TABLE_ROOTPAGE_COLIDX),
             };
@@ -106,7 +106,7 @@ pub fn get_creation_sql_and_root_pagenum(
     None
 }
 
-pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Iterator {
+pub fn new_table_iterator(pgr: &stored_db::StoredDb, pgnum: usize) -> btree::table::Iterator {
     crate::btree::table::Iterator::new(pgnum, pgr)
 }
 

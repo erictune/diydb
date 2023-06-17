@@ -56,7 +56,7 @@ fn path_to_testdata(filename: &str) -> String {
 
 #[cfg(test)]
 pub fn new_table_leaf_cell_iterator_for_page(
-    pgr: &crate::pager::Pager,
+    pgr: &crate::stored_db::StoredDb,
     pgnum: usize,
 ) -> crate::btree::leaf::Iterator {
     use crate::btree;
@@ -85,7 +85,7 @@ pub fn new_table_leaf_cell_iterator_for_page(
 #[test]
 fn test_leaf_iterator_on_minimal_db() {
     let path = path_to_testdata("minimal.db");
-    let pager = crate::pager::Pager::open(path.as_str()).expect("Should have opened pager for db.");
+    let pager = crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened pager for db.");
     let x = crate::get_creation_sql_and_root_pagenum(&pager, "a");
     let mut ri = new_table_leaf_cell_iterator_for_page(&pager, x.unwrap().0);
     let first_item = ri.next().clone();
