@@ -5,7 +5,6 @@ use streaming_iterator::StreamingIterator;
 
 use crate::ast;
 use crate::ir;
-use crate::pager;
 use crate::project;
 use crate::sql_type;
 use crate::sql_value;
@@ -56,7 +55,7 @@ pub fn run_ir(server_state: &crate::DbServerState, ir: &ir::Block) -> Result<cra
                 .context("Project should only have Scan as child")?;
             match child.databasename == "temp" {
                 true => {
-                    let tbl = ps.get_temp_table(&child.tablename)?;
+                    let tbl = server_state.temp_db.get_temp_table(&child.tablename)?;
                     let base_it = tbl.streaming_iterator();
                     project_any_table_into_temp_table(tbl, base_it, &p.outcols)
                 }
@@ -81,7 +80,7 @@ pub fn run_ir(server_state: &crate::DbServerState, ir: &ir::Block) -> Result<cra
         }
         ir::Block::Scan(s) => {
             match s.databasename == "temp" {
-                true => Ok(ps.get_temp_table(&s.tablename)?.clone()),
+                true => Ok(server_state.temp_db.get_temp_table(&s.tablename)?.clone()),
                 false => {
                 // TODO: lock the table in the pager when opening the table for read.
                 // TODO: if we previously loaded the schema speculatively during IR optimization, verify unchanged now, e.g. with hash.

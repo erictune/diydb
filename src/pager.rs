@@ -15,10 +15,7 @@ use std::boxed::Box;
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom};
 
-use crate::temp_table::TempTable;
 use crate::stored_table::StoredTable;
-use crate::sql_type::SqlType;
-use crate::table_traits::TableMeta;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -43,32 +40,17 @@ pub enum Error {
 
 }
 
-/// A `PagerSet` manages zero or one open persistent databases and one temporary database.
+/// A `PagerSet` manages zero or one open persistent databases.
 ///
-/// At present, only two databases can be loaded: `temp`, which is always loaded and empty at the start of execution,
-/// and `main` which corresponds to the current open database file, regardless of filename.
-/// 
-/// The `temp` database is a collection of tables of type `TempTable`.  These have a lifetime limited to the duration of the execution
-/// of the program.
+/// At present, only one database can be loaded: `main`, which corresponds to the current open database file, regardless of filename.
 /// 
 /// The `main` database is a collection of tables of `StoredTable`. These come from an on-disk database.
 /// 
 /// The `main` database and tables are currently accessed via a `Pager`
 /// `Pager` manages the pages from a single database.
 ///
-/// `SELECT`s without `FROM` are still possible even with no tables.
-/// 
-/// StoredTables are a wrapper around a btree.  btrees (`crate::btree::*`), use a `Pager`.
-///
-/// # TODOs
-///   - After introducing a connection concept, consider whether TempTables are global to the server, or local to a Connection.
-///
-/// However, simple database files only contain table btree pages.
-/// Freelist pages will be managed by the Pager once supported.
-// A `PagerSet` manages zero or more Pagers, one per open database.
 pub struct PagerSet {
     pagers: Vec<Pager>,
-    temp_tables: Vec<crate::temp_table::TempTable>, 
 }
 
 // 'a: lifetime of self
@@ -81,20 +63,7 @@ where
     pub fn new() -> Self {
         PagerSet { 
             pagers: vec![],      // TODO: provide table lookup by name, wrapping the persisted schema table.
-            temp_tables: vec![], // TODO: key by name.
         }
-    }
-    pub fn new_temp_table(&'a mut self, table_name: String, column_names: Vec<String>, column_types: Vec<SqlType>, strict: bool) -> Result<(), Error> {
-        self.temp_tables.push(
-            TempTable {
-                rows: vec![],
-                table_name,
-                column_names,
-                column_types,
-                strict,
-            }
-        );
-        Ok(())
     }
 
     pub fn default_pager(&'a self) -> Result<&'b Pager, Error> {
@@ -114,31 +83,6 @@ where
     pub fn opendb(&'a mut self, path: &str) -> Result<(), Error> {
         self.pagers.push(Pager::open(path)?);
         Ok(())
-    }
-    pub fn get_temp_table(&'a self, tablename: &String) -> Result<&'b crate::temp_table::TempTable, Error> {
-        for i in 0..self.temp_tables.len() {
-            if self.temp_tables[i].table_name() == *tablename {
-                return Ok(&self.temp_tables[i]);
-            }
-        }
-        Err(Error::TableNameNotFound)
-    }
-
-    pub fn get_temp_table_mut(&'a mut self, tablename: &String) -> Result<&'b  mut crate::temp_table::TempTable, Error> {
-        for i in 0..self.temp_tables.len() {
-            if self.temp_tables[i].table_name() == *tablename {
-                return Ok(&mut self.temp_tables[i]);
-            }
-        }
-        Err(Error::TableNameNotFound)
-    }
-
-    pub fn temp_schema(&self) -> Result<String, Error> {
-        let mut result= String::new();
-        for tt in self.temp_tables.iter() {
-            result.push_str(&format!("{}", tt.creation_sql()));
-        }
-        Ok(result)
     }
 
     pub fn main_loaded(&self) -> bool {
@@ -185,6 +129,9 @@ where
 /// >    -   A payload overflow page
 /// >    -   A pointer map page
 /// 
+/// However, simple database files only contain table btree pages.
+/// Freelist pages will be managed by the Pager once supported.
+// A `PagerSet` manages zero or more Pagers, one per open database.
 /// # Examples
 /// 
 /// You can open one or more pages readonly at once.

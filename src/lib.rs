@@ -14,6 +14,7 @@ mod serial_type;
 pub mod sql_type;
 pub mod sql_value;
 mod table_traits;
+mod temp_db;
 mod stored_table;
 mod temp_table;
 pub mod typed_row;
@@ -46,12 +47,15 @@ const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 // DbServerState holds the context of running database engine: hold the open persistent and temporary databases.
 pub struct DbServerState {
     pub pager_set: crate::pager::PagerSet,  // Try to make this not private.
+    pub temp_db: crate::temp_db::TempDb,
+
 }
 
 impl DbServerState {
     pub fn new() -> DbServerState {
         DbServerState { 
             pager_set: crate::pager::PagerSet::new(),
+            temp_db: crate::temp_db::TempDb::new(),
         }
     }
 }
@@ -108,9 +112,9 @@ pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Ite
 
 /// Print the Schema table to standard output.
 pub fn print_schema(server_state: &DbServerState) -> anyhow::Result<()> {
-    let ps = &server_state.pager_set;
     // Print temp database and main database if open; we only support these two kinds of dbs.
-    println!("{}", ps.temp_schema()?);
+    println!("{}", server_state.temp_db.temp_schema()?);
+    let ps = &server_state.pager_set;
     if ps.main_loaded() {
         println!("{}", ps.main_schema()?);
     }
@@ -124,13 +128,12 @@ pub fn run_query(server_state: &DbServerState, query: &str) -> anyhow::Result<()
 }
 
 pub fn run_insert(server_state: &mut DbServerState, stmt: &str) -> anyhow::Result<()> {
-    let ps = &mut server_state.pager_set;
     let is: ast::InsertStatement = pt_to_ast::pt_insert_statement_to_ast(stmt)?;
     // TODO: use helper functions or "impl Trait" argument types to reduce how much code is duplicated
     // across these two match arms.
     match is.databasename == "temp" {
         true /* temporary table */ => {
-            let tbl = ps.get_temp_table_mut(&is.tablename)?;
+            let tbl = server_state.temp_db.get_temp_table_mut(&is.tablename)?;
             for row in is.values {
                 // Convert row from AST constants to SQL values.
                 let row: Vec<SqlValue> = row.iter().map(sql_value::from_ast_constant).collect();
@@ -146,13 +149,12 @@ pub fn run_insert(server_state: &mut DbServerState, stmt: &str) -> anyhow::Resul
 }
 
 pub fn run_create(server_state: &mut DbServerState, stmt: &str) -> anyhow::Result<()> {
-    let ps = &mut server_state.pager_set;
     let cs: ast::CreateStatement = pt_to_ast::pt_create_statement_to_ast(stmt);
     // TODO: use helper functions or "impl Trait" argument types to reduce how much code is duplicated
     // across these two match arms.
     match cs.databasename == "temp" {
         true /* temporary table */ => {            
-            ps.new_temp_table(
+            server_state.temp_db.new_temp_table(
                 cs.tablename,
                 cs.coldefs.iter().map(|x| x.colname.name.clone()).collect(),
                 cs.coldefs.iter().map(|x| sql_type::SqlType::from_str(x.coltype.as_str()).unwrap()).collect(),
