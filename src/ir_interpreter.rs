@@ -46,7 +46,8 @@ where
 }
 
 /// Run an IR representation of a query, returning a TempTable with the results of the query.
-pub fn run_ir(ps: &pager::PagerSet, ir: &ir::Block) -> Result<crate::TempTable> {
+pub fn run_ir(server_state: &crate::DbServerState, ir: &ir::Block) -> Result<crate::TempTable> {
+    let ps = &server_state.pager_set;
     match ir {
         ir::Block::Project(p) => {
             let child = p

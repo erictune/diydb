@@ -1,8 +1,8 @@
 use std::io::{self, BufRead, Write};
 
 fn main() {
-    let mut c: Context = Context {
-        pagerset: diydb::pager::PagerSet::new(),
+    let mut c: CliContext = CliContext {
+        server_state: diydb::DbServerState::new(),
     };
     let stdin = io::stdin();
     println!("DIYDB - simple SQL database");
@@ -56,7 +56,7 @@ fn main() {
     }
 }
 
-fn do_command(c: &mut Context, line: &str) {
+fn do_command(c: &mut CliContext, line: &str) {
     if line.len() == 0 {
         println!("Empty command.");
         return;
@@ -115,11 +115,11 @@ fn do_command(c: &mut Context, line: &str) {
     }
 }
 
-struct Context {
-    pagerset: diydb::pager::PagerSet,
+struct CliContext {
+    server_state: diydb::DbServerState, 
 }
 
-fn do_help(_: &mut Context) {
+fn do_help(_: &mut CliContext) {
     println!(
         "
 .help               to get this list.
@@ -134,7 +134,7 @@ CREATE ...          to create a table.
 }
 
 
-fn do_detailed_help(_: &mut Context, word: &str) {
+fn do_detailed_help(_: &mut CliContext, word: &str) {
     let helptext = match word {
         ".help" =>      "\
 Type `.help` with no argument to see all commands; Type `.help [argument]` (with a single argument) to get detailed help on that command.",
@@ -158,8 +158,8 @@ WHERE, AS, GROUP BY, and JOIN are not supported.",
     println!("Help for command '{}'\n{}", word, helptext);
 }
 
-fn do_open(c: &mut Context, path: &str) {
-    match c.pagerset.opendb(path) {
+fn do_open(c: &mut CliContext, path: &str) {
+    match diydb::open_db(&mut c.server_state, path) {
         Ok(()) => {}
         Err(e) => {
             println!("Error opening database {path} : {}", e);
@@ -167,26 +167,26 @@ fn do_open(c: &mut Context, path: &str) {
     }
 }
 
-fn do_schema(c: &mut Context) {
-    if let Err(e) = diydb::print_schema(&c.pagerset) {
+fn do_schema(c: &mut CliContext) {
+    if let Err(e) = diydb::print_schema(&c.server_state) {
         println!("Error printing schemas: {}", e);
     }
 }
 
-fn do_select(c: &mut Context, l: &str) {
-    if let Err(e) = diydb::run_query(&c.pagerset, l) {
+fn do_select(c: &mut CliContext, l: &str) {
+    if let Err(e) = diydb::run_query(&c.server_state, l) {
         println!("Error running query: {}", e);
     }
 }
 
-fn do_insert(c: &mut Context, l: &str) {
-    if let Err(e) = diydb::run_insert(&mut c.pagerset, l) {
+fn do_insert(c: &mut CliContext, l: &str) {
+    if let Err(e) = diydb::run_insert(&mut c.server_state, l) {
         println!("Error running statement: {}", e);
     }
 }
 
-fn do_create(c: &mut Context, l: &str) {
-    if let Err(e) = diydb::run_create(&mut c.pagerset, l) {
+fn do_create(c: &mut CliContext, l: &str) {
+    if let Err(e) = diydb::run_create(&mut c.server_state, l) {
         println!("Error running statement: {}", e);
     }
 }

@@ -42,19 +42,19 @@ fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
     }
 }
 
-fn pagerset_with_open_db_for_run_query_tests(path: &str) -> diydb::pager::PagerSet {
-    let mut ps = diydb::pager::PagerSet::new();
-    ps.opendb(path)
+fn server_state_with_open_db_for_run_query_tests(path: &str) -> diydb::DbServerState {
+    let mut ss = diydb::DbServerState::new();
+    ss.pager_set.opendb(path)
         .expect(format!("Should have opened {}.", path).as_str());
-    ps.into()
+    ss.into()
 }
 
 #[test]
 fn test_run_query_on_minimal_db() {
     use diydb::sql_value::SqlValue::*;
     let path = path_to_testdata("minimal.db");
-    let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
-    let tt = diydb::run_query_no_print(&ps, "select * from a").unwrap();
+    let ss = server_state_with_open_db_for_run_query_tests(path.as_str());
+    let tt = diydb::run_query_no_print(&ss, "select * from a").unwrap();
     assert_eq!(tt.rows.len(), 1);
     assert_eq!(tt.rows[0].items.len(), 1);
     assert_eq!(tt.rows[0].items[0], Int(1));
@@ -71,8 +71,8 @@ fn test_run_query_on_multipage_with_various_page_sizes() {
     ];
     for db in dbs {
         let path = path_to_testdata(db);
-        let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
-        let tt = diydb::run_query_no_print(&ps, "select * from thousandrows").unwrap();
+        let ss = server_state_with_open_db_for_run_query_tests(path.as_str());
+        let tt = diydb::run_query_no_print(&ss, "select * from thousandrows").unwrap();
         assert_eq!(tt.rows.len(), 1000);
 
         assert_eq!(tt.rows[0].items.len(), 3);
@@ -135,8 +135,8 @@ fn test_run_query_on_three_level_db() {
     // row 1000000: 1000000
 
     let path = path_to_testdata("threelevel.db");
-    let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
-    let tt = diydb::run_query_no_print(&ps, "select * from t").unwrap();
+    let ss = server_state_with_open_db_for_run_query_tests(path.as_str());
+    let tt = diydb::run_query_no_print(&ss, "select * from t").unwrap();
 
     assert_eq!(tt.rows.len(), 100000);
     for i in 0..100000 {
@@ -147,8 +147,8 @@ fn test_run_query_on_three_level_db() {
 
 #[test]
 fn test_run_dbless_selects() {
-    let ps = diydb::pager::PagerSet::new();
-    let tt = diydb::run_query_no_print(&ps, "select 1, 2, 3").unwrap();
+    let ss = diydb::DbServerState::new();
+    let tt = diydb::run_query_no_print(&ss, "select 1, 2, 3").unwrap();
     use diydb::sql_value::SqlValue;
     assert_eq!(tt.rows.len(), 1);
     assert_eq!(tt.rows[0].items.len(), 3);
@@ -174,7 +174,7 @@ fn test_run_selects() {
     use diydb::typed_row::Row;
     use diydb::sql_value::SqlValue::*;
     let path = path_to_testdata("for_exprs.db");
-    let ps = pagerset_with_open_db_for_run_query_tests(path.as_str());
+    let ss = server_state_with_open_db_for_run_query_tests(path.as_str());
     let cases = vec![
         (
             "select * from t",
@@ -258,7 +258,7 @@ fn test_run_selects() {
     for case in cases {
         println!("--------------\n");
         println!("running: {}", case.0);
-        let actual = diydb::run_query_no_print(&ps, case.0);
+        let actual = diydb::run_query_no_print(&ss, case.0);
         assert!(actual.is_ok());
         let actual = actual.unwrap();
         println!("Actual rows: {:?}", actual.rows);
@@ -269,10 +269,10 @@ fn test_run_selects() {
 
 #[test]
 fn test_create_a_temptable() {
-    let mut ps = diydb::pager::PagerSet::new();
-    diydb::run_create(&mut ps, "create temp table t (i int)").unwrap();
+    let mut ss = diydb::DbServerState::new();
+    diydb::run_create(&mut ss, "create temp table t (i int)").unwrap();
     // This is relying on automatic creation of a temptable.  TODO: implement CREATE and use that here.
-    let tt = diydb::run_query_no_print(&mut ps, "select * from temp.t").unwrap();
+    let tt = diydb::run_query_no_print(&ss, "select * from temp.t").unwrap();
     assert_eq!(tt.rows.len(), 0);
 }
 // TODO: be able to create persistent tables.
@@ -280,22 +280,22 @@ fn test_create_a_temptable() {
 #[test]
 fn test_insert_into_temptable_adds_a_row() {
     use diydb::sql_value::SqlValue::*;
-    let mut ps = diydb::pager::PagerSet::new();
-    diydb::run_create(&mut ps, "create temp table t (i int)").unwrap();
+    let mut ss = diydb::DbServerState::new();
+    diydb::run_create(&mut ss, "create temp table t (i int)").unwrap();
     // This is relying on automatic creation of a temptable.  TODO: implement CREATE and use that here.
-    let tt = diydb::run_query_no_print(&mut ps, "select * from temp.t").unwrap();
+    let tt = diydb::run_query_no_print(&mut ss, "select * from temp.t").unwrap();
     assert_eq!(tt.rows.len(), 0);
     // Should be able to insert a row.
-    diydb::run_insert(&mut ps, "insert into temp.t values (42)").expect("Should have inserted without errors");
+    diydb::run_insert(&mut ss, "insert into temp.t values (42)").expect("Should have inserted without errors");
     // After Insert, there are two rows.
-    let tt = diydb::run_query_no_print(&mut ps, "select * from temp.t").unwrap();
+    let tt = diydb::run_query_no_print(&mut ss, "select * from temp.t").unwrap();
     assert_eq!(tt.rows.len(), 1);
     assert_eq!(tt.rows[0].items.len(), 1);
     assert_eq!(tt.rows[0].items[0], Int(42));
     // Should be able to insert another row.
-    diydb::run_insert(&mut ps, "insert into temp.t values (102)").expect("Should have inserted without errors");
+    diydb::run_insert(&mut ss, "insert into temp.t values (102)").expect("Should have inserted without errors");
     // After Insert, there are two rows.
-    let tt = diydb::run_query_no_print(&mut ps, "select * from temp.t").unwrap();
+    let tt = diydb::run_query_no_print(&mut ss, "select * from temp.t").unwrap();
     assert_eq!(tt.rows.len(), 2);
     assert_eq!(tt.rows[0].items.len(), 1);
     assert_eq!(tt.rows[0].items[0], Int(42));
@@ -308,10 +308,11 @@ fn test_insert_into_temptable_adds_a_row() {
 
 #[test]
 fn test_insert_select_on_temptable_strict_works() {
-    let mut ps = diydb::pager::PagerSet::new();
-    diydb::run_create(&mut ps, "create temp table t (i int, j int) strict").expect("Should have setup test scenario.");
-    diydb::run_insert(&mut ps, "insert into temp.t values (42, 27)").expect("Should have inserted without errors");
-    diydb::run_insert(&mut ps, "insert into temp.t values (42, 'hello')").expect_err("Should have gotten error inserting string to int column");
-    diydb::run_insert(&mut ps, "insert into temp.t values (42)").expect_err("Should have gotten error inserting short row");
-    diydb::run_insert(&mut ps, "insert into temp.t values (42, 43, 44)").expect_err("Should have gotten error inserting long row");
+    let mut ss = diydb::DbServerState::new();
+
+    diydb::run_create(&mut ss, "create temp table t (i int, j int) strict").expect("Should have setup test scenario.");
+    diydb::run_insert(&mut ss, "insert into temp.t values (42, 27)").expect("Should have inserted without errors");
+    diydb::run_insert(&mut ss, "insert into temp.t values (42, 'hello')").expect_err("Should have gotten error inserting string to int column");
+    diydb::run_insert(&mut ss, "insert into temp.t values (42)").expect_err("Should have gotten error inserting short row");
+    diydb::run_insert(&mut ss, "insert into temp.t values (42, 43, 44)").expect_err("Should have gotten error inserting long row");
 }

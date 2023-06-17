@@ -43,6 +43,24 @@ const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
 const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
 const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 
+// DbServerState holds the context of running database engine: hold the open persistent and temporary databases.
+pub struct DbServerState {
+    pub pager_set: crate::pager::PagerSet,  // Try to make this not private.
+}
+
+impl DbServerState {
+    pub fn new() -> DbServerState {
+        DbServerState { 
+            pager_set: crate::pager::PagerSet::new(),
+        }
+    }
+}
+// Open a database file, and hold it in the DbServerState.
+pub fn open_db(server_state: &mut DbServerState, path: &str) -> anyhow::Result<()> {
+    server_state.pager_set.opendb(path)?;
+    Ok(())
+}
+
 /// Get the root page number for, and the SQL CREATE statement used to create `table_name`.
 pub fn get_creation_sql_and_root_pagenum(
     pgr: &pager::Pager,
@@ -89,7 +107,8 @@ pub fn new_table_iterator(pgr: &pager::Pager, pgnum: usize) -> btree::table::Ite
 }
 
 /// Print the Schema table to standard output.
-pub fn print_schema(ps: &pager::PagerSet) -> anyhow::Result<()> {
+pub fn print_schema(server_state: &DbServerState) -> anyhow::Result<()> {
+    let ps = &server_state.pager_set;
     // Print temp database and main database if open; we only support these two kinds of dbs.
     println!("{}", ps.temp_schema()?);
     if ps.main_loaded() {
@@ -98,13 +117,14 @@ pub fn print_schema(ps: &pager::PagerSet) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_query(ps: &pager::PagerSet, query: &str) -> anyhow::Result<()> {
-    let tt = run_query_no_print(ps, query)?;
+pub fn run_query(server_state: &DbServerState, query: &str) -> anyhow::Result<()> {
+    let tt = run_query_no_print(server_state, query)?;
     tt.print(false)?;
     Ok(())
 }
 
-pub fn run_insert(ps: &mut pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
+pub fn run_insert(server_state: &mut DbServerState, stmt: &str) -> anyhow::Result<()> {
+    let ps = &mut server_state.pager_set;
     let is: ast::InsertStatement = pt_to_ast::pt_insert_statement_to_ast(stmt)?;
     // TODO: use helper functions or "impl Trait" argument types to reduce how much code is duplicated
     // across these two match arms.
@@ -125,7 +145,8 @@ pub fn run_insert(ps: &mut pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_create(ps: &mut pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
+pub fn run_create(server_state: &mut DbServerState, stmt: &str) -> anyhow::Result<()> {
+    let ps = &mut server_state.pager_set;
     let cs: ast::CreateStatement = pt_to_ast::pt_create_statement_to_ast(stmt);
     // TODO: use helper functions or "impl Trait" argument types to reduce how much code is duplicated
     // across these two match arms.
@@ -146,7 +167,7 @@ pub fn run_create(ps: &mut pager::PagerSet, stmt: &str) -> anyhow::Result<()> {
 }
 
 
-pub fn run_query_no_print(ps: &pager::PagerSet, query: &str) -> anyhow::Result<TempTable> {
+pub fn run_query_no_print(server_state: &DbServerState, query: &str) -> anyhow::Result<TempTable> {
     // Convert parse tree to AST.
     let mut ss: ast::SelectStatement = pt_to_ast::pt_select_statement_to_ast(query)?;
     // Optimize the AST (in place).
@@ -154,6 +175,6 @@ pub fn run_query_no_print(ps: &pager::PagerSet, query: &str) -> anyhow::Result<T
     // Convert the AST to IR.
     let ir: ir::Block = ast_to_ir::ast_select_statement_to_ir(&ss)?;
     // Execute the IR.
-    let tt: TempTable = ir_interpreter::run_ir(ps, &ir)?;
+    let tt: TempTable = ir_interpreter::run_ir(server_state, &ir)?;
     Ok(tt)
 }
