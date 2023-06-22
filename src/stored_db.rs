@@ -16,6 +16,7 @@
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom};
+use std::str::FromStr;
 
 use streaming_iterator::StreamingIterator;
 
@@ -50,11 +51,10 @@ pub enum Error {
     NoDefaultDB,
     #[error("Too many pages open for write at once.")]
     TooManyPagesOpenForWrite,
-    #[error("Table name not found.")]
-    TableNameNotFound,
+    #[error("Table {0} not found in database.")]
+    TableNameNotFound(String),
     #[error("Error opening stored table.")]
     OpeningStoredTable,
-
 }
 
 /// A `StoredDb` manages the file locking and the memory use for one open database file.
@@ -325,9 +325,26 @@ impl StoredDb {
         self.page_size
     }
 
+    // opens a table for reading.
+    pub fn open_table_for_read(&self, table_name: &str) -> Result<StoredTable<'_>, Error> {
+        let root_pagenum =
+            self.get_root_pagenum(table_name).ok_or(Error::TableNameNotFound(table_name.to_owned()))?;
+        let create_statement =
+            self.get_creation_sql(table_name).ok_or(Error::TableNameNotFound(table_name.to_owned()))?;
+        let cs = crate::pt_to_ast::pt_create_statement_to_ast(&create_statement);
+        Ok(StoredTable::new(
+            self,
+            cs.tablename,
+            root_pagenum,
+            cs.coldefs.iter().map(|x| x.colname.name.clone()).collect(),
+            cs.coldefs.iter().map(|x| SqlType::from_str(x.coltype.as_str()).unwrap()).collect(),
+            cs.strict,
+        ))    
+    }
+
     pub fn main_schema(&self) -> Result<String, Error> {
         let mut result= String::new();
-        let tt = StoredTable::open_read(self, SCHEMA_TABLE_NAME)
+        let tt = self.open_table_for_read(SCHEMA_TABLE_NAME)
             .map_err(|_| Error::OpeningStoredTable)?
             .to_temp_table()
             .map_err(|_| Error::OpeningStoredTable)?;

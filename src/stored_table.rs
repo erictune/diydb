@@ -3,8 +3,6 @@
 //! Currently, only reading is supported.
 //! A subset of the SQLite file format is supported.
 
-use std::str::FromStr;
-
 use crate::table_traits::TableMeta;
 use crate::typed_row::Row;
 use crate::stored_db;
@@ -22,8 +20,6 @@ pub struct StoredTable<'a> {
 
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
-    #[error("The table {0} was not found in the database.")]
-    TableNameNotFoundInDb(String),
     #[error("While converting persistent table to a temporary table, type casting failure.")]
     CastingError,
 }
@@ -112,24 +108,6 @@ impl<'a> StoredTable<'a> {
         }
     }
     
-    // opens a table for reading.
-    pub fn open_read(db: &'a stored_db::StoredDb, table_name: &str) -> Result<StoredTable<'a>, Error> {
-        let root_pagenum =
-            db.get_root_pagenum(table_name).ok_or(Error::TableNameNotFoundInDb(table_name.to_owned()))?;
-        let create_statement =
-            db.get_creation_sql(table_name).ok_or(Error::TableNameNotFoundInDb(table_name.to_owned()))?;
-        let cs = crate::pt_to_ast::pt_create_statement_to_ast(&create_statement);
-        let pager = db;
-        Ok(StoredTable::new(
-            pager,
-            cs.tablename,
-            root_pagenum,
-            cs.coldefs.iter().map(|x| x.colname.name.clone()).collect(),
-            cs.coldefs.iter().map(|x| SqlType::from_str(x.coltype.as_str()).unwrap()).collect(),
-            cs.strict,
-        ))    
-    }
-
     pub fn streaming_iterator(&'a self) -> TableStreamingIterator<'a> {
         TableStreamingIterator::new(self.iter(), self.column_types())
     }
@@ -172,9 +150,9 @@ fn test_table() {
     use crate::sql_type::SqlType;
     use crate::sql_value::SqlValue;
     let path = path_to_testdata("minimal.db");
-    let pager =
-        crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
-    let tbl = StoredTable::open_read(&pager, "a").expect("Should have opened db.");
+    let db =
+        crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db.");
+    let tbl = db.open_table_for_read("a").expect("Should have opened db.");
     assert_eq!(tbl.column_names(), vec![String::from("b")]);
     assert_eq!(tbl.column_types(), vec![SqlType::Int]);
     let mut it = tbl.streaming_iterator();

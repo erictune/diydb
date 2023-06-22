@@ -61,8 +61,8 @@ pub fn run_ir(server_state: &crate::DbServerState, ir: &ir::Block) -> Result<cra
                 false => {
                     // TODO: this should be a reference to a Table held by the DB, not a Table created here on the stack.
                     if server_state.stored_db.is_none() { anyhow::bail!("No open database, but main database referenced in query.") };
-                    let pgr = server_state.stored_db.as_ref().unwrap();
-                    let tbl: StoredTable<'_> = StoredTable::open_read(pgr, child.tablename.as_str())?;
+                    let db = server_state.stored_db.as_ref().unwrap();
+                    let tbl: StoredTable<'_> = db.open_table_for_read(child.tablename.as_str())?;
                     let base_it = tbl.streaming_iterator();
                     project_any_table_into_temp_table(&tbl, base_it, &p.outcols)
                 }
@@ -86,8 +86,8 @@ pub fn run_ir(server_state: &crate::DbServerState, ir: &ir::Block) -> Result<cra
                 // TODO: lock the table in the pager when opening the table for read.
                 // TODO: if we previously loaded the schema speculatively during IR optimization, verify unchanged now, e.g. with hash.
                 if server_state.stored_db.is_none() { anyhow::bail!("No open database, but main database referenced in query.") };
-                let pgr = server_state.stored_db.as_ref().unwrap();
-                StoredTable::open_read(pgr, s.tablename.as_str())?
+                let db = server_state.stored_db.as_ref().unwrap();
+                db.open_table_for_read(s.tablename.as_str())?
                     .to_temp_table()
                     .map_err(|e| anyhow::anyhow!(e))
                 }
