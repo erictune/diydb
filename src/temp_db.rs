@@ -29,18 +29,18 @@ pub enum Error {
 ///   - After introducing a connection concept, consider whether TempTables are global to the server, or local to a Connection.
 ///
 pub struct TempDb {
-    temp_tables: Vec<crate::temp_table::TempTable>, 
+    tables: Vec<crate::temp_table::TempTable>, 
 }
 
 impl TempDb {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         TempDb { 
-            temp_tables: vec![], // TODO: key by name.
+            tables: vec![], // TODO: key by name.
         }
     }
     pub fn new_temp_table(&mut self, table_name: String, column_names: Vec<String>, column_types: Vec<SqlType>, strict: bool) -> Result<(), Error> {
-        self.temp_tables.push(
+        self.tables.push(
             TempTable {
                 rows: vec![],
                 table_name,
@@ -53,18 +53,18 @@ impl TempDb {
     }
 
     pub fn get_table(&self, tablename: &String) -> Result<&crate::temp_table::TempTable, Error> {
-        for i in 0..self.temp_tables.len() {
-            if self.temp_tables[i].table_name() == *tablename {
-                return Ok(&self.temp_tables[i]);
+        for i in 0..self.tables.len() {
+            if self.tables[i].table_name() == *tablename {
+                return Ok(&self.tables[i]);
             }
         }
         Err(Error::TableNameNotFound)
     }
 
     pub fn get_table_mut(&mut self, tablename: &String) -> Result<&mut crate::temp_table::TempTable, Error> {
-        for i in 0..self.temp_tables.len() {
-            if self.temp_tables[i].table_name() == *tablename {
-                return Ok(&mut self.temp_tables[i]);
+        for i in 0..self.tables.len() {
+            if self.tables[i].table_name() == *tablename {
+                return Ok(&mut self.tables[i]);
             }
         }
         Err(Error::TableNameNotFound)
@@ -72,7 +72,7 @@ impl TempDb {
 
     pub fn temp_schema(&self) -> Result<String, Error> {
         let mut result= String::new();
-        for tt in self.temp_tables.iter() {
+        for tt in self.tables.iter() {
             result.push_str(&format!("{}", tt.creation_sql()));
         }
         Ok(result)
@@ -80,7 +80,7 @@ impl TempDb {
 
     // TODO: move to "db traits"?
     pub fn get_creation_sql(&self, table_name: &str) -> Option<String> {
-        for tt in self.temp_tables.iter() {
+        for tt in self.tables.iter() {
             if tt.table_name() == table_name {
                 return Some(tt.creation_sql());
             }
