@@ -1,6 +1,36 @@
 Current Projects Stack
 ----------------------
 
+# CURRENT - Pages owned by Table, not Db
+  - [ ] change StoredDb::pages from `Vec<_>` to `HashMap<pagenum, Page>`, while keeping public interface of StoredDb the same.
+  - [ ] factor the following members of StoredDb into a private struct in the same module called Pages:
+        ```
+        pub pages: Vec<Option<Vec<u8>>>, // MOVE OUT
+        pub page_size: u32,  // DUPLICATE
+        pub open_rw_page: Option<PageNum>, // MOVE OUT
+        pub num_open_rw_pages: usize,  // MOVE OUT
+        ```
+       and change reference to refer to pages.pages, pages.open_rw_page, etc.
+       StoredDb has a Pages called Pages.
+       In StoredDb::open, do the read_exact() into the pages.pages.insert(pagenum).get_mut(pagenum).
+  
+  - [ ] Next, we want to have a separate Pages object for each table.
+        - But how do you split up the pages between different tables?
+           - Option 1: walk the whole DB at opening time and read different pages into different tables Pages.
+           - Option 2: Read all pages into every table's Pages, accepting duplication, and punt the problem.
+           - Option 3: read pages on demand, for each table (just have the root page to start with.).
+              - This has the problem that to read on demand, we need interior mutability.
+              - Interior mutability propagates Ref<T> and RefMut<T> to users. 
+                where those users include all of the crate::btree methods.
+                - all the places that call get_page_ro() and expect a Vec<u8> are going to have to be changed
+                  to put the Ref<T> on their stack, and then unwrap to get the u8 inside.  See how hard that is.
+                  Try to do that in a refactoring.
+        - If refactoring all users of Vec<u8> into Ref<Vec<u8>> works, then proceed to implement "demand paging" for the StoredDb.
+        - Finally, change from a single Pages to a Pages-per-Tablename in StoredDb. When someone asks for open_read()
+          then reuse the cached Pages for that Table. (Or return a reference to a cached StoredTable instead?)
+        - This should get rid of the <'_>  from StoredTable<'_>?  No, it will just add a reference back to the Db probably.  Groan.
+        - We might want to rename a Pages as a Btree?
+
 # Idea - TreeMap for TempTable and map interface for Table
   - Support rowid as a map (rowid, row).
   - Iterators for Table and TempTable to return both.

@@ -14,6 +14,7 @@
 //  - When there are multiple pagers (multiple open files), coordinating to stay under a total memory limit.
 
 use std::boxed::Box;
+use std::collections::HashMap;
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom};
 use std::str::FromStr;
@@ -122,7 +123,6 @@ pub struct StoredDb {
     f: Box<RefCell<std::fs::File>>,
 
     // TODO: pages could return a RefCell so that pages can be paged in on demand.
-    // Then have `check_present()` call `make_present()` where needed.
     // When implementing that, some things to consider are:
     // - The memory overhead: I think it should be low, given that pages (512B-4kB) are much larger than the overhead (16B-24B?).
     // - The cpu overhead: Is it paid by every function in the stack of iterators and , or once per at allocation and de-allocation, or on every access?  Perhaps benchmark it.
@@ -137,8 +137,9 @@ pub struct StoredDb {
     // Do I need a way to deal with failure other than panicing (which is what RefCell does?)  Like waiting, or logging
     // specific information?
 
-    // This can be per-table - a table has its btree pages, and any overflow pages.  When there is freelist support, that would be at the Db level.
-    pages: Vec<Option<Vec<u8>>>,
+    // TODO: This can be per-table - a table has its btree pages, and any overflow pages.  When there is freelist support, that would be at the Db level.
+    /// Map from page number to the page data, or key not found if page not in memory.
+    pages: HashMap<PageNum, Vec<u8>>,
     // This goes into the StoredDB.
     page_size: u32,
     // This could be per table, though there might need to be special consideration for the first page when the header changes.
@@ -180,7 +181,7 @@ impl StoredDb {
             return Err(Error::PageNumberBeyondLimits);
         }
         //TODO: read these in on demand.
-        let mut pages = vec![None; h.numpages as usize];
+        let mut pages: HashMap<PageNum, Vec<u8>> = HashMap::new();
         for pn in 1_usize..(h.numpages as usize) + 1 {
             let mut v = vec![0_u8; h.pagesize as usize];
             file.borrow_mut()
@@ -189,7 +190,7 @@ impl StoredDb {
             file.borrow_mut()
                 .read_exact(&mut v[..])
                 .map_err(Error::Io)?;
-            pages[pn - 1] = Some(v);
+            pages.insert(pn, v.into());
         }
         Ok(StoredDb {
             f: Box::new(file),
@@ -258,27 +259,14 @@ impl StoredDb {
         if pn > MAX_PAGE_NUM {
             return Err(Error::PageNumberBeyondLimits);
         }
-        if pn > self.pages.len() {
-            // println!("Extending pager capacity to {}", pn);
-            self.pages.resize(pn, None)
-        }
-        if self.pages[pn - 1].is_none() {
+        if !self.pages.contains_key(&pn) {
             // println!("Reading page {} on demand.", pn);
             let v = self.read_page_from_file(pn)?;
-            self.pages[pn - 1] = Some(v);
+            self.pages.insert(pn, v.into()).expect("Should have inserted a page.");
         }
+        assert!(self.pages.contains_key(&pn));
+
         Ok(())
-    }
-
-    fn check_present(&self, pn: PageNum) {
-        // We are increasing the capacity of what pages we cache in memory, not changing the on-disk database file.
-        if pn > self.pages.len() {
-            panic!("Pager capacity does not extend to requested page.");
-        }
-
-        if self.pages[pn - 1].is_none() {
-            panic!("Page not loaded!");
-        }
     }
 
     // TODO: need way to decrement count when page use is done.  Therefore caller needs to hold some object to count that.
@@ -294,11 +282,9 @@ impl StoredDb {
         if pn > MAX_PAGE_NUM {
             return Err(Error::PageNumberBeyondLimits);
         }
-        self.check_present(pn);
-        match &self.pages[pn - 1] {
-            Some(v) => Ok(v),
-            None => Err(Error::Internal),
-        }
+        let maybe_page_ref = self.pages.get(&pn);
+        println!("Found: {} PageNum: {}", maybe_page_ref.is_some(), pn);
+        maybe_page_ref.ok_or(Error::Internal)
     }
 
     // TODO: need way to decrement count when page use is done.  Therefore caller needs to hold some object to count that.
@@ -314,11 +300,7 @@ impl StoredDb {
         if pn > MAX_PAGE_NUM {
             return Err(Error::PageNumberBeyondLimits);
         }
-        self.check_present(pn);
-        match &mut self.pages[pn - 1] {
-            Some(v) => Ok(v),
-            None => Err(Error::Internal),
-        }
+        self.pages.get_mut(&pn).ok_or(Error::Internal)
     }
 
     pub fn get_page_size(&self) -> u32 {

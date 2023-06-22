@@ -10,9 +10,10 @@
 //  - Support dropping unused pages when memory is low.
 //  - When there are multiple pagers (multiple open files), coordinating to stay under a total memory limit.
 
+use std::collections::HashMap;
+
 use crate::temp_table::TempTable;
 use crate::sql_type::SqlType;
-use crate::table_traits::TableMeta;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -29,18 +30,19 @@ pub enum Error {
 ///   - After introducing a connection concept, consider whether TempTables are global to the server, or local to a Connection.
 ///
 pub struct TempDb {
-    tables: Vec<crate::temp_table::TempTable>, 
+    tables: HashMap<String, crate::temp_table::TempTable>, 
 }
 
 impl TempDb {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         TempDb { 
-            tables: vec![], // TODO: key by name.
+            tables: HashMap::new(), 
         }
     }
     pub fn new_temp_table(&mut self, table_name: String, column_names: Vec<String>, column_types: Vec<SqlType>, strict: bool) -> Result<(), Error> {
-        self.tables.push(
+        self.tables.insert(
+            table_name.clone(),
             TempTable {
                 rows: vec![],
                 table_name,
@@ -53,38 +55,24 @@ impl TempDb {
     }
 
     pub fn get_table(&self, tablename: &String) -> Result<&crate::temp_table::TempTable, Error> {
-        for i in 0..self.tables.len() {
-            if self.tables[i].table_name() == *tablename {
-                return Ok(&self.tables[i]);
-            }
-        }
-        Err(Error::TableNameNotFound)
+        self.tables.get(tablename).ok_or(Error::TableNameNotFound)
     }
 
     pub fn get_table_mut(&mut self, tablename: &String) -> Result<&mut crate::temp_table::TempTable, Error> {
-        for i in 0..self.tables.len() {
-            if self.tables[i].table_name() == *tablename {
-                return Ok(&mut self.tables[i]);
-            }
-        }
-        Err(Error::TableNameNotFound)
+        self.tables.get_mut(tablename).ok_or(Error::TableNameNotFound)
     }
 
+    // TODO: make "schema" part of db_traits::DBMeta.
     pub fn temp_schema(&self) -> Result<String, Error> {
         let mut result= String::new();
-        for tt in self.tables.iter() {
+        for (_, tt) in self.tables.iter() {
             result.push_str(&format!("{}", tt.creation_sql()));
         }
         Ok(result)
     }
 
-    // TODO: move to "db traits"?
+    // TODO: make "creation_sql" part of table_traits::TableMeta.
     pub fn get_creation_sql(&self, table_name: &str) -> Option<String> {
-        for tt in self.tables.iter() {
-            if tt.table_name() == table_name {
-                return Some(tt.creation_sql());
-            }
-        }
-        None
+        self.tables.get(table_name).map(|t| t.creation_sql())
     }
 } 
