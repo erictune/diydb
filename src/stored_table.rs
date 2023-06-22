@@ -113,13 +113,13 @@ impl<'a> StoredTable<'a> {
     }
     
     // opens a table for reading.
-    pub fn open_read(pager: &'a stored_db::StoredDb, table_name: &str) -> Result<StoredTable<'a>, Error> {
-        let (root_pagenum, create_statement) =
-            match crate::get_creation_sql_and_root_pagenum(pager, table_name) {
-                Some(x) => x,
-                None => return Err(Error::TableNameNotFoundInDb(String::from(table_name))),
-            };
+    pub fn open_read(db: &'a stored_db::StoredDb, table_name: &str) -> Result<StoredTable<'a>, Error> {
+        let root_pagenum =
+            db.get_root_pagenum(table_name).ok_or(Error::TableNameNotFoundInDb(table_name.to_owned()))?;
+        let create_statement =
+            db.get_creation_sql(table_name).ok_or(Error::TableNameNotFoundInDb(table_name.to_owned()))?;
         let cs = crate::pt_to_ast::pt_create_statement_to_ast(&create_statement);
+        let pager = db;
         Ok(StoredTable::new(
             pager,
             cs.tablename,

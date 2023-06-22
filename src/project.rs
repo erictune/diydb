@@ -110,7 +110,7 @@ fn make_ast_constant(i: i64) -> ast::SelItem {
 
 #[test]
 fn test_build_project_colnames_only() {
-    use crate::SqlType::*;
+    use crate::sql_type::SqlType::*;
     use ProjectAction::*;
     let colnames: Vec<String> = vec!["a", "b", "c", "d", "e"]
         .iter()
@@ -138,7 +138,7 @@ fn test_build_project_colnames_only() {
 
 #[test]
 fn test_build_project_constant_expression() {
-    use crate::SqlType::*;
+    use crate::sql_type::SqlType::*;
     use ProjectAction::*;
     let colnames: Vec<String> = vec!["a", "b", "c", "d", "e"]
         .iter()
@@ -159,7 +159,7 @@ fn test_build_project_constant_expression() {
 
 #[test]
 fn test_build_project_multiple_star() {
-    use crate::SqlType::*;
+    use crate::sql_type::SqlType::*;
     use ProjectAction::*;
     let colnames: Vec<String> = vec!["a", "b", "c", "d", "e"]
         .iter()

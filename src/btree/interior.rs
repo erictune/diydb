@@ -165,11 +165,11 @@ fn test_interior_iterator_on_multipage_db() {
     // Page 5: second leaf page (DFB to GJA ; rows 352-691)
     // Page 6: third leaf page (GJB to JJJ ; 692-1000)
     let path = path_to_testdata("multipage.db");
-    let pager =
+    let db =
         crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened pager for db {path}.");
-    let x = crate::get_creation_sql_and_root_pagenum(&pager, "thousandrows");
-    let pgnum = x.unwrap().0;
+    let pgnum = db.get_root_pagenum("thousandrows").expect("Should have looked up table.");
     assert_eq!(pgnum, 3);
+    let pager = db;
     let mut ri = new_table_interior_cell_iterator_for_page(&pager, pgnum);
     assert_eq!(ri.next(), Some(4));
     assert_eq!(ri.next(), Some(5));

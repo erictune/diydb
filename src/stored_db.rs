@@ -17,7 +17,24 @@ use std::boxed::Box;
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom};
 
+use streaming_iterator::StreamingIterator;
+
+use crate::sql_type::SqlType;
+use crate::sql_value::SqlValue;
+
 use crate::stored_table::StoredTable;
+
+// Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
+// It has references to the root pages of other btrees.
+const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
+const SCHEMA_BTREE_ROOT_PAGENUM: PageNum = 1;
+const SCHEMA_SCHEMA: &str =
+    "CREATE TABLE sqlite_schema (type text, name text, tbl_name text, rootpage integer, sql text)";
+const SCHEMA_TABLE_COL_NAMES: [&str; 5] = ["type", "name", "tbl_name", "rootpage", "sql"];
+const SCHEMA_TABLE_COL_TYPES: [SqlType; 5] = [SqlType::Text, SqlType::Text, SqlType::Text, SqlType::Int, SqlType::Text];
+const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
+const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
+const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -183,6 +200,40 @@ impl StoredDb {
         })
     }
 
+    /// Get the root page number for `table_name`.
+    pub fn get_root_pagenum(&self, table_name: &str) -> Option<PageNum> {
+        if table_name == SCHEMA_TABLE_NAME {
+            return Some(SCHEMA_BTREE_ROOT_PAGENUM);
+        } else {
+            let schema_table = StoredTable::new(
+                self,
+                String::from(SCHEMA_TABLE_NAME),
+                SCHEMA_BTREE_ROOT_PAGENUM,
+                SCHEMA_TABLE_COL_NAMES.iter().map(|x| x.to_string()).collect(),
+                Vec::from(SCHEMA_TABLE_COL_TYPES),
+                true,
+            );   
+            let mut it = schema_table.streaming_iterator();
+            while let Some(row) = it.next() {
+                let this_table_name = match &row.items[SCHEMA_TABLE_TBL_NAME_COLIDX] {
+                    SqlValue::Text(s) => s.clone(),
+                    _ => panic!("Type mismatch in schema table column {}, expected Text", SCHEMA_TABLE_TBL_NAME_COLIDX),
+                };
+                if this_table_name != table_name {
+                    continue;
+                }
+                // TODO: refactor code below to "get row element as type x or return nicely formatted Error", which can be used elsewhere too.
+                let root_pagenum = match &row.items[SCHEMA_TABLE_ROOTPAGE_COLIDX] {
+                    SqlValue::Int(i) => *i as PageNum,
+                    // TODO: return Result rather than panicing.
+                    _ => panic!("Type mismatch in schema table column {}, expected Int", SCHEMA_TABLE_ROOTPAGE_COLIDX),
+                };
+                return Some(root_pagenum);
+            }
+        }
+        None
+    }
+
     #[allow(dead_code)]
     fn alloc_new_page(self) -> PageNum {
         // TODO: to support writes, need to allocate new pages: write to the database header to increase the page count.
@@ -275,8 +326,6 @@ impl StoredDb {
     }
 
     pub fn main_schema(&self) -> Result<String, Error> {
-        use crate::SCHEMA_TABLE_NAME;
-        use crate::SCHEMA_TABLE_SQL_COLIDX;
         let mut result= String::new();
         let tt = StoredTable::open_read(self, SCHEMA_TABLE_NAME)
             .map_err(|_| Error::OpeningStoredTable)?
@@ -287,6 +336,40 @@ impl StoredDb {
         }
         Ok(result)
     }
+
+    /// Get the SQL CREATE statement used to create `table_name`, or None.
+    pub fn get_creation_sql(&self, table_name: &str) -> Option<String> {
+        if table_name == SCHEMA_TABLE_NAME {
+            return Some(String::from(SCHEMA_SCHEMA));
+        } else {
+            let schema_table = StoredTable::new(
+                self,
+                String::from(SCHEMA_TABLE_NAME),
+                SCHEMA_BTREE_ROOT_PAGENUM,
+                SCHEMA_TABLE_COL_NAMES.iter().map(|x| x.to_string()).collect(),
+                Vec::from(SCHEMA_TABLE_COL_TYPES),
+                true,
+            );   
+            let mut it = schema_table.streaming_iterator();
+            while let Some(row) = it.next() {
+                let this_table_name = match &row.items[SCHEMA_TABLE_TBL_NAME_COLIDX] {
+                    SqlValue::Text(s) => s.clone(),
+                    _ => panic!("Type mismatch in schema table column {}, expected Text", SCHEMA_TABLE_TBL_NAME_COLIDX),
+                };
+                if this_table_name != table_name {
+                    continue;
+                }
+                // TODO: refactor code below to "get row element as type x or return nicely formatted Error", which can be used elsewhere too.
+                let creation_sql = match &row.items[SCHEMA_TABLE_SQL_COLIDX] {
+                    SqlValue::Text(s) => s.clone(),
+                    _ => panic!("Type mismatch in schema table column {}, expected Text", SCHEMA_TABLE_SQL_COLIDX),
+                };
+                return Some(creation_sql);
+            }
+        }
+        None
+    }
+    
 
 }
 
@@ -300,13 +383,31 @@ fn path_to_testdata(filename: &str) -> String {
 #[test]
 fn test_open_db() {
     let path = path_to_testdata("minimal.db");
-    let _pager = StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
+    let _db = StoredDb::open(path.as_str()).expect("Should have opened db.");
+}
+
+#[test]
+fn test_get_creation_sql() {
+    let path = path_to_testdata("minimal.db");
+    let db = StoredDb::open(path.as_str()).expect("Should have opened db.");
+    let create = db.get_creation_sql("a").expect("Should have looked up table.");
+    assert_eq!(create.to_lowercase().replace("\n", " "), "create table a ( b int )")
+}
+
+#[test]
+fn test_root_pagenum() {
+    let path = path_to_testdata("minimal.db");
+    let db = StoredDb::open(path.as_str()).expect("Should have opened db.");
+    let pn = db.get_root_pagenum("a").expect("Should have looked up table.");
+    assert_eq!(pn, 2);
+    let pn = db.get_root_pagenum("sqlite_schema").expect("Should have looked up table.");
+    assert_eq!(pn, 1);
 }
 
 #[test]
 fn test_get_page_rw() {
     let path = path_to_testdata("minimal.db");
-    let mut pager = StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
+    let mut pager = StoredDb::open(path.as_str()).expect("Should have opened db.");
     let p1 = pager.get_page_rw(1);
     assert!(p1
             .expect("Should have gotten a page")
@@ -318,7 +419,7 @@ fn test_get_page_rw() {
 #[test]
 fn test_get_two_page_ro() {
     let path = path_to_testdata("minimal.db");
-    let pager = StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
+    let pager = StoredDb::open(path.as_str()).expect("Should have opened db.");
     let p1 = pager.get_page_ro(1);
     let p2 = pager.get_page_ro(2);
     assert!(
@@ -333,6 +434,29 @@ fn test_get_two_page_ro() {
         .len()
         > 0
     );
+}
+
+// test of reading schema with multiple tables.
+#[test]
+fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
+    let path = path_to_testdata("schema_table.db");
+    let db =
+        crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
+    let cases = vec![
+        ("t1", 2, "create table t1 (a int)"),
+        ("t2", 3, "create table t2 (a int, b int)"),
+        (
+            "t3",
+            4,
+            "create table t3 (a text, b int, c text, d int, e real)",
+        ),
+    ];
+    for (tablename, actual_pgnum, actual_csql) in cases {
+        let csql = db.get_creation_sql(tablename).expect("Should have found table's creation sql.");
+        let pgnum = db.get_root_pagenum(tablename).expect("Should have found table's root page.");
+        assert_eq!(pgnum, actual_pgnum);
+        assert_eq!(csql.to_lowercase().replace('\n', " "), actual_csql);
+    }
 }
 
 // Testing: Borrow check fails for multiple writers or read and write as expected.  This is tested in doc comments at the top of the file.

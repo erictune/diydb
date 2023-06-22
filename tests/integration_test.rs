@@ -4,44 +4,6 @@ fn path_to_testdata(filename: &str) -> String {
         + filename
 }
 
-#[test]
-fn test_get_creation_sql_and_root_pagenum_using_minimal_db() {
-    let path = path_to_testdata("minimal.db");
-    let pager =
-        diydb::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
-    let x = diydb::get_creation_sql_and_root_pagenum(&pager, "a");
-    assert!(x.is_some());
-    let (pgnum, csql) = x.unwrap();
-    assert_eq!(pgnum, 2);
-    assert_eq!(
-        csql.to_lowercase().replace('\n', " "),
-        "create table a ( b int )"
-    );
-}
-
-#[test]
-fn test_get_creation_sql_and_root_pagenum_using_schematable_db() {
-    let path = path_to_testdata("schema_table.db");
-    let pager =
-        diydb::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
-    let expected_tables = vec![
-        ("t1", 2, "create table t1 (a int)"),
-        ("t2", 3, "create table t2 (a int, b int)"),
-        (
-            "t3",
-            4,
-            "create table t3 (a text, b int, c text, d int, e real)",
-        ),
-    ];
-    for expect in expected_tables {
-        let x = diydb::get_creation_sql_and_root_pagenum(&pager, expect.0);
-        assert!(x.is_some());
-        let (pgnum, csql) = x.unwrap();
-        assert_eq!(pgnum, expect.1); // first page after schema_table page.
-        assert_eq!(csql.to_lowercase().replace('\n', " "), expect.2);
-    }
-}
-
 fn server_state_with_open_db_for_run_query_tests(path: &str) -> diydb::DbServerState {
     let mut ss = diydb::DbServerState::new();
     diydb::open_db(&mut ss, path)

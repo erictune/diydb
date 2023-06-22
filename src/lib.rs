@@ -24,25 +24,10 @@ extern crate pest_derive;
 
 use anyhow::bail;
 use std::str::FromStr;
-use streaming_iterator::StreamingIterator;
 
-use sql_type::SqlType;
 use sql_value::SqlValue;
-use stored_table::StoredTable;
 use temp_table::TempTable;
 use typed_row::Row;
-
-// Page 1 (the first page) is always a btree page, and it is the root page of the schema table.
-// It has references to the root pages of other btrees.
-const SCHEMA_TABLE_NAME: &str = "sqlite_schema";
-const SCHEMA_BTREE_ROOT_PAGENUM: stored_db::PageNum = 1;
-const SCHEMA_SCHEMA: &str =
-    "CREATE TABLE sqlite_schema (type text, name text, tbl_name text, rootpage integer, sql text)";
-const SCHEMA_TABLE_COL_NAMES: [&str; 5] = ["type", "name", "tbl_name", "rootpage", "sql"];
-const SCHEMA_TABLE_COL_TYPES: [SqlType; 5] = [SqlType::Text, SqlType::Text, SqlType::Text, SqlType::Int, SqlType::Text];
-const SCHEMA_TABLE_TBL_NAME_COLIDX: usize = 2;
-const SCHEMA_TABLE_ROOTPAGE_COLIDX: usize = 3;
-const SCHEMA_TABLE_SQL_COLIDX: usize = 4;
 
 // DbServerState holds the context of running database engine: hold the open persistent and temporary databases.
 pub struct DbServerState {
@@ -63,47 +48,6 @@ pub fn open_db(server_state: &mut DbServerState, path: &str) -> anyhow::Result<(
     if server_state.stored_db.is_some() { bail!("Database file already open.  Close the old one first.  Close might be supported in the future.")}
     server_state.stored_db = Some(crate::stored_db::StoredDb::open(path)?);
     Ok(())
-}
-
-/// Get the root page number for, and the SQL CREATE statement used to create `table_name`.
-pub fn get_creation_sql_and_root_pagenum(
-    pgr: &stored_db::StoredDb,
-    table_name: &str,
-) -> Option<(stored_db::PageNum, String)> {
-    if table_name == SCHEMA_TABLE_NAME {
-        return Some((SCHEMA_BTREE_ROOT_PAGENUM, String::from(SCHEMA_SCHEMA)));
-    } else {
-        let schema_table = StoredTable::new(
-            pgr,
-            String::from(SCHEMA_TABLE_NAME),
-            SCHEMA_BTREE_ROOT_PAGENUM,
-            SCHEMA_TABLE_COL_NAMES.iter().map(|x| x.to_string()).collect(),
-            Vec::from(SCHEMA_TABLE_COL_TYPES),
-            true,
-        );   
-        let mut it = schema_table.streaming_iterator();
-        while let Some(row) = it.next() {
-            let this_table_name = match &row.items[SCHEMA_TABLE_TBL_NAME_COLIDX] {
-                SqlValue::Text(s) => s.clone(),
-                _ => panic!("Type mismatch in schema table column {}, expected Text", SCHEMA_TABLE_TBL_NAME_COLIDX),
-            };
-            if this_table_name != table_name {
-                continue;
-            }
-            // TODO: refactor code below to "get row element as type x or return nicely formatted Error", which can be used elsewhere too.
-            let root_pagenum = match &row.items[SCHEMA_TABLE_ROOTPAGE_COLIDX] {
-                SqlValue::Int(i) => *i as stored_db::PageNum,
-                // TODO: return Result rather than panicing.
-                _ => panic!("Type mismatch in schema table column {}, expected Int", SCHEMA_TABLE_ROOTPAGE_COLIDX),
-            };
-            let creation_sql = match &row.items[SCHEMA_TABLE_SQL_COLIDX] {
-                SqlValue::Text(s) => s.clone(),
-                _ => panic!("Type mismatch in schema table column {}, expected Text", SCHEMA_TABLE_SQL_COLIDX),
-            };
-            return Some((root_pagenum, creation_sql));
-        }
-    }
-    None
 }
 
 pub fn new_table_iterator(pgr: &stored_db::StoredDb, pgnum: usize) -> btree::table::Iterator {

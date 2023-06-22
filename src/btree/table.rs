@@ -164,10 +164,11 @@ fn path_to_testdata(filename: &str) -> String {
 #[test]
 fn test_table_iterator_on_minimal_db() {
     let path = path_to_testdata("minimal.db");
-    let mut pager =
+    let db =
         crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
-    let x = crate::get_creation_sql_and_root_pagenum(&mut pager, "a");
-    let mut ri = crate::new_table_iterator(&pager, x.unwrap().0);
+    let pgnum = db.get_root_pagenum("a").expect("Should have gotten page number.");
+    let pager = db;
+    let mut ri = crate::new_table_iterator(&pager, pgnum);
     let first_item = ri.next().clone();
     assert!(first_item.is_some());
     assert_eq!(first_item.unwrap().0, 1);
@@ -181,11 +182,10 @@ fn test_table_iterator_on_three_level_db() {
     // row 1: 1
     // row 1000000: 1000000
     let path = path_to_testdata("threelevel.db");
-    let pager =
+    let db =
         crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db with pager.");
-    let x = crate::get_creation_sql_and_root_pagenum(&pager, "t");
-    let pgnum = x.unwrap().0;
-
+    let pgnum = db.get_root_pagenum("t").expect("Should have found root pagenum.");
+    let pager = db;
     let ri = crate::new_table_iterator(&pager, pgnum);
     let mut last_rowid = 0;
     for e in ri.enumerate() {

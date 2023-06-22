@@ -77,4 +77,14 @@ impl TempDb {
         }
         Ok(result)
     }
+
+    // TODO: move to "db traits"?
+    pub fn get_creation_sql(&self, table_name: &str) -> Option<String> {
+        for tt in self.temp_tables.iter() {
+            if tt.table_name() == table_name {
+                return Some(tt.creation_sql());
+            }
+        }
+        None
+    }
 } 

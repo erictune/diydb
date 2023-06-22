@@ -26,4 +26,6 @@ pub trait TableMeta {
     /// Runtime error: cannot store TEXT value in INT column t2.a (19)
     /// ```
     fn strict(&self) -> bool;
+
+    // TODO: add "creation_sql()" as a default method.
 }
