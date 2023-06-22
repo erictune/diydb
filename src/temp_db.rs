@@ -52,7 +52,7 @@ impl TempDb {
         Ok(())
     }
 
-    pub fn get_temp_table(&self, tablename: &String) -> Result<&crate::temp_table::TempTable, Error> {
+    pub fn get_table(&self, tablename: &String) -> Result<&crate::temp_table::TempTable, Error> {
         for i in 0..self.temp_tables.len() {
             if self.temp_tables[i].table_name() == *tablename {
                 return Ok(&self.temp_tables[i]);
@@ -61,7 +61,7 @@ impl TempDb {
         Err(Error::TableNameNotFound)
     }
 
-    pub fn get_temp_table_mut(&mut self, tablename: &String) -> Result<&mut crate::temp_table::TempTable, Error> {
+    pub fn get_table_mut(&mut self, tablename: &String) -> Result<&mut crate::temp_table::TempTable, Error> {
         for i in 0..self.temp_tables.len() {
             if self.temp_tables[i].table_name() == *tablename {
                 return Ok(&mut self.temp_tables[i]);

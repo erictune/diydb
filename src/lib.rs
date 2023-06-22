@@ -76,7 +76,7 @@ pub fn run_insert(server_state: &mut DbServerState, stmt: &str) -> anyhow::Resul
     // across these two match arms.
     match is.databasename == "temp" {
         true /* temporary table */ => {
-            let tbl = server_state.temp_db.get_temp_table_mut(&is.tablename)?;
+            let tbl = server_state.temp_db.get_table_mut(&is.tablename)?;
             for row in is.values {
                 // Convert row from AST constants to SQL values.
                 let row: Vec<SqlValue> = row.iter().map(sql_value::from_ast_constant).collect();
