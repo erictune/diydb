@@ -73,7 +73,7 @@ impl<'p> Iterator<'p> {
             let page = self.pager.get_page_ro(next_page).unwrap();
             // TODO: if the borrow checker gets confused by this loop, then the stack could be made to
             // have a maximum height, e.g. 12, given that there are at most 2^64 pages and it is balanced.
-            let hdr = super::header::check_header(page, Self::btree_start_offset(starting_page));
+            let hdr = super::header::check_header(page, Self::btree_start_offset(next_page));
             let rmp = hdr.rightmost_pointer;
             let page_type = hdr.btree_page_type;
             match page_type {
@@ -81,7 +81,7 @@ impl<'p> Iterator<'p> {
                     self.stack
                         .push(EitherIter::Leaf(leaf::Iterator::new(cell::Iterator::new(
                             page,
-                            Self::btree_start_offset(starting_page),
+                            Self::btree_start_offset(next_page),
                             self.pager.get_page_size(),
                         ))));
                     return;
@@ -91,7 +91,7 @@ impl<'p> Iterator<'p> {
                         .push(EitherIter::Interior(interior::ScanIterator::new(
                             cell::Iterator::new(
                                 page,
-                                Self::btree_start_offset(starting_page),
+                                Self::btree_start_offset(next_page),
                                 self.page_size,
                             ),
                             rmp.expect("Interior pages should always have rightmost pointer.")
