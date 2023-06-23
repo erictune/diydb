@@ -118,36 +118,6 @@ fn path_to_testdata(filename: &str) -> String {
         + filename
 }
 
-#[cfg(test)]
-fn new_table_interior_cell_iterator_for_page(
-    pgr: &crate::stored_db::StoredDb,
-    pgnum: usize,
-) -> crate::btree::interior::ScanIterator {
-    use crate::btree;
-    let pgsz = pgr.get_page_size();
-    let page = match pgr.get_page_ro(pgnum) {
-        Ok(p) => p,
-        Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
-    };
-    let btree_start_offset = match pgnum {
-        1 => 100,
-        _ => 0,
-    };
-    let hdr = super::header::check_header(page, btree_start_offset);
-    println!("Examining page {} with header {:?}", pgnum, hdr);
-    match hdr.btree_page_type {
-        btree::PageType::TableInterior => btree::interior::ScanIterator::new(
-            btree::cell::Iterator::new(page, btree_start_offset, pgsz),
-            hdr.rightmost_pointer
-                .expect("Interior pages should always have rightmost pointer.")
-                as usize,
-        ),
-        _ => {
-            unreachable!();
-        }
-    }
-}
-
 #[test]
 fn test_interior_iterator_on_multipage_db() {
     // This tests iterating over the root page which is interior type.
@@ -169,8 +139,31 @@ fn test_interior_iterator_on_multipage_db() {
         crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened pager for db {path}.");
     let pgnum = db.get_root_pagenum("thousandrows").expect("Should have looked up table.");
     assert_eq!(pgnum, 3);
-    let pager = db;
-    let mut ri = new_table_interior_cell_iterator_for_page(&pager, pgnum);
+    let pgr = db;
+    
+    use crate::btree;
+    let pgsz = pgr.get_page_size();
+    let page = pgr.get_page_ro(pgnum)
+        .unwrap_or_else(|e| panic!("Error loading db page #{} : {}", pgnum, e));
+    let btree_start_offset = match pgnum {
+        1 => 100,
+        _ => 0,
+    };
+    let hdr = super::header::check_header(page, btree_start_offset);
+    println!("Examining page {} with header {:?}", pgnum, hdr);
+
+    let mut ri: ScanIterator<'_> = match hdr.btree_page_type {
+        btree::PageType::TableInterior => btree::interior::ScanIterator::new(
+            btree::cell::Iterator::new(page, btree_start_offset, pgsz),
+            hdr.rightmost_pointer
+                .expect("Interior pages should always have rightmost pointer.")
+                as usize,
+        ),
+        _ => {
+            unreachable!();
+        }
+    };
+
     assert_eq!(ri.next(), Some(4));
     assert_eq!(ri.next(), Some(5));
     assert_eq!(ri.next(), Some(6));

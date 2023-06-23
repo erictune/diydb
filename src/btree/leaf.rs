@@ -54,41 +54,31 @@ fn path_to_testdata(filename: &str) -> String {
         + filename
 }
 
-#[cfg(test)]
-pub fn new_table_leaf_cell_iterator_for_page(
-    pgr: &crate::stored_db::StoredDb,
-    pgnum: usize,
-) -> crate::btree::leaf::Iterator {
-    use crate::btree;
-
-    let pgsz = pgr.get_page_size();
-    let page = match pgr.get_page_ro(pgnum) {
-        Ok(p) => p,
-        Err(e) => panic!("Error loading db page #{} : {}", pgnum, e),
-    };
-    let btree_start_offset = match pgnum {
-        1 => 100,
-        _ => 0,
-    };
-    let hdr = btree::header::check_header(page, btree_start_offset);
-    println!("Examining page {} with header {:?}", pgnum, hdr);
-    match hdr.btree_page_type {
-        btree::PageType::TableLeaf => {
-            btree::leaf::Iterator::new(btree::cell::Iterator::new(page, btree_start_offset, pgsz))
-        }
-        _ => {
-            unreachable!()
-        }
-    }
-}
 
 #[test]
 fn test_leaf_iterator_on_minimal_db() {
     let path = path_to_testdata("minimal.db");
     let db = crate::stored_db::StoredDb::open(path.as_str()).expect("Should have opened db.");
     let pgnum = db.get_root_pagenum("a").expect("Should have found root page.");
-    let pager = db;
-    let mut ri = new_table_leaf_cell_iterator_for_page(&pager, pgnum);
+    let pgr = db;
+
+    let pgsz = pgr.get_page_size();
+    let page = pgr.get_page_ro(pgnum).unwrap_or_else(|e| panic!("Error loading db page #{} : {}", pgnum, e));
+    let btree_start_offset = match pgnum {
+        1 => 100,
+        _ => 0,
+    };
+    let hdr = crate::btree::header::check_header(page, btree_start_offset);
+    println!("Examining page {} with header {:?}", pgnum, hdr);
+    let mut ri = match hdr.btree_page_type {
+        crate::btree::PageType::TableLeaf => {
+            crate::btree::leaf::Iterator::new(crate::btree::cell::Iterator::new(page, btree_start_offset, pgsz))
+        }
+        _ => {
+            unreachable!()
+        }
+    };
+
     let first_item = ri.next().clone();
     assert!(first_item.is_some());
     assert_eq!(first_item.unwrap().0, 1);

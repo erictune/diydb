@@ -1,4 +1,4 @@
-//! cell::Iterator ierates over the cells in a btree page.
+//! cell::Iterator iterates over the cells in a btree page.
 
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Cursor, Seek, SeekFrom};
