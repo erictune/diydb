@@ -6,6 +6,14 @@ pub struct Iterator<'a> {
 }
 
 impl<'a> Iterator<'a> {
+
+    fn btree_start_offset(pgnum: usize) -> usize {
+        match pgnum {
+            1 => 100,
+            _ => 0,
+        }
+    }
+
     /// Creates an iterator over the cells of a single page of a btree, with page of type TableLeaf.
     ///
     /// Iterator produces cells which are slices of bytes, which contain a record.
@@ -14,7 +22,13 @@ impl<'a> Iterator<'a> {
     ///
     /// * `s` - A byte slice.  Borrowed for the lifetime of the iterator.  Slice begins with the record header length (a varint).
     ///         slives ends with the last byte of the record body.
-    pub fn new(ci: cell::Iterator) -> Iterator {
+    pub fn new(pager: &crate::stored_db::StoredDb, pgnum: usize) -> Iterator {
+        let page: &Vec<u8> = pager.get_page_ro(pgnum).unwrap();
+        let ci = cell::Iterator::new(
+            page,
+            Self::btree_start_offset(pgnum),
+            pager.get_page_size()
+        );
         Iterator { ci }
     }
 }
@@ -62,7 +76,6 @@ fn test_leaf_iterator_on_minimal_db() {
     let pgnum = db.get_root_pagenum("a").expect("Should have found root page.");
     let pgr = db;
 
-    let pgsz = pgr.get_page_size();
     let page = pgr.get_page_ro(pgnum).unwrap_or_else(|e| panic!("Error loading db page #{} : {}", pgnum, e));
     let btree_start_offset = match pgnum {
         1 => 100,
@@ -71,9 +84,7 @@ fn test_leaf_iterator_on_minimal_db() {
     let hdr = crate::btree::header::check_header(page, btree_start_offset);
     println!("Examining page {} with header {:?}", pgnum, hdr);
     let mut ri = match hdr.btree_page_type {
-        crate::btree::PageType::TableLeaf => {
-            crate::btree::leaf::Iterator::new(crate::btree::cell::Iterator::new(page, btree_start_offset, pgsz))
-        }
+        crate::btree::PageType::TableLeaf => crate::btree::leaf::Iterator::new(&pgr, pgnum),
         _ => {
             unreachable!()
         }

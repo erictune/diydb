@@ -37,17 +37,33 @@ impl<'a> SearchIterator<'a> {
 }
 
 impl<'a> ScanIterator<'a> {
+
+    fn btree_start_offset(pgnum: usize) -> usize {
+        match pgnum {
+            1 => 100,
+            _ => 0,
+        }
+    }
+
     /// Creates an iterator over the cells of a single page of a btree, with page of type TableLeaf.
     ///
     /// # Arguments
     ///
     /// * `ci` - A cell iterator for the page. Borrowed for the lifetime of the iterator.
     /// * `rmp` - The rightmost pointer for this page.
-    pub fn new(ci: cell::Iterator, rmp: PageNum) -> ScanIterator {
+    pub fn new(pager: &crate::stored_db::StoredDb, pgnum: usize) -> ScanIterator {
+        let page = pager.get_page_ro(pgnum).unwrap();
+        let hdr = super::header::check_header(page, Self::btree_start_offset(pgnum));
+
+        let ci = cell::Iterator::new(
+            page,
+            Self::btree_start_offset(pgnum),
+            pager.get_page_size()
+        );
         ScanIterator {
             ci,
             returned_rightmost: false,
-            rightmost_pointer: rmp,
+            rightmost_pointer: hdr.rightmost_pointer.expect("Interior pages should always have rightmost pointer.") as usize,
         }
     }
 }
@@ -142,7 +158,6 @@ fn test_interior_iterator_on_multipage_db() {
     let pgr = db;
     
     use crate::btree;
-    let pgsz = pgr.get_page_size();
     let page = pgr.get_page_ro(pgnum)
         .unwrap_or_else(|e| panic!("Error loading db page #{} : {}", pgnum, e));
     let btree_start_offset = match pgnum {
@@ -154,11 +169,7 @@ fn test_interior_iterator_on_multipage_db() {
 
     let mut ri: ScanIterator<'_> = match hdr.btree_page_type {
         btree::PageType::TableInterior => btree::interior::ScanIterator::new(
-            btree::cell::Iterator::new(page, btree_start_offset, pgsz),
-            hdr.rightmost_pointer
-                .expect("Interior pages should always have rightmost pointer.")
-                as usize,
-        ),
+            &pgr, pgnum),
         _ => {
             unreachable!();
         }

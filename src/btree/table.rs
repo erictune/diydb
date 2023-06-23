@@ -1,7 +1,7 @@
 //! table provides iterators over Table type btrees.  
 //! It hides the fact that btrees span several pages.
 
-use super::{cell, interior, leaf, PageType, RowId};
+use super::{interior, leaf, PageType, RowId};
 use crate::stored_db::PageNum;
 
 enum EitherIter<'z> {
@@ -29,7 +29,6 @@ pub struct Iterator<'p> {
     root_page: crate::stored_db::PageNum,
     pager: &'p crate::stored_db::StoredDb,
     stack: Vec<EitherIter<'p>>, // The lifetime of the references in the inner iterators is good as long as the pager is, since the pager holds the pages.
-    page_size: u32,
 }
 
 impl<'p> Iterator<'p> {
@@ -51,12 +50,10 @@ impl<'p> Iterator<'p> {
         // iterators which are multiple borrows against  approach avoids having page references
         //  during the iteration phase, which allows the next() c
 
-        let pgsz = pager.get_page_size();
         Iterator {
             root_page,
             pager,
             stack: vec![],
-            page_size: pgsz,
         }
     }
 
@@ -74,29 +71,17 @@ impl<'p> Iterator<'p> {
             // TODO: if the borrow checker gets confused by this loop, then the stack could be made to
             // have a maximum height, e.g. 12, given that there are at most 2^64 pages and it is balanced.
             let hdr = super::header::check_header(page, Self::btree_start_offset(next_page));
-            let rmp = hdr.rightmost_pointer;
             let page_type = hdr.btree_page_type;
             match page_type {
                 PageType::TableLeaf => {
                     self.stack
-                        .push(EitherIter::Leaf(leaf::Iterator::new(cell::Iterator::new(
-                            page,
-                            Self::btree_start_offset(next_page),
-                            self.pager.get_page_size(),
-                        ))));
+                        .push(EitherIter::Leaf(leaf::Iterator::new(self.pager, next_page),
+                        ));
                     return;
                 }
                 PageType::TableInterior => {
                     self.stack
-                        .push(EitherIter::Interior(interior::ScanIterator::new(
-                            cell::Iterator::new(
-                                page,
-                                Self::btree_start_offset(next_page),
-                                self.page_size,
-                            ),
-                            rmp.expect("Interior pages should always have rightmost pointer.")
-                                as usize,
-                        )));
+                        .push(EitherIter::Interior(interior::ScanIterator::new(self.pager, next_page)));
                     let top_of_stack_iter = self.stack.last_mut().unwrap();
                     next_page = top_of_stack_iter
                         .unwrap_interior()
