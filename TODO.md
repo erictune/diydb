@@ -3,7 +3,8 @@ Current Projects Stack
 
 # CURRENT - Pages owned by Table, not Db
   - [X] change StoredDb::pages from `Vec<_>` to `HashMap<pagenum, Page>`, while keeping public interface of StoredDb the same.
-  - [ ] in btree/table.rs, in seek_leftmost_leaf(), notice how when we push an EitherIter<>, we pass a Cell::Iterator into a LeafIterator or a InteriorIterator.  Let's flip that and see if we can make the Leaf/InteriorIterator take a PageHandle, and own that PageHandle for the duration of the usage of the page.  
+  - [X] in btree/table.rs, refactor Cell::Iterator::new into a LeafIterator::new and InteriorIterator::new.  
+  - [ ] Add PageHandles, which replace Pages.  Hold those on the stack when a page is gotten.  
     - Will that make the borrow checker happy?
       If not we may need to try unrolling the loop into 3 or 4 predicated phases. 
     - Maybe try this on HEAD, and then try applying the stash "PageReadHandle almost working".

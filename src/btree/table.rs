@@ -67,11 +67,13 @@ impl<'p> Iterator<'p> {
     fn seek_leftmost_leaf(&mut self, starting_page: PageNum) {
         let mut next_page = starting_page;
         loop {
-            let page = self.pager.get_page_ro(next_page).unwrap();
-            // TODO: if the borrow checker gets confused by this loop, then the stack could be made to
-            // have a maximum height, e.g. 12, given that there are at most 2^64 pages and it is balanced.
-            let hdr = super::header::check_header(page, Self::btree_start_offset(next_page));
-            let page_type = hdr.btree_page_type;
+            let page_type = {
+                let page = self.pager.get_page_ro(next_page).unwrap();
+                // TODO: if the borrow checker gets confused by this loop, then the stack could be made to
+                // have a maximum height, e.g. 12, given that there are at most 2^64 pages and it is balanced.
+                let hdr = super::header::check_header(page, Self::btree_start_offset(next_page));
+                hdr.btree_page_type
+            };
             match page_type {
                 PageType::TableLeaf => {
                     self.stack
